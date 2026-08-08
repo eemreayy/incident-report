@@ -53,11 +53,62 @@
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!--
+          Architecture rules live here because this is the only module that sees
+          every other module on its classpath. See ADR-017.
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Versions come from Spring Boot's dependency management. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mongodb</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <finalName>incident-report</finalName>
         <plugins>
+            <!--
+              Project-wide coverage report. The per-module `check` in the parent is
+              the gate; this produces the single number NFR-02 talks about, by
+              merging the coverage of every module this one depends on - which is
+              all of them. Output: app/target/site/jacoco-aggregate/index.html
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>report-aggregate</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-aggregate</goal>
+                        </goals>
+                        <configuration>
+                            <title>incident-report backend coverage</title>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Only this module is repackaged into an executable jar. -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>

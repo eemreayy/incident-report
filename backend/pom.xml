@@ -47,6 +47,13 @@
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <jacoco.version>0.8.15</jacoco.version>
+        <archunit.version>1.5.0</archunit.version>
+
+        <!-- NFR-02: unit test coverage must be at least 80%. This is a floor the
+             build enforces, not a target to aim at. -->
+        <coverage.minimum.line>0.80</coverage.minimum.line>
     </properties>
 
     <dependencyManagement>
@@ -90,6 +97,63 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!--
+                  Coverage gate (NFR-02). Applied per module rather than only to a
+                  project-wide total: an aggregate number lets a well-tested module
+                  hide an untested one, and the requirement is that the important
+                  functionality is covered, not that the average looks good.
+                  The `app` module additionally produces an aggregate report for
+                  reporting purposes.
+                -->
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco.version}</version>
+                    <configuration>
+                        <excludes>
+                            <!-- Bootstrap class: main() is never exercised by tests, and
+                                 wrapping it just to reach 100% would test nothing. -->
+                            <exclude>**/IncidentReportApplication.class</exclude>
+                        </excludes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>prepare-agent</id>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>report</id>
+                            <phase>test</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>check-coverage</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                            <configuration>
+                                <rules>
+                                    <rule>
+                                        <element>BUNDLE</element>
+                                        <limits>
+                                            <limit>
+                                                <counter>LINE</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>${coverage.minimum.line}</minimum>
+                                            </limit>
+                                        </limits>
+                                    </rule>
+                                </rules>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
@@ -123,6 +187,11 @@
         </pluginManagement>
 
         <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

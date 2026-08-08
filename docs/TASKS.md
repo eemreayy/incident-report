@@ -67,7 +67,7 @@ Health check'ler, servis bağımlılık sırası, named volume'lar, `.env.exampl
 > container'a geçiyor — T-04'te starter'lar eklendiğinde compose dosyasında değişiklik gerekmeyecek
 > ve `/actuator/health` her iki veri tabanını da raporlamaya başlayacak.
 
-### ☐ T-03 · Kalite kapısı: coverage, kalan sınır kuralları, Testcontainers
+### ☑ T-03 · Kalite kapısı: coverage, kalan sınır kuralları, Testcontainers
 JaCoCo `verify` fazına bağlanır ve **%80** altında build kırılır. Çok modüllü yapıda toplam oranın
 nasıl hesaplanacağı (modül bazlı eşik mi, birleşik rapor mu) bu task'ta karara bağlanır.
 Testcontainers ile Mongo ve Postgres için ortak test altyapısı.
@@ -75,11 +75,39 @@ Testcontainers ile Mongo ve Postgres için ortak test altyapısı.
 **Kapsam notu:** Modüller arası erişim yasağı T-01'de **build seviyesinde** çözüldü (bağımlılık
 grafiğinde kenar yok → derleme hatası). Bu task'a kalan, derleyicinin göremediği kurallar:
 controller'ın entity/document sızdırmaması, `analysis` içinde Mongo tipi kullanılmaması,
-katman yönü (repository → service → controller). Bunun için ArchUnit yeterli; Spring Modulith'e
-gerek olup olmadığı burada değerlendirilip ADR'ye yazılacak.
+katman yönü (repository → service → controller).
 - **Bağımlılık:** T-01
 - **Karşılar:** NFR-02, NFR-05
 - **DoD:** Kasten yazılmış bir katman/sızıntı ihlali testi kırar; coverage eşiğinin altına düşünce build kırılır.
+- **Sonuç:** JaCoCo 0.8.15 — modül başına satır eşiği %80 (`verify`), `app`'te proje geneli
+  birleşik rapor (`app/target/site/jacoco-aggregate/`). ArchUnit 1.5.0 ile **12 mimari kuralı**,
+  `app` modülünün testlerinde. Testcontainers 1.21.4 (sürüm Boot'tan) ile smoke test.
+  Toplam 15 test geçiyor. Kararlar: **ADR-017** (ArchUnit, Spring Modulith yerine) ve
+  **ADR-018** (coverage stratejisi).
+- **Her iki kapı da fiilen doğrulandı:**
+  - Testi olmayan sınıf eklendi → `Rule violated for bundle app: lines covered ratio is 0.00,
+    but expected minimum is 0.80` → BUILD FAILURE.
+  - `Repository → Controller` bağımlılığı eklendi → `Architecture Violation ... was violated
+    (3 times)` → BUILD FAILURE. Probe sınıfları sonrasında silindi.
+- **Testcontainers yaklaşımı:** Smoke test veri tabanlarına sürücüyle bağlanmıyor; container
+  içinden `pg_isready` ve `mongosh ping` çalıştırıyor — compose'daki healthcheck'lerle aynı
+  yöntem. Sürücüler onları kullanan kodla birlikte T-04'te geliyor; sadece "container ayağa
+  kalkıyor mu" demek için erken bağımlılık çekilmedi. İmaj etiketleri compose ile aynı
+  sürümlere sabit, böylece test ve çalışan sistem birbirinden kaymıyor.
+- **Ortak test altyapısı notu:** Paylaşılan base sınıflar bu task'ta yazılmadı. Henüz tek bir
+  repository yok; tüketicisi olmayan bir soyutlama kurmak yerine sürüm yönetimi merkezileştirildi
+  ve mekanizmanın çalıştığı kanıtlandı. Base sınıflar ilk gerçek repository testiyle (T-04/T-05)
+  gelecek.
+- **Yeni kısıt:** `./mvnw verify` artık çalışan bir Docker daemon gerektiriyor. İmaj derlemesi
+  gerektirmiyor (`Dockerfile` paketlemeyi `-DskipTests` ile yapıyor).
+
+> **Bilinen boşluk — dürüstlük kaydı.** JaCoCo, `jacoco.exec` bulunmayan modülde `check` goal'ünü
+> **sessizce atlıyor**. Yani **kodu olup hiç testi olmayan bir modül kapıdan geçer** — NFR-02'nin
+> tam da engellemesi gereken durum. Bugün hiçbir modülün üretim kodu olmadığı için etkisi yok.
+> Kapatma yolu Surefire'ın `failIfNoTests=true` ayarı; bugün açılamıyor çünkü dört modülün ne
+> sınıfı ne testi var. **T-05'te açılacak** (o task'ın kapsamına yazıldı). Proje geneli birleşik
+> rapor bu boşluktan etkilenmiyor: exec verisi olmayan modüllerin sınıflarını kapsanmamış sayıyor.
+> Eksik olan otomatik kapı, ölçüm değil. Bkz. ADR-018.
 
 ---
 
@@ -117,6 +145,10 @@ event yayınlanır.
 - **Bağımlılık:** T-04
 - **Karşılar:** FR-01, FR-02, FR-14 · **İlgili karar:** ADR-005
 - **DoD:** Kaydedilen metin girdiyle birebir aynı; update/delete API'si yok; event yayınlanıyor.
+- **Ek kapsam (T-03'ten devredildi):** Her modül üretim koduna kavuştuğunda Surefire
+  `failIfNoTests=true` açılır. Bu, ADR-018'de kayıtlı boşluğu kapatır: testi olmayan modül
+  artık coverage kapısını sessizce geçemez, build doğrudan kırılır. Aynı anda ArchUnit'in
+  `archRule.failOnEmptyShould` ayarı da tekrar açılabilir (bkz. ADR-017).
 
 ### ☐ T-06 · REST katmanı ve hata sözleşmesi
 `POST /api/v1/incident-reports`, `GET /incident-reports`, `GET /incident-reports/{id}`. Girdi doğrulama

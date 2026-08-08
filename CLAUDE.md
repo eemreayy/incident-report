@@ -37,13 +37,17 @@ Maven runs from `backend/` (the reactor root). Compose runs from the repository 
 
 ```
 cd backend
-./mvnw verify                          # all modules: build + tests (JaCoCo gate lands in T-03)
+./mvnw verify                          # all modules: build + tests + coverage gate
 ./mvnw -pl analysis -am verify         # one module and what it depends on
 ./mvnw test -Dtest=ClassName           # single test class
 ./mvnw -pl app spring-boot:run         # run locally, `local` profile is the default
 java -jar backend/app/target/incident-report.jar
 curl -s localhost:8080/actuator/health
+open app/target/site/jacoco-aggregate/index.html   # project-wide coverage report
 ```
+
+**`verify` needs a running Docker daemon** — Testcontainers starts real Postgres and Mongo.
+The image build does not: the Dockerfile packages with `-DskipTests`.
 
 ```
 docker compose up --build              # from repo root: the whole system
@@ -112,15 +116,21 @@ Rules that must never be broken:
 
 ## Testing
 
-- JaCoCo gate at **80%** wired into `verify`. The build must fail below it. Coverage is a floor,
-  not a goal — cover real behavior, not getters.
+- JaCoCo gate at **80% lines, per module**, wired into `verify` — an aggregate number would let a
+  well-tested module hide an untested one. `app` also emits a project-wide aggregate report.
+  Coverage is a floor, not a goal — cover real behavior, not getters. See ADR-018.
+- **Known gap**: JaCoCo silently skips the check in a module with no tests at all (no `.exec` file).
+  Closing it needs Surefire `failIfNoTests=true`, which lands in T-05 once every module has code.
+  Until then, a new module without tests will *not* be caught by the build.
+- Architecture rules live in `app/src/test/java/.../architecture/ArchitectureRulesTest.java`
+  (ArchUnit — see ADR-017). `app` is the only module that sees all the others, so cross-module
+  rules can only be expressed there. Add new rules to that file, not to individual modules.
 - Every extractor (date, province, number, event type, metric) gets parameterized table-driven tests
   including the negative and ambiguous cases.
 - The three sample texts from the source document are **golden tests** — see the table in
   `docs/PRD.md` §11. They must also pass with their sentences shuffled.
 - Unit tests use plain JUnit 5 + Mockito, no Spring context. Repository/integration tests use
-  Testcontainers against real Mongo and Postgres.
-- A module-boundary verification test must fail if rule 1 or 2 above is violated.
+  Testcontainers against real Mongo and Postgres, pinned to the same image tags compose runs.
 
 ## Gotchas
 

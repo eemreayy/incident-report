@@ -24,6 +24,8 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-014](#adr-014--tarih-çözümleme-ve-referans-tarih) | Tarih çözümleme ve referans tarih | Kabul edildi |
 | [ADR-015](#adr-015--üç-repoluk-yapı-ve-ayrı-devops-reposu) | Üç repo'luk yapı ve ayrı devops repo'su | **Geçersiz** — yerini [ADR-016](#adr-016--tek-repo-monorepo) aldı |
 | [ADR-016](#adr-016--tek-repo-monorepo) | Tek repo (monorepo) | Kabul edildi |
+| [ADR-017](#adr-017--mimari-kurallar-için-archunit-spring-modulith-yerine) | Mimari kurallar için ArchUnit (Spring Modulith yerine) | Kabul edildi |
+| [ADR-018](#adr-018--coverage-kapısı-modül-başına-eşik--proje-geneli-rapor) | Coverage kapısı: modül başına eşik + proje geneli rapor | Kabul edildi |
 
 ---
 
@@ -421,3 +423,56 @@ incident-report/
 - Tüm modüller aynı anda klonlanıyor; repo büyüdükçe klon boyutu da büyüyecek. Bu ölçekte önemsiz.
 
 **İleride.** Modüllerden biri bağımsız release kadansı ya da ayrı erişim kontrolü gerektirirse, `git filter-repo --subdirectory-filter backend` ile o dizin kendi geçmişiyle birlikte ayrı bir repo'ya çıkarılabilir — monorepo bu kapıyı kapatmıyor. CI tarafında yol bazlı tetikleyiciler (`paths: backend/**`) ile modüller ayrı ayrı derlenip test edilebilir; tek repo, tek pipeline demek değil.
+
+---
+
+## ADR-017 — Mimari Kurallar için ArchUnit (Spring Modulith Yerine)
+
+**Karar.** Derleyicinin yakalayamadığı mimari kurallar **ArchUnit** ile, `app` modülünün test kaynaklarında doğrulanır. Spring Modulith kullanılmaz.
+
+**Bağlam.** ADR-001, modülleri ayrı Maven modülleri yaptığı için modüller arası erişim yasağı zaten **derleme hatası**. Geriye derleyicinin göremediği kurallar kalıyor: hangi modülün hangi kütüphaneye dokunabileceği, controller'ın entity/document sızdırmaması, katman yönü, alan enjeksiyonu yasağı.
+
+**Gerekçe.**
+- **Spring Modulith'in ana katkısı bu projede zaten karşılanmış.** Modulith, paket tabanlı modül sınırlarını doğrular; bizde sınır Maven bağımlılık grafiğinde ve ihlali derlemede kırılıyor. Aynı işi ikinci kez yapan bir bağımlılık eklemek net kazanç getirmiyor.
+- **Modulith'in getirdiği diğer şeyleri istemiyoruz.** `@ApplicationModuleListener` asenkron ve `REQUIRES_NEW` transaction ile çalışır; ADR-003 mesajlaşmanın senkron olmasını şart koşuyor. Event publication registry ise ek bir veri tabanı tablosu demek. Kullanmayacağımız yetenekler için kavramsal yük taşımak istemiyoruz.
+- **ArchUnit tam da boşluğu dolduruyor.** Kütüphane bazlı yasaklar, isimlendirme tabanlı katman kuralları ve anotasyon tabanlı kurallar doğrudan ifade edilebiliyor; kurallar okunabilir birer cümle ve `because(...)` ile gerekçesi kodda duruyor.
+- **Test kapsamında, çalışma zamanı ayak izi yok.** Üretim artifact'ına hiçbir şey eklemiyor.
+
+**Alternatifler.**
+- *Spring Modulith:* `ApplicationModules.verify()` tek satırla modül doğrulaması sunardı ve dokümantasyon üretebilirdi (PlantUML, C4). Ancak doğrulamanın büyük kısmı bizde zaten build garantisi; kalan kurallar (entity sızıntısı, katman yönü, alan enjeksiyonu) Modulith'in kapsamında değil — yine ArchUnit gerekirdi. Yani Modulith ArchUnit'in yerini almıyor, üstüne biniyor.
+- *Kural koymamak, code review'a bırakmak:* İnsan disiplinine bağlı; ilk yoğun haftada kaybedilir.
+- *Kuralları her modülün kendi testinde tanımlamak:* Her modül yalnızca kendi sınıflarını görür; modüller arası kurallar ifade edilemez. Bu yüzden kurallar `app`'te — tüm modülleri classpath'inde gören tek modül.
+
+**Sonuçlar.**
+- 12 kural devrede: modül sınırları, veri tabanı sahipliği, çevrim (cycle) yokluğu, controller'ın persistence tipi sızdırmaması, katman yönü ve alan enjeksiyonu yasağı.
+- Kurallar isim tabanlı (`*Repository`, `*Controller`); isimlendirme konvansiyonundan sapmak kuralı sessizce devre dışı bırakır. Konvansiyon `CLAUDE.md`'de yazılı.
+- Modüllerin çoğu henüz boş olduğu için `archRule.failOnEmptyShould=false` ayarlandı. Bu, yanlış yazılmış bir paket adının kuralı sessizce geçirmesi riskini doğuruyor; risk, "hiç sınıf import edilmediyse patla" diyen ayrı bir kontrol testiyle kapatıldı. Modüller kod kazandığında ayar tekrar açılmalı.
+- Doğrulandı: `Repository → Controller` bağımlılığı eklendiğinde build `Architecture Violation ... was violated (3 times)` ile kırıldı.
+
+**İleride.** Modüller doldukça ArchUnit'in `layeredArchitecture()` ve `onionArchitecture()` tanımlarına geçilebilir; bugünkü isim tabanlı kurallar yerine paket tabanlı katman tanımı daha güçlüdür. Mimari dokümantasyonun otomatik üretimi istenirse Spring Modulith yalnızca **doküman üreticisi** olarak (doğrulayıcı olarak değil) ayrıca değerlendirilebilir.
+
+---
+
+## ADR-018 — Coverage Kapısı: Modül Başına Eşik + Proje Geneli Rapor
+
+**Karar.** JaCoCo `verify` fazına bağlanır. Eşik **her modül için ayrı ayrı** uygulanır (satır bazında ≥ %80) ve altına düşen modül build'i kırar. Ayrıca `app` modülü, bağımlı olduğu tüm modülleri birleştiren **proje geneli bir rapor** üretir.
+
+**Bağlam.** NFR-02: "Birim testlerin kapsayıcılığı en az yüzde 80 olmalı ve tüm önemli fonksiyonları kapsayıcı olmalıdır." Çok modüllü bir build'de bu oranın nasıl hesaplanacağı belirsiz: modül başına mı, toplamda mı?
+
+**Gerekçe.**
+- **Modül başına eşik, ortalamanın arkasına saklanmayı engelliyor.** Yalnızca toplam oran ölçülseydi, iyi test edilmiş bir modül test edilmemiş bir modülü maskeleyebilirdi. İsterin "tüm önemli fonksiyonları kapsayıcı" kısmı tam olarak bunu yasaklıyor.
+- **Proje geneli rapor, isterin lafzına cevap veriyor.** Değerlendiriciye gösterilecek tek bir sayı gerekiyor; `app/target/site/jacoco-aggregate/` bunu üretiyor.
+- **Bootstrap sınıfı hariç tutuldu.** `IncidentReportApplication.main()` testlerle çalıştırılmıyor; yalnızca oranı yükseltmek için sarmalamak hiçbir davranışı test etmez.
+
+**Alternatifler.**
+- *Yalnızca proje geneli eşik:* Tek sayı, basit. Ancak modül maskeleme sorunu doğar ve JaCoCo'nun birleşik rapor üzerinde `check` goal'ü yok — ayrı bir birleştirme modülü kurmak gerekirdi.
+- *Yalnızca modül başına eşik:* Bugünkü kapı bu; tek eksiği isterin istediği "tek sayı"yı üretmemesi. Bu yüzden birleşik rapor ayrıca ekleniyor.
+- *Branch coverage eşiği de eklemek:* Daha güçlü olurdu; ancak ister satır bazında bir oran veriyor ve branch eşiği erken aşamada gereksiz sürtünme yaratır. İleride eklenebilir.
+
+**Sonuçlar.**
+- Doğrulandı: `app` modülüne testi olmayan bir sınıf eklendiğinde build `Rule violated for bundle app: lines covered ratio is 0.00, but expected minimum is 0.80` ile kırıldı.
+- **Bilinen boşluk.** JaCoCo, `jacoco.exec` bulunmayan modülde `check` goal'ünü **sessizce atlıyor** (`Skipping JaCoCo execution due to missing execution data file`). Yani **kodu olup hiç testi olmayan bir modül kapıdan geçer.** Bugün hiçbir modülün üretim kodu olmadığı için etkisi yok; ancak kod geldiğinde gerçek bir risk. Kapatma yolu: Surefire'ın `failIfNoTests=true` ayarı — hiç test çalışmayan modülde build kırılır, dolayısıyla exec dosyası her zaman oluşur. Bugün açılamıyor çünkü dört modülün henüz ne sınıfı ne testi var; **T-05'te, ilk üretim kodu geldiğinde açılacak** ve o task'ın kapsamına yazıldı.
+- Birleşik rapor, exec verisi olmayan modüllerin sınıflarını **kapsanmamış** sayarak dahil ediyor; yani proje geneli sayı bu boşluktan etkilenmiyor, dürüst kalıyor. Otomatik kapı eksik, ölçüm değil.
+- `./mvnw verify` artık çalışan bir Docker daemon gerektiriyor (Testcontainers). İmaj derlemesi gerektirmiyor — `Dockerfile` paketlemeyi `-DskipTests` ile yapıyor.
+
+**İleride.** Coverage eşiği tek bir property'den (`coverage.minimum.line`) yönetiliyor; kod tabanı olgunlaştıkça yükseltilebilir ve branch coverage eşiği eklenebilir. Mutation testing (PIT) bir sonraki doğal adım: coverage "satır çalıştırıldı mı" sorusunu, mutation testing "test gerçekten bir şey doğruluyor mu" sorusunu cevaplar — %80 çizgisinin anlamlı testlerle mi yoksa getter çağrılarıyla mı tutulduğunu ancak o gösterir.
