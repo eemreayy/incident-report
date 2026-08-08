@@ -31,8 +31,10 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 
 **Karar.** Backend, tek bir deploy edilebilir Spring Boot uygulaması olarak, ancak içinde net sınırları olan iki çekirdek modülle (`ingestion`, `analysis`) ve ince bir `realtime` katmanıyla geliştirilecek. Modüller **ayrı Maven modülleri** olarak, her biri kendi `pom.xml`'i ile hayata geçirilecek:
 
+Maven reactor'ın kökü, monorepo'daki `backend/` dizinidir (bkz. ADR-016):
+
 ```
-incident-report-be   (parent, packaging=pom)
+backend/             (parent, packaging=pom)
 ├── shared           hiçbir modüle bağımlı değil — modüller arası event'ler, hata sözleşmesi
 ├── ingestion        → shared        MongoDB'ye sahip
 ├── analysis         → shared        PostgreSQL'e sahip
@@ -414,7 +416,7 @@ incident-report/
 
 **Sonuçlar.**
 - Maven reactor'ın kökü artık `backend/`. Komutlar `cd backend && ./mvnw ...` şeklinde; kökte `pom.xml` yok.
-- İki compose dosyası var: kökteki (full-system) ve `backend/`dekі (yalnız backend + veri tabanları). Tekrar yok — kökteki, `include:` ile backend'inkini olduğu gibi tüketiyor. Backend'in compose'u "dahil edilebilir" kalmak zorunda (ADR-015'ten devralınan kısıt).
+- İki compose dosyası var: kökteki (full-system) ve `backend/`deki (yalnız backend + veri tabanları). Tekrar yok — kökteki, `include:` ile backend'inkini olduğu gibi tüketiyor. Backend'in compose'u "dahil edilebilir" kalmak zorunda (ADR-015'ten devralınan kısıt).
 - Repo geçmişi ADR-015'in kurulup geri alındığını gösteriyor. Bu bilinçli olarak temizlenmedi: karar günlüğünün işi, hangi yolun neden denendiğini ve neden bırakıldığını kayıt altına almak.
 - Tüm modüller aynı anda klonlanıyor; repo büyüdükçe klon boyutu da büyüyecek. Bu ölçekte önemsiz.
 
