@@ -22,6 +22,7 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-012](#adr-012--reprocess-yeteneği) | Reprocess yeteneği | Kabul edildi |
 | [ADR-013](#adr-013--maven--flyway--openapi) | Maven + Flyway + OpenAPI | Kabul edildi |
 | [ADR-014](#adr-014--tarih-çözümleme-ve-referans-tarih) | Tarih çözümleme ve referans tarih | Kabul edildi |
+| [ADR-015](#adr-015--üç-repoluk-yapı-ve-ayrı-devops-reposu) | Üç repo'luk yapı ve ayrı devops repo'su | Kabul edildi |
 
 ---
 
@@ -339,3 +340,36 @@ Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalı
 **Sonuçlar.** Tarih alanının yanında bir kaynak alanı taşınacak ve sorgu/grafik uçlarında görünür olacak. Göreli **aralık** ifadeleri v1'de tek bir referans güne indirgeniyor — "son 3 günde" ifadesi üç güne yayılmıyor. Zaman dilimi seçimi (`Europe/Istanbul` vs. UTC) ve gün sınırı tanımı bu kararla sabitlenmedi; TC-6 kapsamında karara bağlanacak.
 
 **İleride.** Tarih tek bir gün yerine bir **aralık** (başlangıç–bitiş) olarak modellenebilir; böylece "son 3 günde" ifadesi gerçek yayılımıyla temsil edilir ve zaman serisi grafiklerinde daha doğru dağıtılır. Ayrıca kaynak bilgisine bir güven skoru eklenerek, kullanıcıya tarih belirsizliği grafik üzerinde görsel olarak (ör. soluk/kesikli seri) gösterilebilir. Bugün kaynağı saklıyor olmak, bu evrimin ön koşulunu şimdiden karşılıyor.
+
+---
+
+## ADR-015 — Üç Repo'luk Yapı ve Ayrı DevOps Repo'su
+
+**Karar.** Proje üç repo'ya bölünür: `incident-report-be` (backend), `incident-report-fe` (frontend) ve `incident-report-devops` (kompozisyon). Full-system `docker compose up`, servis repo'larını **git submodule** olarak bağlayan devops repo'sundan çalıştırılır. Her servis repo'su ayrıca **tek başına** çalıştırılabilir kalır.
+
+| Repo | İçerik | Bağımsız çalışır |
+|---|---|---|
+| `incident-report-be` | Backend + kendi compose'u (app + PostgreSQL + MongoDB) | Evet |
+| `incident-report-fe` | Frontend | Evet |
+| `incident-report-devops` | Full-system compose, submodule pinleri, operasyon dokümanı | Sistemin giriş noktası |
+
+**Bağlam.** Kaynak doküman "Sistem `docker-compose up` komutu ile **tek seferde** ayağa kalkmalıdır" diyor; buradaki "sistem" backend, frontend ve veri tabanlarının tamamı. Buna karşılık backend ve frontend ayrı repo'larda geliştiriliyor. Kompozisyonun bir yerde yaşaması gerekiyordu.
+
+**Gerekçe.**
+- **Sahiplik simetrisi.** Full-system compose backend repo'suna konsaydı, backend frontend'e referans verir ve onu sahiplenmiş görünürdü. Ne backend ne frontend diğerinin üstünde değil; kompozisyon üçüncü bir yere ait.
+- **Tekrar yok.** Compose'un `include:` özelliği backend'in kendi compose dosyasını olduğu gibi alıyor. `app`, `postgres`, `mongodb` tanımları **tek yerde**, onları sahiplenen repo'da duruyor; devops repo'su yalnızca frontend'i ve servisler arası bağlantıyı ekliyor. Duplikasyon gerekseydi bu ayrım maliyetli olurdu.
+- **Sürüm bileşimi kayıt altında.** Submodule'ler belirli commit'lere sabit; "hangi backend hangi frontend ile çalışıyor" sorusunun cevabı devops repo'sunun git geçmişinde duruyor.
+- **Doğal ev.** CI workflow'ları, k8s manifestleri, seed data ve operasyon dokümanının backend veya frontend repo'sunda yeri yok; burada var.
+
+**Alternatifler.**
+- *Monorepo:* Tek `docker compose up`, tek klon, en basit değerlendirici deneyimi. Ancak backend ve frontend repo'larını ayırma kararı zaten alınmıştı; bunu geri almak bağımsız sürümleme ve ayrı CI hattı gibi kazanımları da geri alırdı.
+- *Full-system compose'u backend repo'sunda tutmak:* Bir repo eksik olurdu. Karşılığında backend'in frontend'i submodule olarak içermesi gerekirdi — yanlış sahiplik sinyali.
+- *Devops repo'sunun GHCR'dan hazır imaj çekmesi:* Değerlendirici için en hızlı yol (`docker compose up`, derleme yok). Ancak GitHub Actions kurulumu ve public package gerektirir; daha önemlisi, değerlendirici kodu değiştirip yeniden çalıştıramaz. Bir değerlendirme projesinde kodun derlendiğinin görünmesi, hızdan daha değerli.
+
+**Sonuçlar.**
+- Değerlendirici üç repo görüyor ve muhtemelen önce backend'e denk geliyor; oradaki compose yalnızca backend'i ayağa kaldırıyor. **Bu gerçek bir risk.** Karşılığı: her repo'nun README'sinin en üstünde devops repo'suna yönlendiren bir kutu var.
+- `git clone --recurse-submodules` unutulursa servis klasörleri boş gelir. Devops repo'sundaki `make up`, submodule checkout'unu kendisi yaptığı için bu tuzağı kapatıyor.
+- Backend'e yeni commit gelmesi devops repo'sunu kendiliğinden güncellemiyor; submodule pointer'ı elle ilerletmek gerekiyor (`make update` + commit). Bu bilinçli: sürüm bileşimi otomatik değil, kayıtlı.
+- Backend'in compose dosyası artık "dahil edilebilir" olmak zorunda — mutlak yol veya tek-compose varsayımı yapamaz.
+
+**İleride.** Servisler GHCR'a imaj yayınlayan bir CI hattı kazandığında devops repo'suna ikinci bir compose dosyası (`docker-compose.images.yml`) eklenip "derlemeden çalıştır" seçeneği sunulabilir; submodule'lü kaynaktan derleme yolu geliştirme için kalır. Aynı repo, Kubernetes'e geçiş halinde Helm chart'larının ve ortam bazlı (staging/prod) değerlerin de doğal evi olur — bugün compose'un durduğu yerde.

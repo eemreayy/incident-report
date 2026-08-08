@@ -1,11 +1,16 @@
 # Olay Bildirim Sistemi — Backend
 
+> ### 🚀 Tüm sistemi (backend + frontend + veri tabanları) tek komutla ayağa kaldırmak için
+> ### → **[incident-report-devops](https://github.com/eemreayy/incident-report-devops)**
+>
+> Bu repo projenin **yalnızca backend** bacağıdır ve buradaki `docker compose up` yalnızca
+> backend'i ve veri tabanlarını başlatır — backend üzerinde çalışmak için yeterlidir.
+> Sistemin tamamı için yukarıdaki repo'yu kullanın. Gerekçe: [ADR-015](docs/DECISIONS.md#adr-015--üç-repoluk-yapı-ve-ayrı-devops-reposu).
+
 Açık kaynaklardan (haber, rapor, sosyal medya vb.) elde edilen **serbest metin** olay bildirimlerini
 otomatik olarak ayrıştırıp **Tarih, İl, Olay Tipi ve sayısal metrikler**'den oluşan yapılandırılmış
 veriye dönüştüren; bu veriyi filtrelenebilir tablo ve olay tipi bazlı grafiklerle sunan ve yeni
 bildirim girildiğinde bağlı istemcileri gerçek zamanlı bilgilendiren backend servisi.
-
-> Bu depo projenin **backend** bacağıdır. Frontend (ReactJS) ayrı bir depoda geliştirilmektedir.
 
 ---
 
