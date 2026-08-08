@@ -1,0 +1,341 @@
+# Tasarım Kararları ve Gerekçeleri
+
+Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıklarını, hangi alternatiflerin neden elenediğini ve katlanılan trade-off'ları kayıt altına alır. Her kararın sonunda bir **İleride** bölümü vardır: bugünkü tercihin gelecekte hangi yöne evrilebileceğini ve o evrilmenin neden bugünkü tasarımla kolaylaştığını anlatır.
+
+**Kural:** Mimari veya teknoloji seçimi değişirse bu dosya aynı commit içinde güncellenir.
+
+**Şablon:** Karar · Bağlam · Gerekçe · Alternatifler · Sonuçlar (trade-off) · İleride
+
+| No | Karar | Durum |
+|---|---|---|
+| [ADR-001](#adr-001--modular-monolith) | Modular monolith | Kabul edildi |
+| [ADR-002](#adr-002--iki-veri-tabanının-rol-ayrımı) | İki veri tabanının rol ayrımı | Kabul edildi |
+| [ADR-003](#adr-003--modüller-arası-senkron-spring-application-event) | Modüller arası senkron Spring Application Event | Kabul edildi |
+| [ADR-004](#adr-004--gerçek-zamanlı-bildirim-için-sse) | Gerçek zamanlı bildirim için SSE | Kabul edildi |
+| [ADR-005](#adr-005--ham-kaydın-değiştirilemez-olması) | Ham kaydın değiştirilemez olması | Kabul edildi |
+| [ADR-006](#adr-006--tanınmayan-olay-tipi-davranışı) | Tanınmayan olay tipi davranışı | Kabul edildi |
+| [ADR-007](#adr-007--konfigürasyondan-yönetilen-olay-kataloğu) | Konfigürasyondan yönetilen olay kataloğu | Kabul edildi |
+| [ADR-008](#adr-008--kuralregex-tabanlı-çıkarım-ml-yerine) | Kural/regex tabanlı çıkarım (ML yerine) | Kabul edildi |
+| [ADR-009](#adr-009--java-21--spring-boot-35x) | Java 21 + Spring Boot 3.5.x | Kabul edildi |
+| [ADR-010](#adr-010--tek-instance-veri-tabanları) | Tek instance veri tabanları | Kabul edildi |
+| [ADR-011](#adr-011--kimlik-doğrulamanın-kapsam-dışı-bırakılması) | Kimlik doğrulamanın kapsam dışı bırakılması | Kabul edildi |
+| [ADR-012](#adr-012--reprocess-yeteneği) | Reprocess yeteneği | Kabul edildi |
+| [ADR-013](#adr-013--maven--flyway--openapi) | Maven + Flyway + OpenAPI | Kabul edildi |
+| [ADR-014](#adr-014--tarih-çözümleme-ve-referans-tarih) | Tarih çözümleme ve referans tarih | Kabul edildi |
+
+---
+
+## ADR-001 — Modular Monolith
+
+**Karar.** Backend, tek bir deploy edilebilir Spring Boot uygulaması olarak, ancak içinde net sınırları olan iki çekirdek modülle (`ingestion`, `analysis`) ve ince bir `realtime` katmanıyla geliştirilecek. Modüller **ayrı Maven modülleri** olarak, her biri kendi `pom.xml`'i ile hayata geçirilecek:
+
+```
+incident-report-be   (parent, packaging=pom)
+├── shared           hiçbir modüle bağımlı değil — modüller arası event'ler, hata sözleşmesi
+├── ingestion        → shared        MongoDB'ye sahip
+├── analysis         → shared        PostgreSQL'e sahip
+├── realtime         → shared        SSE taşıma katmanı, veri tabanı yok
+└── app              → hepsi         tek deploy edilebilir artifact
+```
+
+`ingestion` ile `analysis` arasında **bilinçli olarak bağımlılık yoktur**.
+
+**Bağlam.** Sistemin iki farklı sorumluluğu var: ham metni almak/saklamak ve metni analiz edip analitik veri üretmek. Bunlar farklı veri tabanları, farklı değişim hızları ve farklı test stratejileri gerektiriyor.
+
+**Gerekçe.**
+- Sorumluluklar başından net ayrıldığı için kod tabanı büyüdükçe karışmıyor.
+- Tek deploy artifact'ı: `docker compose up` ile tek komutta ayağa kalkma isterini (NFR-03) doğrudan destekliyor.
+- Dağıtık sistem maliyetleri (ağ hatası, kısmi başarısızlık, dağıtık transaction, servis keşfi) bu ölçekte hiçbir fayda getirmeden karmaşıklık ekleyecekti.
+- **Ayrı Maven modülleri, sınırı derleme zamanında zorunlu kılıyor.** Tek `src` altındaki paketlerde "`ingestion`, `analysis`'e dokunmasın" bir konvansiyondur; bağımlılık grafiğinde o kenar hiç yoksa, ihlal bir derleme hatasıdır. Ayrıca her modülün kütüphaneleri kendi pom'unda durduğu için, `analysis`'in Mongo sürücüsüne erişimi *fiilen* yoktur.
+
+**Alternatifler.**
+- *Mikroservisler:* İki servis + mesaj altyapısı. Bu kapsam için operasyonel maliyeti faydasından çok daha yüksek; değerlendirme projesinde tek komutla ayağa kaldırma isterini de zorlaştırırdı.
+- *Katmanlı (teknik katman bazlı) monolit:* `controller/service/repository` paketleri. Domain sınırları görünmez olur, iki veri tabanının rol ayrımı kod içinde kaybolur.
+- *Tek modül, paketlerle ayrılmış sınırlar:* Kurulum daha basit olurdu; ama sınır yalnızca konvansiyon olarak kalır ve ihlali ancak ek bir araçla (ArchUnit vb.) yakalanır. Proje bu yaklaşımla başladı ve bilinçli olarak çok modüllü yapıya taşındı.
+
+**Sonuçlar.** Build daha ayrıntılı: beş `pom.xml` ve bir reactor. Modüller arası refactoring tek `src`'ye göre daha çok dokunuş gerektiriyor. Buna karşılık `ingestion`'dan `analysis`'e erişim denemesi `package ... does not exist` ile derlemede kırılıyor — NFR-05'in büyük kısmı artık test değil, build garantisi. Kalan sınır kuralları (ör. controller'ın entity sızdırmaması) için ek doğrulama testi yine gerekli (T-03).
+
+**İleride.** Modüller kendi veri tabanına sahip, birbirine yalnızca event ve açık API ile bağlı olduğu için mikroservise geçiş kararı alınırsa bölünme hattı zaten çizilmiş olacak: `analysis` modülü kendi Postgres'i ve kendi API'siyle olduğu gibi ayrı bir servise taşınabilir. O noktada değişmesi gereken tek şey, bugün süreç içi olan event yayınının ağ üzerinden yapılması (bkz. ADR-003).
+
+---
+
+## ADR-002 — İki Veri Tabanının Rol Ayrımı
+
+**Karar.** MongoDB yalnızca **ham metni** (log/audit), PostgreSQL yalnızca **normalize/analitik veriyi** tutar. `ingestion` modülü Postgres'e, `analysis` modülü Mongo'ya erişmez.
+
+**Bağlam.** Kaynak doküman her iki veri tabanının da kullanılmasını, ham metnin Mongo'da log niteliğinde saklanmasını, parse çıktısının Postgres'te olmasını ve iki taraftaki kayıtların ilişkilendirilebilmesini istiyor.
+
+**Gerekçe.**
+- Ham metin şemasızdır, yalnızca yazılır ve kimliğiyle okunur — döküman deposu bu erişim şekline uygun.
+- Normalize veri üzerinde filtreleme, gruplama, zaman serisi ve kümülatif toplam sorguları çalışacak — ilişkisel model ve SQL agregasyonları bu iş için doğru araç.
+- Ayrım aynı zamanda modül sınırını fiziksel olarak da güçlendiriyor: bir modülün diğerinin verisine "kestirmeden" ulaşması mümkün değil.
+
+**Alternatifler.**
+- *Tek veri tabanı:* Daha basit olurdu ama kaynak dokümanın açık teknik isterine aykırı.
+- *Ham metni de Postgres'te tutmak:* Log/audit kaydının analitik şemayla aynı yaşam döngüsüne bağlanmasına ve gereksiz şema baskısına yol açardı.
+
+**Sonuçlar.** İki veri tabanı arasında transaction bütünlüğü yok; ham metin yazıldıktan sonra analiz başarısız olabilir. Bu bilinçli olarak kabul ediliyor — ham metin her koşulda korunuyor, başarısız kayıt işaretlenip yeniden işlenebiliyor (ADR-012). İzlenebilirlik uygulama seviyesinde, iki yönlü referansla sağlanıyor (FR-08).
+
+**İleride.** Ham metin hacmi büyüdüğünde Mongo tarafında TTL/arşivleme politikası, Postgres tarafında ise tarih bazlı partitioning devreye alınabilir. İki depo arasındaki tutarlılık bugün uygulama seviyesinde; ihtiyaç halinde outbox pattern'e taşınabilir (bkz. ADR-003).
+
+---
+
+## ADR-003 — Modüller Arası Senkron Spring Application Event
+
+**Karar.** `ingestion` modülü ham metni kaydettikten sonra bir domain event yayınlar; `analysis` modülü bu event'i **senkron** olarak dinler ve analizi aynı istek içinde tamamlar. Süreç içi `ApplicationEventPublisher` kullanılır.
+
+**Bağlam.** İki modülün birbirini doğrudan çağırmaması ama kullanıcının gönderim sonucunu (analiz özeti ve uyarılar) hemen görebilmesi isteniyor.
+
+**Gerekçe.**
+- Event, modüller arasında derleme zamanı bağımlılığı yaratmadan iletişim kurmanın en hafif yolu: `ingestion` kimin dinlediğini bilmiyor.
+- Senkron olması, kullanıcının bildirimi gönderir göndermez sonucu ve uyarıları (özellikle FR-09) görmesini sağlıyor.
+- Ek altyapı (broker, kuyruk) gerektirmiyor; tek komutla ayağa kalkma isterini bozmuyor.
+
+**Alternatifler.**
+- *Doğrudan servis çağrısı:* En basit, ama modüller arasında sert bağımlılık kurar ve ileride ayrıştırmayı zorlaştırır.
+- *Kafka/RabbitMQ:* Dayanıklılık ve geri basınç yönetimi kazandırırdı; bu ölçekte gereksiz operasyonel yük ve `docker compose` kurulumuna fazladan servis demek.
+- *Asenkron in-process event (`@Async`):* Kullanıcı sonucu anında göremezdi; hata yönetimi ve test edilebilirlik zorlaşırdı.
+
+**Sonuçlar.** Analiz süresi API yanıt süresine dahil. Analiz hatası ham metnin kaydını iptal etmemeli — bu yüzden analiz, ham metin kaydının transaction'ından ayrı ele alınacak. Ayrıca senkron olduğu için geriye basınç (backpressure) mekanizması yok; yoğun yükte istek süresi uzar.
+
+**İleride.** Event sözleşmesi (yayımlanan domain event tipi) zaten var olduğu için, ileride bu yapı kademeli olarak evrilebilir:
+1. **Asenkron in-process** — dinleyici `@Async` ile ayrılır; API hemen 202 döner.
+2. **Transactional outbox** — event, ham kayıtla aynı transaction'da bir outbox'a yazılır; ayrı bir yayıcı gerçek broker'a iter. "En az bir kez" teslim garantisi kazanılır.
+3. **CDC pipeline** — Mongo change stream / Debezium ile ham kayıt değişiklikleri doğrudan akışa dönüştürülür; `ingestion` event yayınlama sorumluluğundan tamamen kurtulur.
+Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalır; değişen yalnızca taşıma katmanıdır.
+
+---
+
+## ADR-004 — Gerçek Zamanlı Bildirim için SSE
+
+**Karar.** Yeni normalize veri üretildiğinde istemciler **Server-Sent Events** ile bilgilendirilecek. Akış tek yönlüdür (sunucu → istemci).
+
+**Bağlam.** İster, yeni bildirim girildiğinde tablo ve grafiklerin sayfa yenilemeden güncellenmesi (FR-13). Veri akışı yalnızca sunucudan istemciye.
+
+**Gerekçe.**
+- İhtiyaç tek yönlü; SSE tam olarak bunun için tasarlanmış ve düz HTTP üzerinde çalışıyor.
+- Tarayıcıda yerleşik `EventSource` API'si var; otomatik yeniden bağlanma ve `Last-Event-ID` protokolün parçası.
+- Proxy/altyapı açısından WebSocket'e göre daha az sürtünme, sunucu tarafında daha az durum yönetimi.
+
+**Alternatifler.**
+- *WebSocket / STOMP:* Çift yönlü iletişim gerekmiyor; ek protokol ve altyapı karmaşıklığı karşılığında bir fayda yok.
+- *Polling:* Basit ama gereksiz yük ve gecikme; "anlık güncelleme" hissini vermez.
+
+**Sonuçlar.** Uzun ömürlü HTTP bağlantıları sunucu thread/bağlantı bütçesini tüketir; timeout ve bağlantı yönetimi ayrıca tasarlanmalı (TC-10). Yayın tüm bağlı istemcilere gider — kimlik doğrulama olmadığı için istemci bazlı filtreleme yok (ADR-011).
+
+**İleride.** Çift yönlü etkileşim (ör. istemcinin abone olduğu olay tipini seçmesi) gerekirse WebSocket'e; çok örnekli (multi-instance) dağıtıma geçilirse örnekler arası yayın için Redis Pub/Sub gibi bir fan-out katmanına ihtiyaç doğar. SSE olayının sözleşmesi (payload şekli) bugünden sabitlendiği için bu geçişte istemci tarafındaki değişim taşıma katmanıyla sınırlı kalır.
+
+---
+
+## ADR-005 — Ham Kaydın Değiştirilemez Olması
+
+**Karar.** Ham bildirim yazıldıktan sonra güncellenemez ve silinemez. `ingestion` modülü Create + Read + Reprocess sunar; Update/Delete uçları yoktur.
+
+**Bağlam.** Kaynak doküman ham kaydın "log niteliğinde" olmasını ve bir kaydın hangi metinden üretildiğinin sonradan izlenebilmesini istiyor.
+
+**Gerekçe.**
+- İzlenebilirlik ancak kaynak değişmezse anlamlıdır; ham metin değişirse ondan türeyen kayıtların açıklaması geçersizleşir.
+- Değişmezlik, reprocess'i güvenli kılar: aynı girdiden her zaman yeniden üretim yapılabilir.
+- Silme/güncelleme olmadığı için türetilmiş verinin invalidasyonu gibi bir sınıf problem hiç doğmuyor.
+
+**Alternatifler.**
+- *Tam CRUD:* Ham metin değişince türeyen Postgres kayıtlarının geçersiz kılınması/yeniden üretilmesi de ister haline gelirdi; log semantiğiyle çelişirdi.
+- *Soft delete:* Kayıt korunur ama listelerden düşer. v1 için gereksiz; ihtiyaç doğarsa eklenmesi kolay.
+
+**Sonuçlar.** Yanlış girilen bir bildirim düzeltilemez, yalnızca yenisi girilebilir. Veri hacmi tek yönlü büyür.
+
+**İleride.** Kullanıcı hatalarını yönetmek için ham kayda "gizlendi/geçersiz" gibi bir durum alanı (soft delete) eklenebilir — kayıt fiziksel olarak korunurken türeyen veriler görünümlerden düşürülür. Bu, mevcut değişmezlik ilkesini bozmadan yapılabilir çünkü metnin kendisi yine dokunulmaz kalır.
+
+---
+
+## ADR-006 — Tanınmayan Olay Tipi Davranışı
+
+**Karar.** Kataloğa uymayan bir olay tipi geldiğinde bildirim **reddedilmez**. Ham metin her zaman Mongo'ya yazılır; olay kaydı `OTHER` tipi ve `UNCLASSIFIED` durumuyla üretilir; çıkarılabilen tarih/il/sayılar korunur; API cevabında kullanıcıyı bilgilendiren uyarı listesi döner.
+
+**Bağlam.** Kaynak doküman bu davranışı açıkça tasarım tercihimize bırakıyor ve gerekçesini ReadMe'de açıklamamızı istiyor.
+
+**Gerekçe.**
+- **Veri kaybı olmaz.** Reddetmek, sistemin henüz tanımadığı gerçek bir olayı tamamen kaybetmek demektir. Bilinmeyen tip çoğunlukla kullanıcının değil kataloğun eksikliğidir.
+- **Görünürlük sağlar.** `UNCLASSIFIED` kayıtlar sorgulanabilir olduğu için "sistem neyi tanıyamıyor" sorusu ölçülebilir hale gelir; katalog bu geri bildirimle büyütülür.
+- **Kısmi değer korunur.** Olay tipi bilinmese de tarih ve il çıkarımı çoğu zaman başarılıdır; bu bilgi atılmaz.
+- **Kullanıcı yanıltılmaz.** Uyarı listesi, sonucun kısmi olduğunu açıkça söyler; sessizce yanlış bir tipe zorlamaktan iyidir.
+
+**Alternatifler.**
+- *400 ile reddetme:* Kullanıcıya net ama veri kaybı yaratır ve ham kaydın "log" isteriyle çelişir.
+- *Yalnızca Mongo'ya yazıp Postgres'e hiç yazmama:* Postgres temiz kalır, ama tanınmayan bildirimlerin hacmi görünmez olur ve yeniden işleme için ayrı bir keşif işi gerekir.
+- *En yakın tipe zorlama:* Sessiz yanlış sınıflandırma — analitik veriyi kirletir, en kötü seçenek.
+
+**Sonuçlar.** Postgres'te düşük değerli `OTHER` kayıtları birikir; sorgu ve grafiklerde bunların varsayılan olarak dahil mi edileceği bir tasarım detayı olarak kalır. Sınıflandırma eşiğinin belirlenmesi ayrı bir problem (TC-8).
+
+**İleride.** `UNCLASSIFIED` kayıtlar bir "katalog boşluğu" göstergesi olarak raporlanabilir; en sık görülen sınıflandırılamayan ifadeler otomatik çıkarılıp katalog önerisine dönüştürülebilir. Katalog güncellendiğinde bu kayıtlar reprocess ile (ADR-012) geriye dönük olarak doğru tipe kavuşur — bu yüzden bugün onları saklıyor olmak ileride doğrudan kazanca dönüşüyor.
+
+---
+
+## ADR-007 — Konfigürasyondan Yönetilen Olay Kataloğu
+
+**Karar.** Olay tipleri, tetikleyici anahtar kelimeleri ve metrik tanımları koda gömülmez; konfigürasyon (YAML) üzerinden tanımlanır ve uygulama başlangıcında yüklenir.
+
+**Bağlam.** Kaynak doküman olay tiplerini ve metrikleri örneklerden bizim belirlememizi istiyor — yani katalog baştan eksik olduğu bilinen, zaman içinde büyüyecek bir şey.
+
+**Gerekçe.**
+- Yeni bir olay tipi eklemek kod değişikliği değil konfigürasyon değişikliği olur (NFR-08).
+- Katalog verisi ile çıkarım algoritması birbirinden ayrılır; algoritma testleri kataloğa, katalog testleri algoritmaya bağımlı olmaz.
+- Kataloğun içeriği tek bir yerde okunabilir; değerlendiren kişi sistemin neyi tanıdığını tek dosyada görebilir.
+
+**Alternatifler.**
+- *Enum + koda gömülü keyword listeleri:* Tip güvenliği kazandırır ama her genişletme kod değişikliği ve yeniden derleme gerektirir.
+- *Katalogun veri tabanında tutulması:* Çalışma zamanında düzenlenebilirlik kazandırır, ama yönetim arayüzü, versiyonlama ve migration ihtiyacı doğurur; v1 kapsamı için fazla.
+
+**Sonuçlar.** Konfigürasyon hatası çalışma zamanında ortaya çıkar; bu yüzden katalog başlangıçta doğrulanmalı ve hatalı katalogda uygulama ayağa kalkmamalıdır. Tip güvenliği enum'a göre zayıftır.
+
+**İleride.** Katalog veri tabanına taşınıp yönetim arayüzüyle çalışma zamanında düzenlenebilir hale getirilebilir; her katalog sürümü versiyonlanır ve olay kayıtları hangi katalog sürümüyle üretildiklerini taşır. Bu, ADR-012'deki reprocess ile birleşince "kataloğu güncelle, geçmişi yeniden değerlendir" akışını tam olarak mümkün kılar.
+
+---
+
+## ADR-008 — Kural/Regex Tabanlı Çıkarım (ML Yerine)
+
+**Karar.** Tarih, il, olay tipi ve metrik çıkarımı kural ve düzenli ifade (regex) tabanlı bir hattayla (pipeline) yapılacak: normalizasyon → cümle bölme → aday tespiti (tarih, il, sayı, anahtar kelime) → eşleştirme → sınıflandırma.
+
+**Bağlam.** Girdi Türkçe serbest metin; sayılar yazıyla gelebiliyor, tarihler çok formatlı, iller ek alıyor.
+
+**Gerekçe.**
+- **Deterministik ve test edilebilir:** Aynı girdi her zaman aynı çıktıyı verir. %80 kapsam isterini (NFR-02) anlamlı testlerle karşılamanın en doğrudan yolu.
+- **Açıklanabilir:** Hangi kelimenin hangi çıkarımı tetiklediği gösterilebilir (FR-17). ML modeliyle bu doğrudan mümkün değil.
+- **Bağımlılık ve kaynak maliyeti sıfıra yakın:** Model dosyası, GPU, harici servis yok; `docker compose up` hafif kalır.
+- Problem alanı dar ve kalıplı; kural tabanlı yaklaşım bu kalıpları yüksek isabetle yakalar.
+
+**Alternatifler.**
+- *NER modeli (spaCy/Zemberek/HuggingFace):* Görülmemiş ifadelerde daha esnek olurdu; karşılığında eğitim verisi, model servisi, belirsiz çıktı ve ağır bağımlılık gelirdi.
+- *LLM ile çıkarım:* Esneklikte en güçlüsü; ama harici servis bağımlılığı, maliyet, gecikme ve deterministik olmayan çıktı — birim testle doğrulaması zor.
+
+**Sonuçlar.** Kalıp dışına çıkan ifadelerde ("geçtiğimiz hafta sonu", devrik cümleler) isabet düşer. Kural seti büyüdükçe bakım maliyeti artar ve kurallar arası öncelik/çakışma yönetimi gerekir (TC-3, TC-8).
+
+**İleride.** Hat, aşamaları ayrık olacak şekilde kurgulanıyor; bu yüzden tek bir aşama (ör. olay tipi sınıflandırıcı ya da varlık çıkarıcı) kural tabanlıdan model tabanlıya değiştirilebilir, diğerleri aynı kalır. Hibrit bir yapı da mümkün: kural hattı önce çalışır, yalnızca `UNCLASSIFIED` kalan metinler bir modele/LLM'e düşer. Bu ikinci aşama, ADR-006 sayesinde zaten sorgulanabilir bir kuyruk halinde duruyor.
+
+---
+
+## ADR-009 — Java 21 + Spring Boot 3.5.x
+
+**Karar.** Java 21 (LTS) ve Spring Boot 3.5.x kullanılacak.
+
+**Bağlam.** Java 21 bir proje kısıtı. Ağustos 2026 itibarıyla güncel Spring Boot hattı 4.1.x; 3.5.x hattı da desteklenmeye devam ediyor.
+
+**Gerekçe.**
+- Java 21 ile tam uyumlu ve olgun; record, pattern matching, sealed types gibi modern dil özellikleri kullanılabiliyor.
+- Ekosistem (Testcontainers, JaCoCo, springdoc-openapi, Flyway, Spring Data) bu hatta en iyi test edilmiş durumda.
+- Dokümantasyon ve örnek bolluğu en yüksek hat; değerlendirme projesinde sürpriz/kırıcı değişiklik riski en düşük seçenek.
+
+**Alternatifler.**
+- *Spring Boot 4.1.x:* Daha güncel ve Java 26'ya kadar destekli. Karşılığında kırıcı değişiklikler ve görece az topluluk örneği — bu projede kazandıracağı bir şey yok.
+- *Spring Boot 3.4 ve öncesi:* Destek penceresi daha dar, yeni bir projede tercih için sebep yok.
+
+**Sonuçlar.** Bir noktada Boot 4.x'e yükseltme gerekecek. Bu maliyeti düşük tutmak için kaldırılmış/deprecated API'lerden kaçınılacak.
+
+**İleride.** Boot 4.x'e geçiş, özellikle sanal thread'lerin (Project Loom) yaygınlaşmasıyla SSE'nin uzun ömürlü bağlantılarında (ADR-004) doğrudan fayda sağlar: platform thread bütçesi darboğaz olmaktan çıkar.
+
+---
+
+## ADR-010 — Tek Instance Veri Tabanları
+
+**Karar.** MongoDB ve PostgreSQL `docker compose` içinde birer tek instance olarak çalışacak; replica set / cluster kurulmayacak.
+
+**Bağlam.** Sistem tek komutla ayağa kalkmalı (NFR-03) ve geliştirme/değerlendirme ortamında çalışacak.
+
+**Gerekçe.**
+- Yüksek erişilebilirlik bir ister değil; replica set kurulumu `docker compose`'u belirgin şekilde ağırlaştırır ve ilk çalıştırma süresini uzatır.
+- Tek instance, kurulumu deterministik ve hata ayıklamayı basit tutar.
+
+**Alternatifler.**
+- *Mongo replica set:* Change stream ve çok belgeli transaction için gerekli olurdu. İkisi de v1 kapsamında değil.
+- *Yönetilen bulut veri tabanları:* Değerlendirme senaryosunda taşınabilirliği ve tek komutla ayağa kalkmayı bozar.
+
+**Sonuçlar.** Üretim ortamı için uygun değil: tek nokta hatası ve yatay okuma ölçeklenmesi yok. Mongo transaction ve change stream özellikleri kullanılamaz.
+
+**İleride.** Üretime çıkış hâlinde Mongo replica set'e, Postgres ise okuma replikalarına ve tarih bazlı partitioning'e geçirilebilir. Mongo replica set'e geçmek ayrıca change stream'i açar — bu da ADR-003'te tarif edilen CDC evrimi için ön koşuldur.
+
+---
+
+## ADR-011 — Kimlik Doğrulamanın Kapsam Dışı Bırakılması
+
+**Karar.** v1'de kimlik doğrulama, yetkilendirme ve kullanıcı yönetimi yok. API açık; SSE yayını bağlı tüm istemcilere gider.
+
+**Bağlam.** Kaynak dokümanda güvenlik/kimlik ile ilgili herhangi bir ister yok. Sistem tek tip aktör (analist) etrafında tanımlı.
+
+**Gerekçe.**
+- İster olmayan bir yeteneği eklemek kapsamı, test yükünü ve `docker compose` kurulumunu gereksiz büyütür.
+- Asıl teknik zorluk metin analizi tarafında; efor oraya ayrılmalı.
+- Kararın bilinçli olduğunu belgelemek, sessizce atlamış olmaktan farklıdır — bu kayıt tam olarak o amaca hizmet ediyor.
+
+**Alternatifler.**
+- *Basit API key:* Düşük maliyetle "güvenlik düşünüldü" sinyali verirdi; ancak gerçek bir güvenlik sınırı olmadan yanlış güven duygusu yaratır.
+- *Spring Security + JWT:* Tam çözüm; ama kullanıcı deposu, token yaşam döngüsü ve ilgili testler kapsamı ciddi büyütür.
+
+**Sonuçlar.** Sistem herkese açık; üretimde bu haliyle çalıştırılmamalı. Kullanıcı bazlı filtreleme, oran sınırlama (rate limiting) ve denetim izi (audit trail) yok.
+
+**İleride.** Kimlik doğrulama eklendiğinde giriş noktası nettir: REST uçları için bir güvenlik filtre zinciri, SSE için bağlantı kurulurken token doğrulaması. SSE yayını o noktada istemci bazlı filtrelenebilir hale gelir (ör. kullanıcı yalnızca ilgilendiği illeri dinler). Ham bildirim kaydına "gönderen kullanıcı" alanı eklemek, kaydın değişmezliğini (ADR-005) bozmadan denetim izi sağlar.
+
+---
+
+## ADR-012 — Reprocess Yeteneği
+
+**Karar.** Mevcut bir ham bildirim, güncel analiz kurallarıyla yeniden analiz edilebilir; ham metin değişmez, önceki normalize kayıtların yerini yeni sonuç alır.
+
+**Bağlam.** Katalog (ADR-007) ve çıkarım kuralları (ADR-008) zaman içinde gelişecek. Analiz ayrıca başarısız olabilir (ADR-002).
+
+**Gerekçe.**
+- Ham metin değişmez olduğu için (ADR-005) yeniden üretim her zaman güvenli ve tekrarlanabilir.
+- Kurallar geliştikçe geçmiş verinin kalitesi de yükselir; aksi halde katalog iyileştirmeleri yalnızca yeni bildirimlere fayda sağlardı.
+- Başarısız analizler için doğal bir kurtarma yolu sunar.
+
+**Alternatifler.**
+- *Reprocess olmaması:* Geçmiş veri, üretildiği andaki kural setine sonsuza kadar sıkışır; ADR-006'daki "sakla, sonra sınıflandır" stratejisi anlamsızlaşırdı.
+- *Otomatik toplu yeniden işleme:* Katalog değişiminde tüm geçmişi otomatik işlemek. Kontrolsüz ve maliyetli; v1 için açık tetikleme yeterli.
+
+**Sonuçlar.** Yeniden üretimin mükerrer kayıt oluşturmaması gerekiyor; bu, kayıt kimliği ve değiştirme stratejisiyle ilgili bir tasarım detayı olarak task aşamasına kalıyor (TC-1, TC-9 ile bağlantılı).
+
+**İleride.** Analiz motoru versiyonlanıp her olay kaydına "hangi motor/katalog sürümüyle üretildi" bilgisi eklenebilir. Böylece yalnızca eski sürümle üretilmiş kayıtlar seçilip toplu yeniden işlenebilir ve iki sürümün çıktısı karşılaştırılarak kural değişikliğinin etkisi ölçülebilir.
+
+---
+
+## ADR-013 — Maven + Flyway + OpenAPI
+
+**Karar.** Build aracı Maven (wrapper ile), PostgreSQL şema yönetimi Flyway, API dokümantasyonu springdoc-openapi.
+
+**Bağlam.** Projenin tek komutla kurulup çalışabilmesi ve şemanın öngörülebilir olması gerekiyor.
+
+**Gerekçe.**
+- **Maven:** Spring Boot ekosisteminde en yaygın; wrapper sayesinde makinede kurulu Maven gerekmiyor, Dockerfile ve README adımları sadeleşiyor. Çok modüllü (reactor) yapı, ADR-001'deki modül sınırlarını build seviyesinde taşıyor: ortak sürüm/plugin yönetimi parent'ta, modüle özgü kütüphaneler kendi pom'unda.
+- **Flyway:** Şema versiyonlu ve kaynak kontrolünde; `ddl-auto` ile şema üretmek üretim benzeri davranıştan uzaklaşır ve şema değişikliklerini görünmez kılar.
+- **springdoc-openapi:** API sözleşmesi kodla birlikte üretilir ve senkron kalır; frontend entegrasyonunu kolaylaştırır (NFR-07).
+
+**Alternatifler.**
+- *Gradle:* Daha esnek ve hızlı build; bu proje ölçeğinde belirgin bir fayda getirmiyor.
+- *Liquibase:* Flyway'e denk; düz SQL migration'lar bu proje için daha okunaklı.
+- *Elle yazılan OpenAPI dosyası:* Kodla senkron kalmama riski yüksek.
+
+**Sonuçlar.** Maven XML'i Gradle DSL'ine göre daha ayrıntılı. Flyway migration'ları ileri yönlüdür; geri alma senaryosu ayrıca düşünülmelidir.
+
+**İleride.** Çok modüllü yapı zaten kurulu olduğu için, bir modülün ayrı servise çıkarılması onu kendi `app` modülüyle eşleyip reactor'dan ayırmaya indirgeniyor — kod taşımak gerekmiyor. OpenAPI şeması "contract-first" yaklaşımına çevrilerek frontend istemci kodu otomatik üretilebilir.
+
+---
+
+## ADR-014 — Tarih Çözümleme ve Referans Tarih
+
+**Karar.** Bir olay kaydının tarihi üç kaynaktan çözülür ve **çözüm kaynağı kayıtla birlikte saklanır**: `EXPLICIT` (metinde açık tarih), `RELATIVE` (göreli zaman ifadesi) ve `DEFAULTED` (metinde hiç zaman ifadesi yok). Göreli ifadelerin ve varsayılan durumun **referans tarihi, ham bildirimin gönderim tarihidir**; reprocess sırasında da orijinal gönderim tarihi kullanılır.
+
+**Bağlam.** Kaynak dokümandaki üçüncü örnek — "Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi." — açık takvim tarihi içermiyor, ama tarihsiz de değil: metin bir zaman ifadesi taşıyor ve bu ifade gönderim tarihine göre çözülebiliyor. Bu üçüncü örnek, "tarih var / tarih yok" şeklindeki ikili ayrımın yetersiz olduğunu gösteriyor.
+
+**Gerekçe.**
+- **Göreli ifade bir çıkarımdır, varsayım değil.** "Son 24 saatte" ifadesini "tarih bulunamadı" saymak, metinde fiilen var olan bilgiyi atmak olur. `RELATIVE` ile `DEFAULTED`'ı ayırmak, aynı takvim gününü üretseler bile aralarındaki güven farkını korur.
+- **Kaynağın saklanması veriyi dürüst kılar.** Kullanıcı bir grafikte gördüğü noktanın metinden okunmuş bir tarihe mi yoksa sistemin varsayımına mı dayandığını bilmelidir. Aksi halde `DEFAULTED` kayıtlar gönderim gününde yapay bir yığılma yaratır ve bu görünmez kalır.
+- **Referansın gönderim tarihi olması reprocess'i güvenli kılar.** Referans "şimdi" olsaydı, aynı bildirimin yeniden işlenmesi (ADR-012) geçmiş kayıtların tarihini kaydırır ve analiz tekrarlanabilir olmaktan çıkardı. Ham kayıt değişmez olduğu için (ADR-005) gönderim tarihi de sabit ve güvenilir bir çapa.
+
+**Alternatifler.**
+- *Göreli ifadeyi yok sayıp `DEFAULTED` saymak:* Kod basitleşirdi; ama metindeki gerçek bilgi kaybolur ve veri kalitesi ölçülemez hale gelirdi.
+- *Tarih kaynağını saklamamak:* Tek alanla yetinmek. Çıkarılmış ve varsayılmış tarihler ayırt edilemez, kullanıcı yanıltılır.
+- *Tarihsiz metinleri reddetmek:* ADR-006'daki "veri kaybetme" ilkesiyle çelişir.
+- *Referans olarak analiz anını ("şimdi") kullanmak:* Reprocess'i bozar; aynı girdi farklı zamanlarda farklı çıktı üretir.
+
+**Sonuçlar.** Tarih alanının yanında bir kaynak alanı taşınacak ve sorgu/grafik uçlarında görünür olacak. Göreli **aralık** ifadeleri v1'de tek bir referans güne indirgeniyor — "son 3 günde" ifadesi üç güne yayılmıyor. Zaman dilimi seçimi (`Europe/Istanbul` vs. UTC) ve gün sınırı tanımı bu kararla sabitlenmedi; TC-6 kapsamında karara bağlanacak.
+
+**İleride.** Tarih tek bir gün yerine bir **aralık** (başlangıç–bitiş) olarak modellenebilir; böylece "son 3 günde" ifadesi gerçek yayılımıyla temsil edilir ve zaman serisi grafiklerinde daha doğru dağıtılır. Ayrıca kaynak bilgisine bir güven skoru eklenerek, kullanıcıya tarih belirsizliği grafik üzerinde görsel olarak (ör. soluk/kesikli seri) gösterilebilir. Bugün kaynağı saklıyor olmak, bu evrimin ön koşulunu şimdiden karşılıyor.

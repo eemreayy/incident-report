@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.emreay.incidentreport</groupId>
+        <artifactId>incident-report-be</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>analysis</artifactId>
+    <name>analysis</name>
+    <description>Text extraction, classification and the analytical read side; owns PostgreSQL</description>
+
+    <!--
+      Owns PostgreSQL. There is deliberately no dependency on the `ingestion` module: this module
+      reacts to domain events declared in `shared`.
+
+      Not here yet, by design:
+        - spring-boot-starter-data-jpa, postgresql, flyway  -> T-04, with the schema they manage.
+          Adding the JPA starter before there is a datasource would stop the app from booting.
+      The event type catalog (T-08) will live in this module's own resources under a distinct
+      filename - never as application.yml, which belongs to the `app` module.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>com.emreay.incidentreport</groupId>
+            <artifactId>shared</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+    </dependencies>
+</project>

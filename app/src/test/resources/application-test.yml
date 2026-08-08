@@ -1,0 +1,7 @@
+# Test profile. Tests that touch a database run against real MongoDB and PostgreSQL instances
+# via Testcontainers (T-03); their connection details are supplied dynamically by the containers.
+
+logging:
+  level:
+    root: WARN
+    com.emreay.incidentreport: DEBUG

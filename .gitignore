@@ -1,0 +1,71 @@
+### Maven ###
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+.mvn/timing.properties
+# NOTE: mvnw, mvnw.cmd and .mvn/wrapper/maven-wrapper.properties ARE committed.
+# The whole point of the wrapper is that a fresh clone builds without Maven installed.
+dependency-reduced-pom.xml
+buildNumber.properties
+release.properties
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+
+### Java ###
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### Eclipse / VS Code ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+.vscode/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+### Logs ###
+*.log
+logs/
+
+### Environment / secrets ###
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+### Docker ###
+docker-compose.override.yml
+
+### Test & coverage output ###
+/coverage/
+*.exec

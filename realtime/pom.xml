@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.emreay.incidentreport</groupId>
+        <artifactId>incident-report-be</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>realtime</artifactId>
+    <name>realtime</name>
+    <description>One-way Server-Sent Events broadcast of newly produced structured records</description>
+
+    <!--
+      A transport layer, not a source of truth: it owns no database and depends on no other module
+      than `shared`. It learns about new records from domain events, never by querying analysis.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>com.emreay.incidentreport</groupId>
+            <artifactId>shared</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: incident-report-be
+  profiles:
+    default: local
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: true
+
+server:
+  port: 8080
+  error:
+    # Errors are returned as RFC 7807 problem+json (T-06). The default Whitelabel body is off:
+    # no stack trace and no internal message may leak to the client.
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    com.emreay.incidentreport: INFO
+
+# Application-specific settings. The event type catalog (T-08) and the analysis thresholds
+# will be added here.
+incident-report:
+  ingestion:
+    # Maximum accepted length of the raw text; used by the T-06 request validation.
+    max-text-length: 10000

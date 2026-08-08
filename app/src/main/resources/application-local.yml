@@ -1,0 +1,8 @@
+# Local development: the application runs from the IDE or via ./mvnw spring-boot:run,
+# while the databases are started on localhost with docker compose (T-02).
+#
+# Database connection settings arrive here together with their starters (T-04).
+
+logging:
+  level:
+    com.emreay.incidentreport: DEBUG

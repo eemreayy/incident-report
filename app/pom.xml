@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.emreay.incidentreport</groupId>
+        <artifactId>incident-report-be</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>app</artifactId>
+    <name>app</name>
+    <description>Deployable bootstrap: wires the modules together into one Spring Boot application</description>
+
+    <!--
+      The only deployable artifact and the only module allowed to depend on every other module.
+      It contains the @SpringBootApplication class and the application*.yml files - Spring Boot
+      loads application.yml from the classpath root, so exactly one module may own it.
+
+      Keep application logic out of here. This module wires, it does not decide.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>com.emreay.incidentreport</groupId>
+            <artifactId>shared</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.emreay.incidentreport</groupId>
+            <artifactId>ingestion</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.emreay.incidentreport</groupId>
+            <artifactId>analysis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.emreay.incidentreport</groupId>
+            <artifactId>realtime</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>incident-report-be</finalName>
+        <plugins>
+            <!-- Only this module is repackaged into an executable jar. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

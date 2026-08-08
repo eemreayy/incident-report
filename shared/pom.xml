@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.emreay.incidentreport</groupId>
+        <artifactId>incident-report-be</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>shared</artifactId>
+    <name>shared</name>
+    <description>Shared kernel: cross-module domain events and the common error contract</description>
+
+    <!--
+      This module must not depend on any other module of this project. Everything declared here
+      becomes something all modules may couple to, which makes it expensive to change - so keep the
+      dependency list as small as it can possibly be.
+
+      spring-context is present only for the ApplicationEvent publishing contract. No web layer,
+      no persistence, no starters.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+    </dependencies>
+</project>

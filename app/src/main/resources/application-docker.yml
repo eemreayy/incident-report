@@ -1,0 +1,9 @@
+# The application running inside docker compose (T-02).
+# Connection details are supplied by compose as environment variables; secrets are never
+# baked into the image.
+#
+# Database connection settings arrive here together with their starters (T-04).
+
+logging:
+  level:
+    com.emreay.incidentreport: INFO
