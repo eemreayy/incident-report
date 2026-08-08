@@ -162,7 +162,7 @@ Sistem kaydın tarihini üç kaynaktan çözer ve **hangi kaynaktan çözüldü�
 ### FR-07 — Tek metinde birden fazla il ve metrik seti
 Bir ham bildirim birden fazla ile ve/veya birden fazla metrik setine ait bilgi taşıyabilir; sistem bu bilgiyi kaybetmeden temsil eder.
 - **Kabul:** Örnek 3'te hem Bursa hem Kocaeli verisi sorgu sonuçlarında ayrı ayrı görünür; hiçbir sayısal değer çift sayılmaz.
-- **Not:** Bu isterin veri modeline nasıl yansıyacağı bilinçli olarak PRD dışında bırakılmıştır → **TC-1**.
+- **Not:** Veri modeline nasıl yansıdığı [ADR-019](DECISIONS.md#adr-019--kayıt-granülaritesi)'da karara bağlandı: `(ham bildirim, tarih, il, olay tipi)` granülaritesi, ile atanamayan sayılar için `SHARED` kapsamı.
 
 ### FR-08 — Normalize verinin saklanması ve izlenebilirlik
 Analizden çıkan veri PostgreSQL'e yazılır; ham MongoDB kaydı ile normalize kayıtlar **iki yönlü** ilişkilendirilebilir.
@@ -277,8 +277,8 @@ Bu maddeler bilinçli olarak PRD'de karara bağlanmamıştır; her biri implemen
 
 | No | Challenge | Neden zor |
 |---|---|---|
-| **TC-1** | **Kayıt granülaritesi** — bir ham metinden kaç normalize kayıt üretilecek (il × tarih × olay tipi?) | "Her iki ilde toplam 10 kişi yaralı" gibi ile atanamayan metriklerde çift sayım riski var (FR-07) |
-| **TC-2** | Metrik veri modeli (normalize tablo / JSONB / geniş tablo) | Olay tipine göre metrik setleri farklı; agregasyon performansı ile genişletilebilirlik çatışıyor |
+| ~~TC-1~~ | ~~Kayıt granülaritesi~~ | **Çözüldü → [ADR-019](DECISIONS.md#adr-019--kayıt-granülaritesi).** Granülarite `(ham bildirim, tarih, il, olay tipi)`; ile atanamayan sayılar `SHARED` kapsamıyla ayrı kayıt, kapsadıkları iller kayıtlı |
+| ~~TC-2~~ | ~~Metrik veri modeli~~ | **Çözüldü → [ADR-020](DECISIONS.md#adr-020--metrik-veri-modeli-metrik-başına-satır).** Metrik başına satır; katalog büyürken şema değişmiyor |
 | **TC-3** | Sayı ↔ metrik eşleştirme | Cümle içi yakınlık kuralları; "Bursa'da 8, Kocaeli'nde 6 trafik kazası" gibi çoklu il-sayı bağlama |
 | **TC-4** | Türkçe bileşik sayı sözcüğü ayrıştırma | "on iki", "kırk beş", "yüz yirmi" gibi çok kelimeli ifadeler |
 | **TC-5** | Türkçe metin normalizasyonu | Locale bağımlı büyük/küçük harf (i/I/İ/ı); ek ve apostrof toleransı (`Ankara'da`, `Kocaeli'nde`) |
@@ -299,7 +299,7 @@ Bu maddeler bilinçli olarak PRD'de karara bağlanmamıştır; her biri implemen
    |---|---|---|---|---|
    | 1 | `EPIDEMIC` | 2020-04-20 | Ankara | `NEW_CASE`=15, `DEATH`=1, `RECOVERED`=5 |
    | 2 | `EARTHQUAKE` | 2020-05-03 | İzmir | `DAMAGED_BUILDING`=12, `DEATH`=2, `RESCUED`=9, `INJURED`=40 |
-   | 3 | `TRAFFIC_ACCIDENT` | Gönderim tarihi — kaynak `RELATIVE` ("Son 24 saatte") | Bursa, Kocaeli | Bursa: `ACCIDENT_COUNT`=8, `DEATH`=1 · Kocaeli: `ACCIDENT_COUNT`=6, `DEATH`=2 · `INJURED`=10 (ile atanamaz → TC-1) |
+   | 3 | `TRAFFIC_ACCIDENT` | Gönderim tarihi — kaynak `RELATIVE` ("Son 24 saatte") | Bursa, Kocaeli | Bursa: `ACCIDENT_COUNT`=8, `DEATH`=1 · Kocaeli: `ACCIDENT_COUNT`=6, `DEATH`=2 · `INJURED`=10 (ile atanamaz → `SHARED` {Bursa, Kocaeli}) |
 
 2. Örnek metinlerin cümleleri karıştırıldığında sonuç değişmez (FR-04).
 3. Tanınmayan olay tipi içeren bir metin reddedilmez; `OTHER`/`UNCLASSIFIED` üretilir ve uyarı döner (FR-09).

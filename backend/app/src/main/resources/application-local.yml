@@ -1,8 +1,31 @@
 # Local development: the application runs from the IDE or via ./mvnw spring-boot:run,
-# while the databases are started on localhost with docker compose (T-02).
+# while the databases are started on localhost with docker compose.
 #
-# Database connection settings arrive here together with their starters (T-04).
+#   docker compose up -d postgres mongodb
+#
+# These values match the compose defaults. Under the `docker` profile the same settings arrive
+# as environment variables instead, so nothing here is duplicated there.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/incident_report
+    username: incident
+    password: incident
+  data:
+    mongodb:
+      # authSource=admin because the root user created by MONGO_INITDB_* lives in the admin
+      # database, not in the application database.
+      uri: mongodb://incident:incident@localhost:27017/incident_report?authSource=admin
 
 logging:
   level:
     com.emreay.incidentreport: DEBUG
+
+management:
+  endpoint:
+    health:
+      # Development convenience: shows each database as its own component, which is the quickest
+      # evidence that the application really reached both stores. Safe enough here - there are no
+      # credentials in the payload and the API carries no authentication at all (ADR-011). The base
+      # application.yml keeps `never`, so a future production profile stays closed by default.
+      show-details: always

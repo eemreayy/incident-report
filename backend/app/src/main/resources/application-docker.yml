@@ -7,3 +7,12 @@
 logging:
   level:
     com.emreay.incidentreport: INFO
+
+management:
+  endpoint:
+    health:
+      # Development convenience: shows each database as its own component, which is the quickest
+      # evidence that the application really reached both stores. Safe enough here - there are no
+      # credentials in the payload and the API carries no authentication at all (ADR-011). The base
+      # application.yml keeps `never`, so a future production profile stays closed by default.
+      show-details: always

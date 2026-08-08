@@ -113,7 +113,7 @@ katman yönü (repository → service → controller).
 
 ## Faz 1 — Veri Modeli Kararı *(bloke edici)*
 
-### ☐ T-04 · TC-1 ve TC-2'yi karara bağla, şemayı kur
+### ☑ T-04 · TC-1 ve TC-2'yi karara bağla, şemayı kur
 **Ek kapsam (T-02'den devredildi):** Veri tabanı starter'ları (`spring-boot-starter-data-mongodb`,
 `spring-boot-starter-data-jpa`, `postgresql`, `flyway`) ilgili modüllerin pom'una eklenir ve
 uygulamanın her iki veri tabanına gerçekten bağlandığı `/actuator/health` üzerinden doğrulanır.
@@ -130,7 +130,27 @@ arasındaki **iki yönlü** referans bu task'ta kurulur.
 - **Bağımlılık:** T-01
 - **Karşılar:** FR-07, FR-08, NFR-06 · **Çözer:** TC-1, TC-2
 - **DoD:** Kararlar ADR olarak `docs/DECISIONS.md`'de ("İleride" bölümü dahil); migration'lar temiz veri tabanında çalışıyor; iki yönlü izlenebilirlik şema seviyesinde mümkün.
-- **Not:** Bu task sonraki her şeyi bloke ediyor; kararlar netleşmeden ingestion ve analysis persist edilemez.
+- **Kararlar:** **ADR-019** (granülarite) ve **ADR-020** (metrik modeli). Belirleyici olan, kaynak
+  dokümanın amaç cümlesindeki *"zaman içinde, coğrafi bölge bazında"* ifadesi: tarih ve il, kaydın
+  kimliğinin parçası oldu. İle atanamayan sayılar (`SHARED`) bölüştürülmüyor, düşürülmüyor;
+  kapsadıkları iller ayrı bir tabloda kayıtlı.
+- **Sonuç:** Flyway `V1__schema.sql` (6 tablo, CHECK constraint'ler, indexler) + `V2` (81 il).
+  Mongo dökümanı `record` olarak yazıldı — değişmezlik yapısal, setter yok. JPA entity'leri üç
+  fabrika metoduyla (`forProvince` / `sharedAcross` / `withoutProvince`) şemadaki
+  `incident_province_matches_scope` kuralını Java tarafında da imkânsız kılıyor.
+  `ddl-auto=validate`, yani entity ile migration ayrışırsa uygulama ayağa kalkmıyor.
+- **Doğrulandı:** 26 test geçiyor (14'ü yeni), coverage **%98**. Docker'da `db` ve `mongo`
+  health bileşenlerinin ikisi de `UP`; `flyway_schema_history` iki migration'ı da başarılı
+  gösteriyor; `province` tablosunda 81 satır.
+- **T-02'den devredilen DoD kapandı:** "uygulama iki veri tabanına da bağlanabiliyor" artık
+  gerçek. Compose dosyasında değişiklik gerekmedi — ortam değişkenleri T-02'de standart Spring
+  isimleriyle bağlanmıştı.
+- **Kalite kapısı işini yaptı:** ilk denemede `analysis` %77'de kaldı. Eksik satırlar test
+  yazılarak değil **kod silinerek** kapatıldı: `Province`'in public constructor'ı ölü koddu
+  (iller Flyway'den geliyor), çocuk entity'lerin geri-referans getter'ları kullanılmıyordu.
+  Ayrıca `Incident.toString()` lazy association'a dokunuyordu — transaction dışında loglanınca
+  patlayacak gerçek bir tuzak; sadeleştirildi ve testle sabitlendi.
+- **Not:** Bu task sonraki her şeyi bloke ediyordu; T-05 ve T-07 artık açık.
 
 ---
 

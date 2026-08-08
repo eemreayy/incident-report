@@ -100,6 +100,32 @@ Rules that must never be broken:
 7. Event types, their trigger keywords and their metrics live in **YAML configuration**, never
    hardcoded. Adding an event type must not require a code change.
 
+## Data model — hard constraints
+
+An `Incident` is grained by **(raw report, date, province, event type)** — ADR-019. One text
+produces one record per distinct combination it contains. `province` is nullable and always paired
+with a scope:
+
+- `SINGLE` — the numbers belong to one named province.
+- `SHARED` — the text gives a total across several provinces ("her iki ilde toplam 10 kişi").
+  The covered provinces are stored in `incident_shared_province`.
+- `UNKNOWN` — no province appears in the text.
+
+Rules that follow, and that queries and DTOs must respect:
+
+- **Never split a `SHARED` figure across its provinces.** Even distribution invents data the text
+  does not contain. It is not added to any single province's total, ever.
+- **Never drop it either.** A province-filtered view must be able to surface it as a separate,
+  labelled item, so per-province totals and the grand total can be reconciled by the reader.
+- **Count it once when several provinces are selected** — join through the link table with
+  `DISTINCT`, do not sum per province.
+- Build incidents through `Incident.forProvince` / `sharedAcross` / `withoutProvince`. There is no
+  constructor that can attach a single province to a `SHARED` record, and the schema enforces the
+  same thing via `incident_province_matches_scope`.
+- Metrics are one row per metric (ADR-020), keyed by catalog name. Adding a metric must never
+  require a migration.
+- Entity `toString()` must not touch a lazy association — it explodes from inside the logging call.
+
 ## Conventions
 
 - Java 21, Spring Boot 3.5.x, Maven (wrapper), Flyway for Postgres schema, springdoc-openapi.

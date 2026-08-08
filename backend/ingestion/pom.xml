@@ -18,8 +18,9 @@
       Owns MongoDB. There is deliberately no dependency on the `analysis` module: the two
       communicate through domain events declared in `shared`.
 
-      spring-boot-starter-data-mongodb is NOT here yet. The document shape is decided in T-04
-      together with the PostgreSQL schema, so the driver arrives with the code that uses it.
+      Note what is absent: no JPA, no JDBC, no PostgreSQL driver. The relational side belongs to
+      `analysis` (ADR-002), and withholding the dependency is what makes that boundary real rather
+      than a convention. The ArchUnit rules verify the same thing from the other direction.
     -->
     <dependencies>
         <dependency>
@@ -34,6 +35,26 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mongodb</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

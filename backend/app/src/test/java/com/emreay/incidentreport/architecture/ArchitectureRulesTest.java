@@ -1,6 +1,7 @@
 package com.emreay.incidentreport.architecture;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
@@ -20,7 +21,12 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * <p>This test lives in {@code app} because that is the only module with every other module on its
  * classpath. See ADR-017 for why ArchUnit rather than Spring Modulith.
  */
-@AnalyzeClasses(packages = ArchitectureRulesTest.ROOT_PACKAGE)
+@AnalyzeClasses(
+        packages = ArchitectureRulesTest.ROOT_PACKAGE,
+        // Rules describe production code. Tests legitimately do things production code must not —
+        // reaching across modules to assemble a scenario, for one — and holding them to the same
+        // rules would only teach people to weaken the rules.
+        importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureRulesTest {
 
     static final String ROOT_PACKAGE = "com.emreay.incidentreport";

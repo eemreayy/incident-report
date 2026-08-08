@@ -8,6 +8,20 @@ spring:
     deserialization:
       fail-on-unknown-properties: true
 
+  jpa:
+    hibernate:
+      # Flyway owns the schema. `validate` turns a mismatch between the entities and the
+      # migrations into a startup failure instead of a runtime surprise.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+    # Migrations live in the analysis module, which owns PostgreSQL (ADR-002).
+    locations: classpath:db/migration
+
 server:
   port: 8080
   error:

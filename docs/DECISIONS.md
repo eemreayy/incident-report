@@ -26,6 +26,8 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-016](#adr-016--tek-repo-monorepo) | Tek repo (monorepo) | Kabul edildi |
 | [ADR-017](#adr-017--mimari-kurallar-için-archunit-spring-modulith-yerine) | Mimari kurallar için ArchUnit (Spring Modulith yerine) | Kabul edildi |
 | [ADR-018](#adr-018--coverage-kapısı-modül-başına-eşik--proje-geneli-rapor) | Coverage kapısı: modül başına eşik + proje geneli rapor | Kabul edildi |
+| [ADR-019](#adr-019--kayıt-granülaritesi) | Kayıt granülaritesi: (ham bildirim, tarih, il, olay tipi) | Kabul edildi · **TC-1 çözüldü** |
+| [ADR-020](#adr-020--metrik-veri-modeli-metrik-başına-satır) | Metrik veri modeli: metrik başına satır | Kabul edildi · **TC-2 çözüldü** |
 
 ---
 
@@ -476,3 +478,63 @@ incident-report/
 - `./mvnw verify` artık çalışan bir Docker daemon gerektiriyor (Testcontainers). İmaj derlemesi gerektirmiyor — `Dockerfile` paketlemeyi `-DskipTests` ile yapıyor.
 
 **İleride.** Coverage eşiği tek bir property'den (`coverage.minimum.line`) yönetiliyor; kod tabanı olgunlaştıkça yükseltilebilir ve branch coverage eşiği eklenebilir. Mutation testing (PIT) bir sonraki doğal adım: coverage "satır çalıştırıldı mı" sorusunu, mutation testing "test gerçekten bir şey doğruluyor mu" sorusunu cevaplar — %80 çizgisinin anlamlı testlerle mi yoksa getter çağrılarıyla mı tutulduğunu ancak o gösterir.
+
+---
+
+## ADR-019 — Kayıt Granülaritesi
+
+**Karar.** Bir **Olay Kaydı**'nın granülaritesi `(ham bildirim, tarih, il, olay tipi)`'dir. Bir ham metin, içerdiği her farklı kombinasyon için bir kayıt üretir. İl alanı null olabilir ve yanında bir **kapsam** bilgisi taşır:
+
+| `province_scope` | Anlamı | `province_code` |
+|---|---|---|
+| `SINGLE` | Sayılar belirli bir ile ait | Dolu |
+| `SHARED` | Metin sayıyı birden fazla ile **ortak** veriyor ("her iki ilde toplam") | Boş — kapsadığı iller `incident_shared_province`'de |
+| `UNKNOWN` | Metinde hiç il geçmiyor | Boş |
+
+**Bağlam.** PRD bu kararı bilinçli olarak TC-1 olarak açık bırakmıştı. Belirleyici olan, kaynak dokümanın amaç cümlesi: verilerin *"zaman içinde, coğrafi bölge bazında grafiksel olarak izlenebilmesi"*. Bu, tarih ve ilin bir sunum tercihi değil, verinin taşıması gereken boyutlar olduğunu söylüyor. Üçüncüsünü FR-11 ekliyor: grafik olay tipine göre çiziliyor.
+
+Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası… Bursa'da 1, Kocaeli'nde ise 2 kişi hayatını kaybetti. **Her iki ilde toplam 10 kişi yaralı** olarak hastaneye kaldırıldı."* Son sayı hiçbir tek ile ait değil.
+
+**Gerekçe.**
+- **Amaç cümlesi tarih ve ili kimliğin parçası yapıyor.** Bu boyutlar kaydın içine gömülü nitelikler olsaydı, il bazında grafik ancak metin yeniden ayrıştırılarak çizilebilirdi.
+- **Atanamayan sayı için ayrı bir kapsam, tek dürüst temsil.** `SHARED` kaydı sayıyı bölmez, düşürmez, gizlemez. Toplamlar doğru kalır (yaralı = 10, kaza = 14, ölü = 3) ve hiçbir il kendisine ait olmayan bir sayıyı üstlenmez.
+- **Kapsadığı illerin saklanması, coğrafi izlenebilirlikteki deliği kapatıyor.** Saklanmasaydı 10 yaralı "hiçbir yere ait olmayan" bir sayıya dönüşürdü; Bursa'yı filtreleyen kullanıcıya *"ayrıca Kocaeli ile paylaşılan 10 yaralı var"* denemezdi. Üstelik bu bilgi analiz sırasında **zaten mevcut**: kaydın `SHARED` olduğuna karar verebilmek için ifadenin hangi illere işaret ettiğinin çözülmüş olması gerekiyor. Onu atıp sonradan "aynı bildirimdeki diğer iller" varsayımıyla geri üretmek, *"Ankara'da 5 vaka. İstanbul ve İzmir'de toplam 12 vaka."* gibi bir metinde tamamen yanlış sonuç verir.
+- **Değişmezlik ve kapsam, hem şemada hem Java'da zorunlu.** `incident_province_matches_scope` CHECK constraint'i ve üç fabrika metodu (`forProvince`, `sharedAcross`, `withoutProvince`) aynı kuralı iki katmanda birden koruyor; `SHARED` bir kayda tek il iliştirmenin yolu yok.
+- **Reprocess yapısal olarak güvenli.** Kayıtlar `raw_report_id` ile bağlı; ham metin değişmez olduğu için (ADR-005) yeniden işleme = o bildirime ait kayıtları silip yeniden üretmek. Mükerrer kayıt riski doğmuyor.
+
+**Alternatifler.**
+- *Paylaşılan sayıyı eşit bölüştürmek (5/5):* Metinde olmayan bir bilgi üretmek olurdu. Grafik "Bursa'da 5 yaralı" derdi; metin bunu hiçbir yerde söylemiyor. Uydurma sayı, analitik veriyi kirletmenin en kötü yolu.
+- *Atanamayan metriği düşürmek:* 10 yaralı kaybolurdu — ADR-006'daki "veri kaybetme" ilkesiyle çelişir.
+- *Metin başına tek kayıt, iller liste olarak:* Bursa'nın 8 kazası ile Kocaeli'nin 6'sı aynı satırda toplanır, il bazında grafik imkânsız hale gelirdi. Amaç cümlesinin doğrudan ihlali.
+- *Header'sız düz fact tablosu (metrik başına satır, il ve tarih dahil):* Analitik için elverişli; ancak FR-10'un "tablo halinde göster"ine ve FR-13'ün SSE ile yayınlayacağı "yeni kayıt"a karşılık gelen doğal bir birim kalmazdı. PRD'nin sözlüğündeki "Olay Kaydı" kavramı karşılıksız kalırdı.
+
+**Sonuçlar.**
+- Üç örnek metin toplam **5 kayıt** üretiyor (1 + 1 + 3).
+- **İl bazlı görünümde `SHARED` gizlenemez.** Bursa çubuğu 10 yaralıyı içermez — içermemeli — ama arayüz ayrıca "paylaşılan / atanamayan" dilimini göstermek zorunda. Aksi halde kullanıcı il toplamlarının genel toplamı tutmadığını görür ve nedenini bilemez. Bu, API sözleşmesine ayrı bir alan olarak yansıyacak (T-16/T-17).
+- **Çoklu il seçiminde `DISTINCT` şart.** Bursa ve Kocaeli birlikte seçilirse paylaşılan kayıt bir kez sayılmalı. Bu bir maliyet; ancak link tablosu olmadan bu soru sorulamaz — problem çözülmez, görünmez olur.
+- Bir bildirim birden fazla `SHARED` kaydı taşıyabilir (farklı il gruplarını kapsayan iki "toplam" ifadesi), bu yüzden doğal anahtar üzerinde unique constraint **yok**; reprocess sil-ve-yeniden-üret ile çalışıyor.
+
+**İleride.** Kapsam modeli il düzeyinde; bölge/ülke gibi daha geniş coğrafi seviyeler gerekirse `province` tablosunun yanına bir hiyerarşi eklenip `SHARED` kaydın kapsamı o seviyeye taşınabilir. Paylaşılan sayıların dağıtımı istenirse (ör. nüfusa orantılı tahmin), bu **türetilmiş bir görünüm** olarak eklenmeli — ham kayıt bölünmemiş halde kalmalı ki tahmin ile ölçüm birbirine karışmasın.
+
+---
+
+## ADR-020 — Metrik Veri Modeli: Metrik Başına Satır
+
+**Karar.** Metrikler `incident_metric(incident_id, metric_type, metric_value)` tablosunda, metrik başına bir satır olarak saklanır. `metric_type` bir katalog anahtarıdır — veri tabanı enum'u değil.
+
+**Bağlam.** PRD bunu TC-2 olarak açık bırakmıştı. Olay tiplerinin metrik setleri farklı: salgın için vaka/vefat/taburcu, deprem için hasarlı bina/kurtarılan/yaralı. Katalog ise konfigürasyondan yönetiliyor ve büyüyecek (ADR-007).
+
+**Gerekçe.**
+- **Kataloğun kod değişmeden büyümesi, şemanın da değişmeden büyümesini gerektiriyor.** ADR-007 "yeni olay tipi eklemek yalnızca YAML değişikliği" diyor. Metrik başına kolon olsaydı her yeni metrik bir migration demek olurdu — bu iki karar birbiriyle çelişirdi.
+- **Agregasyon doğrudan SQL.** FR-11'in metrik bazlı zaman serisi ve FR-12'nin kümülatif görünümü `group by metric_type` + `sum(metric_value)`'a indirgeniyor; `metric_type` indexlenebiliyor.
+- **Seyreklik problemi yok.** Geniş tabloda her kayıt, ait olmadığı olay tipinin metrik kolonlarını `null` taşırdı.
+- `(incident_id, metric_type)` unique: bir metrik bir kayıt için yalnızca bir kez çıkarılabilir. İkinci bir değer, çıkarımın aynı soruya iki cevap üretmesi demek olurdu.
+
+**Alternatifler.**
+- *JSONB kolon:* Esnek ve tek satırda toplu okuma sağlar. Ancak metrik bazlı agregasyon ve indexleme ifade indexleri gerektirir, tip güvenliği yoktur ve `sum` için cast şarttır. Kazandırdığı esneklik bu tabloda zaten var.
+- *Geniş tablo (metrik başına kolon):* Sorgusu en basit. Ancak her yeni metrikte migration gerekir — ADR-007 ile doğrudan çelişir — ve tablo seyrekleşir.
+- *Metrikleri ham metinle birlikte Mongo'da tutmak:* Agregasyon Postgres'te yapılacağı için (ADR-002) veriyi yanlış tarafa koymak olurdu.
+
+**Sonuçlar.** Bir kaydın tüm metriklerini okumak join gerektiriyor; satır sayısı kayıt sayısının birkaç katı. Bu ölçekte önemsiz. `metric_value` `integer`: katalogdaki metriklerin tamamı sayım. `metric_type` veri tabanı tarafından doğrulanmıyor — yazım hatası kataloğun kendi başlangıç doğrulamasında yakalanmalı (ADR-007).
+
+**İleride.** Parasal hasar gibi tam sayı olmayan bir metrik gerekirse `metric_value` `numeric`'e çevrilebilir; ileri yönlü, veri kaybı olmayan bir migration. Sorgu hacmi büyürse `(event_type, occurred_on, metric_type)` üzerinde materialized view ya da tarih bazlı partitioning devreye alınabilir — tablo şekli buna hazır.

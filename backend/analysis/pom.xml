@@ -15,12 +15,13 @@
     <description>Text extraction, classification and the analytical read side; owns PostgreSQL</description>
 
     <!--
-      Owns PostgreSQL. There is deliberately no dependency on the `ingestion` module: this module
-      reacts to domain events declared in `shared`.
+      Owns PostgreSQL, including the Flyway migrations under src/main/resources/db/migration.
+      There is deliberately no dependency on the `ingestion` module: this module reacts to domain
+      events declared in `shared`.
 
-      Not here yet, by design:
-        - spring-boot-starter-data-jpa, postgresql, flyway  -> T-04, with the schema they manage.
-          Adding the JPA starter before there is a datasource would stop the app from booting.
+      Note what is absent: no MongoDB driver. The document store belongs to `ingestion` (ADR-002),
+      and withholding the dependency is what makes that boundary real rather than a convention.
+
       The event type catalog (T-08) will live in this module's own resources under a distinct
       filename - never as application.yml, which belongs to the `app` module.
     -->
@@ -37,6 +38,41 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
