@@ -2,6 +2,9 @@ package com.emreay.incidentreport;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import java.time.Clock;
 
 /**
  * Entry point of the incident reporting backend.
@@ -29,5 +32,18 @@ public class IncidentReportApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(IncidentReportApplication.class, args);
+    }
+
+    /**
+     * The one source of "now" in the application.
+     *
+     * <p>Injected rather than called statically so that time is something tests can hold still.
+     * That matters more here than usual: the submission timestamp is the reference date for
+     * relative and defaulted dates (ADR-014), so a test that cannot fix the clock cannot assert
+     * what date a report resolves to.
+     */
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
     }
 }

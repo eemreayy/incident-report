@@ -158,17 +158,31 @@ arasındaki **iki yönlü** referans bu task'ta kurulur.
 
 Amaç: gerçek çıkarım mantığı olmadan, boru hattının baştan sona çalıştığını kanıtlamak.
 
-### ☐ T-05 · Ingestion: ham metnin değişmez saklanması
+### ☑ T-05 · Ingestion: ham metnin değişmez saklanması
 Mongo document + repository + `IngestionService`. Create, tekil read, sayfalı list. Metin **bayt bayt**
 gönderildiği gibi, hiçbir normalizasyon uygulanmadan yazılır. Update/delete yok. Kayıt sonrası domain
 event yayınlanır.
 - **Bağımlılık:** T-04
 - **Karşılar:** FR-01, FR-02, FR-14 · **İlgili karar:** ADR-005
 - **DoD:** Kaydedilen metin girdiyle birebir aynı; update/delete API'si yok; event yayınlanıyor.
-- **Ek kapsam (T-03'ten devredildi):** Her modül üretim koduna kavuştuğunda Surefire
-  `failIfNoTests=true` açılır. Bu, ADR-018'de kayıtlı boşluğu kapatır: testi olmayan modül
-  artık coverage kapısını sessizce geçemez, build doğrudan kırılır. Aynı anda ArchUnit'in
-  `archRule.failOnEmptyShould` ayarı da tekrar açılabilir (bkz. ADR-017).
+- **Ek kapsam (T-03'ten devredildi) — yapıldı:** Surefire `failIfNoTests=true` parent'a eklendi.
+  ADR-018'deki boşluk kapandı: testi olmayan modül artık coverage kapısını sessizce geçemiyor.
+  **Doğrulandı** — `shared`'ın testleri geçici olarak kaldırıldığında build
+  `No tests to run!` ile kırıldı. `realtime` tek istisna: üretim kodu T-18'de geleceği için
+  kendi pom'unda açık bir override taşıyor, kaldırılacağı yorumda yazılı.
+- **Sonuç:** `IngestionService` — doğrulama, saklama, event yayını, tekil/sayfalı okuma.
+  Update/delete yok. Doğrulama servis katmanında, web katmanında değil: reprocess yolunun
+  arkasında HTTP isteği yok, kural yine de geçerli olmalı.
+- **Kural 4 doğrulandı:** Event dinleyicisi patladığında ham metin hayatta kalıyor, kayıt
+  `FAILED` işaretleniyor ve **çağırana hata dönmüyor**. Metni kaybetmek tasarımın reddettiği
+  tek sonuç. Testte gerçek bir dinleyici yerine yayıncı mock'u fırlatıyor.
+- **Event ham metni taşıyor, sadece id'yi değil.** `analysis` modülü Mongo'yu okuyamaz
+  (ADR-002), dolayısıyla id-only bir event dinleyiciye üzerinde çalışacak hiçbir şey bırakmaz.
+  `submittedAt` de aynı sebeple taşınıyor: göreli tarihlerin referansı (ADR-014).
+- **`Clock` enjekte ediliyor.** Gönderim zamanı, göreli ve varsayılan tarihlerin referansı
+  olduğu için testin zamanı sabitleyebilmesi gerekiyor.
+- **Doğrulandı:** 51 test geçiyor (25'i yeni). Modül başına coverage eşiği tüm modüllerde
+  sağlanıyor.
 
 ### ☐ T-06 · REST katmanı ve hata sözleşmesi
 `POST /api/v1/incident-reports`, `GET /incident-reports`, `GET /incident-reports/{id}`. Girdi doğrulama

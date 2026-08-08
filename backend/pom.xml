@@ -154,6 +154,21 @@
                     </executions>
                 </plugin>
 
+                <!--
+                  Closes the hole recorded in ADR-018. JaCoCo's `check` silently skips a module
+                  that produced no execution data, which is exactly what a module with code and
+                  no tests looks like - so the coverage gate would wave it through. Failing the
+                  build when a module runs no tests at all guarantees the execution data exists,
+                  and therefore that the gate actually runs.
+                -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <failIfNoTests>true</failIfNoTests>
+                    </configuration>
+                </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
@@ -190,6 +205,11 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
 
             <plugin>

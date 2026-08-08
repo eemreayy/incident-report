@@ -145,9 +145,9 @@ Rules that follow, and that queries and DTOs must respect:
 - JaCoCo gate at **80% lines, per module**, wired into `verify` — an aggregate number would let a
   well-tested module hide an untested one. `app` also emits a project-wide aggregate report.
   Coverage is a floor, not a goal — cover real behavior, not getters. See ADR-018.
-- **Known gap**: JaCoCo silently skips the check in a module with no tests at all (no `.exec` file).
-  Closing it needs Surefire `failIfNoTests=true`, which lands in T-05 once every module has code.
-  Until then, a new module without tests will *not* be caught by the build.
+- Surefire runs with `failIfNoTests=true`, because JaCoCo silently skips its check in a module that
+  produced no `.exec` file — a module with code and no tests would otherwise sail through the gate.
+  `realtime` carries an explicit override until it has code (T-18); do not add more.
 - Architecture rules live in `app/src/test/java/.../architecture/ArchitectureRulesTest.java`
   (ArchUnit — see ADR-017). `app` is the only module that sees all the others, so cross-module
   rules can only be expressed there. Add new rules to that file, not to individual modules.
