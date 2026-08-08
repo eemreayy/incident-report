@@ -41,7 +41,7 @@ cd backend
 ./mvnw -pl analysis -am verify         # one module and what it depends on
 ./mvnw test -Dtest=ClassName           # single test class
 ./mvnw -pl app spring-boot:run         # run locally, `local` profile is the default
-java -jar backend/app/target/incident-report-be.jar
+java -jar backend/app/target/incident-report.jar
 curl -s localhost:8080/actuator/health
 ```
 

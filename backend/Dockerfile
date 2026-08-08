@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 # they change. Third-party dependencies are ~25 MB and change rarely; our own
 # classes are ~100 KB and change on every commit. Copying them as separate
 # image layers means a code change rebuilds and ships only the small one.
-RUN java -Djarmode=tools -jar app/target/incident-report-be.jar \
+RUN java -Djarmode=tools -jar app/target/incident-report.jar \
         extract --layers --launcher --destination extracted
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ yönetimi parent'ta; modüle özgü kütüphaneler ilgili modülün pom'unda. Pr
 - **Karşılar:** NFR-01, NFR-05 (kısmen)
 - **DoD:** `./mvnw verify` geçer; uygulama ayağa kalkar.
 - **Sonuç:** Spring Boot **3.5.16**, JDK **21.0.12**. Reactor 6 modülü sırayla derliyor,
-  `/actuator/health` → `UP`, `backend/app/target/incident-report-be.jar` içinde dört modül jar'ı var.
+  `/actuator/health` → `UP`, `backend/app/target/incident-report.jar` içinde dört modül jar'ı var.
   `maven-compiler-plugin` `<release>21</release>` ile API yüzeyini 21'e sabitliyor;
   `maven-enforcer-plugin` JDK tabanını (≥21) ve Maven sürümünü (≥3.9) zorunlu kılıyor.
 - **Modül sınırı doğrulandı:** `ingestion` içinden `analysis` sınıfına erişim denendi, build

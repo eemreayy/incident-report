@@ -1,6 +1,6 @@
 spring:
   application:
-    name: incident-report-be
+    name: incident-report
   profiles:
     default: local
   jackson:
