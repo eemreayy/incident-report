@@ -1,0 +1,19 @@
+# Keep the build context small and the image reproducible.
+# Anything that is generated, local, or irrelevant to compiling the application stays out.
+
+**/target/
+.git/
+.gitignore
+.idea/
+*.iml
+
+docs/
+README.md
+CLAUDE.md
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log

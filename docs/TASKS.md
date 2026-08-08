@@ -41,12 +41,31 @@ yönetimi parent'ta; modüle özgü kütüphaneler ilgili modülün pom'unda. Pr
 - **Ortam notu:** Makinede JDK 21 yoktu (varsayılan 17). `brew install openjdk@21` ile kuruldu;
   `JAVA_HOME` export edilmeden Maven komutları enforcer kuralına takılır (bkz. `CLAUDE.md` → Commands).
 
-### ☐ T-02 · Dockerize ve tek komutla ayağa kalkma
+### ☑ T-02 · Dockerize ve tek komutla ayağa kalkma
 Uygulama için multi-stage `Dockerfile`; `docker-compose.yml` ile app + MongoDB + PostgreSQL (tek instance).
 Health check'ler, servis bağımlılık sırası, named volume'lar, `.env.example`.
 - **Bağımlılık:** T-01
 - **Karşılar:** NFR-03, NFR-04 · **İlgili karar:** ADR-010
-- **DoD:** Temiz makinede `docker compose up --build` sonrası API ve iki veri tabanı sağlıklı; uygulama iki veri tabanına da bağlanabiliyor.
+- **DoD:** Temiz makinede `docker compose up --build` sonrası API ve iki veri tabanı sağlıklı.
+- **Sonuç:** `docker compose up --build` temiz durumdan üç servisi ayağa kaldırıyor, üçü de
+  `healthy`. PostgreSQL 17.10, MongoDB 8.2.12. Uygulama `docker` profiliyle, root olmayan
+  kullanıcı (uid 1001) ile çalışıyor. Host'tan 8080/5432/27017 erişilebilir; named volume'lar
+  restart sonrası veriyi koruyor; SIGTERM PID 1'e ulaşıp Spring graceful shutdown yapıyor.
+- **Sıfır kurulum:** Tüm ayarların compose içinde gömülü varsayılanları var, bu yüzden taze klon
+  `.env` oluşturmadan çalışıyor (NFR-03'ün "tek seferde" isteri). `.env.example` yalnızca
+  override içindir.
+- **İmaj:** Multi-stage + Spring Boot layer ayrımı (dependencies / loader / application) +
+  Alpine JRE → **336 MB**. Kod değişikliğinde yalnızca ~104 KB'lık `application` katmanı
+  yeniden üretiliyor; 25 MB'lık bağımlılık katmanı cache'te kalıyor.
+
+> **DoD kapsam notu — dürüstlük kaydı.** Bu task'ın orijinal DoD'si "uygulama iki veri tabanına da
+> bağlanabiliyor" diyordu. Bu **yapılmadı ve bilinçli olarak T-04'e bırakıldı**: veri tabanı
+> starter'ları henüz projede yok (T-01 kararı), çünkü JPA starter'ı datasource olmadan uygulamanın
+> ayağa kalkmasını engelliyor ve Testcontainers altyapısı da henüz kurulmadı (T-03).
+> Compose tarafı bağlantı için tamamen hazır: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
+> `SPRING_DATASOURCE_PASSWORD` ve `SPRING_DATA_MONGODB_URI` standart Spring isimleriyle
+> container'a geçiyor — T-04'te starter'lar eklendiğinde compose dosyasında değişiklik gerekmeyecek
+> ve `/actuator/health` her iki veri tabanını da raporlamaya başlayacak.
 
 ### ☐ T-03 · Kalite kapısı: coverage, kalan sınır kuralları, Testcontainers
 JaCoCo `verify` fazına bağlanır ve **%80** altında build kırılır. Çok modüllü yapıda toplam oranın
@@ -67,6 +86,11 @@ gerek olup olmadığı burada değerlendirilip ADR'ye yazılacak.
 ## Faz 1 — Veri Modeli Kararı *(bloke edici)*
 
 ### ☐ T-04 · TC-1 ve TC-2'yi karara bağla, şemayı kur
+**Ek kapsam (T-02'den devredildi):** Veri tabanı starter'ları (`spring-boot-starter-data-mongodb`,
+`spring-boot-starter-data-jpa`, `postgresql`, `flyway`) ilgili modüllerin pom'una eklenir ve
+uygulamanın her iki veri tabanına gerçekten bağlandığı `/actuator/health` üzerinden doğrulanır.
+Compose tarafı hazır; ortam değişkenleri standart Spring isimleriyle zaten geçiyor.
+
 PRD'nin bilinçli olarak açık bıraktığı iki karar burada veriliyor:
 - **TC-1 — Kayıt granülaritesi:** Bir ham metinden kaç normalize kayıt üretilecek (il × tarih × olay tipi?).
   Örnek 3'teki "her iki ilde toplam 10 kişi yaralı" gibi **ile atanamayan** metriklerin çift sayıma yol

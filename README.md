@@ -176,22 +176,83 @@ kullanıcıyı bilgilendiren bir uyarı listesi döner.
 
 ## Kurulum ve Çalıştırma
 
-<!-- TODO: Docker ve Maven yapılandırması tamamlandığında doldurulacak. -->
-
 ### Gereksinimler
-<!-- TODO: Docker / Docker Compose sürümleri; kaynak koddan derleme için JDK 21 -->
+
+Tek komutla çalıştırmak için **yalnızca Docker** yeterlidir:
+
+| Araç | Sürüm | Not |
+|---|---|---|
+| Docker Engine | 24+ | BuildKit varsayılan olarak açık olmalı |
+| Docker Compose | v2 | `docker compose` (tire yok) |
+
+Kaynak koddan derlemek isterseniz ek olarak **JDK 21** gerekir. Maven'a gerek yok — depo kendi
+wrapper'ını (`./mvnw`) taşır.
 
 ### Tek komutla çalıştırma
-<!-- TODO: docker compose up --build; ayağa kalkan servisler ve portları; sağlık kontrolü -->
+
+```bash
+docker compose up --build
+```
+
+Başka hiçbir hazırlık gerekmez; `.env` dosyası oluşturmanız da gerekmez (aşağıya bakın).
+Komut üç servisi ayağa kaldırır ve uygulama, veri tabanları **sağlıklı** olana kadar bekler:
+
+| Servis | Adres | Açıklama |
+|---|---|---|
+| `app` | http://localhost:8080 | Backend API |
+| `postgres` | `localhost:5432` | PostgreSQL 17 — normalize/analitik veri |
+| `mongodb` | `localhost:27017` | MongoDB 8 — ham metin (log) |
+
+Sağlık kontrolü:
+
+```bash
+curl -s localhost:8080/actuator/health
+```
+
+`{"status":"UP",...}` dönmelidir. Servislerin durumunu topluca görmek için:
+
+```bash
+docker compose ps
+```
 
 ### Yapılandırma
-<!-- TODO: ortam değişkenleri, .env örneği, veri tabanı bağlantı ayarları -->
+
+Tüm ayarların `docker-compose.yml` içinde gömülü varsayılanları vardır; bu yüzden taze bir klon
+hiçbir ek dosya olmadan çalışır. Bir değeri değiştirmek isterseniz:
+
+```bash
+cp .env.example .env
+```
+
+Değiştirilebilir değişkenler: `APP_PORT`, `POSTGRES_DB/USER/PASSWORD/PORT`,
+`MONGO_DB/USER/PASSWORD/PORT`. `.env` git tarafından yok sayılır; gerçek kimlik bilgileri
+asla commit edilmemelidir.
 
 ### Yerelde geliştirme
-<!-- TODO: yalnızca veri tabanlarını compose ile ayağa kaldırıp uygulamayı IDE'den çalıştırma -->
+
+Uygulamayı IDE'den veya Maven'dan çalıştırıp yalnızca veri tabanlarını Docker'da tutmak için:
+
+```bash
+docker compose up -d postgres mongodb
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+./mvnw -pl app spring-boot:run
+```
+
+Bu akışta `local` profili devreye girer (varsayılan) ve uygulama `localhost` üzerindeki
+veri tabanlarına bağlanır.
+
+Testleri ve derlemeyi çalıştırmak için:
+
+```bash
+./mvnw verify
+```
 
 ### Durdurma ve temizlik
-<!-- TODO: docker compose down -v -->
+
+```bash
+docker compose down       # container'ları durdurur, veriyi korur
+docker compose down -v    # veri hacimlerini de siler (sıfırdan başlamak için)
+```
 
 ---
 

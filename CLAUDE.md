@@ -29,9 +29,16 @@ Run Maven from the repository root — it is the aggregator for all modules.
 ./mvnw -pl app spring-boot:run         # run locally, `local` profile is the default
 java -jar app/target/incident-report-be.jar
 curl -s localhost:8080/actuator/health
-docker compose up --build              # whole system: app + mongodb + postgres  (T-02)
-docker compose down -v                 # tear down including volumes             (T-02)
+docker compose up --build              # whole system: app + mongodb + postgres
+docker compose up -d postgres mongodb  # databases only, for the `local` profile
+docker compose ps                      # service status incl. health
+docker compose logs -f app
+docker compose down -v                 # tear down including volumes
 ```
+
+Compose carries inline defaults for every setting, so it runs on a fresh clone with no `.env`.
+The app image is layered (dependencies / loader / application), so a code change rebuilds only the
+~100 KB application layer — do not collapse those COPY steps back into one.
 
 ## Architecture — hard constraints
 
