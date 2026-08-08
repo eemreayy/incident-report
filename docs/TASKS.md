@@ -8,6 +8,13 @@ karşıladığı isterleri (FR/NFR) ve çözdüğü teknik challenge'ları (TC) 
 çalıştıktan sonra giriliyor — böylece iki veri tabanı, event akışı ve persist entegrasyonu, en riskli
 iş olan Türkçe metin çıkarımıyla aynı anda hata ayıklanmak zorunda kalınmıyor.
 
+**Çalışma akışı:** Depo baştan kuruldu (T-21 öne alındı), bu yüzden **her task kendi commit'i olarak**
+GitHub'a gidiyor. Git geçmişi projenin nasıl inşa edildiğini gösteriyor; tek büyük commit'e göre
+hem incelemesi hem geri alması kolay. Bir task'ın mimari kararı varsa `docs/DECISIONS.md`
+güncellemesi de aynı commit'te yer alır.
+
+**Depo:** https://github.com/eemreayy/incident-report-be
+
 **Durum lejantı:** ☐ bekliyor · ◐ devam ediyor · ☑ tamamlandı
 
 ---
@@ -218,36 +225,45 @@ raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
 - **Karşılar:** NFR-07, NFR-10, NFR-02
 - **DoD:** README'de `TODO` kalmadı; temiz makinede talimatlar birebir izlenerek sistem ayağa kalkıyor; coverage ≥ %80.
 
-### ☐ T-21 · Git deposu ve GitHub'a ilk push
+### ☑ T-21 · Git deposu ve GitHub'a ilk push  *(T-01 sonrasına alındı)*
 `git init`, ilk commit, GitHub deposu ve push.
-- **Bağımlılık:** T-20 *(daha erken de yapılabilir — kullanıcı kararı)*
+- **Bağımlılık:** — *(planda T-20'ye bağlıydı; kalan task'ların ayrı commit'ler halinde
+  gidebilmesi için öne alındı)*
 - **Karşılar:** NFR-11
 - **DoD:** Kaynak kod GitHub üzerinden erişilebilir.
-- **Not:** Kullanıcının talebi üzerine GitHub kimlik bilgileri bu aşamada **kendisinden istenecek**; commit/push birlikte yapılacak.
+- **Sonuç:** https://github.com/eemreayy/incident-report-be — public, default branch `main`,
+  ilk commit `e497e84` (25 dosya). Yerel ve uzak HEAD aynı.
+- **Yetkilendirme:** GitHub CLI (`gh`) kuruldu; kullanıcı `gh auth login --git-protocol https --web`
+  ile kendi tarayıcısından giriş yaptı. Token macOS keychain'de; sohbete hiçbir kimlik bilgisi
+  girilmedi. Remote **HTTPS**, böylece makinedeki mevcut SSH anahtarı (başka bir projeye ait)
+  hiçbir aşamada devreye girmiyor.
+- **Commit kimliği:** Repo-local olarak `eemreayy <12291082+eemreayy@users.noreply.github.com>`.
+  Global git ayarları değiştirilmedi; noreply adresi e-postayı public geçmişten uzak tutuyor.
 
 ---
 
 ## Bağımlılık Özeti
 
 ```
-T-01 ─┬─ T-02
-      ├─ T-03
-      ├─ T-08 ──────────────┐
-      ├─ T-09 ─┬─ T-10 ─┐   │
-      │        ├─ T-12 ─┤   │
-      │        └────────┼───┤
-      └─ T-04 ─┬─ T-05 ─┴───┼── T-13 ─┐
-               │     └─ T-06│         │
-               ├─ T-07 ─────┼─────────┤
-               └────────────┴── T-14 ─┴─ T-11
-                                 │
-                                 ├─ T-15 (golden)
-                                 ├─ T-16 ─ T-17 ─┐
-                                 ├─ T-18 ────────┤
-                                 └─ T-19 ────────┴─ T-20 ─ T-21
+T-01 ✔ ─┬─ T-21 ✔  (depo hazır; her task ayrı commit)
+        ├─ T-02
+        ├─ T-03
+        ├─ T-08 ──────────────┐
+        ├─ T-09 ─┬─ T-10 ─┐   │
+        │        ├─ T-12 ─┤   │
+        │        └────────┼───┤
+        └─ T-04 ─┬─ T-05 ─┴───┼── T-13 ─┐
+                 │     └─ T-06│         │
+                 ├─ T-07 ─────┼─────────┤
+                 └────────────┴── T-14 ─┴─ T-11
+                                   │
+                                   ├─ T-15 (golden)
+                                   ├─ T-16 ─ T-17 ─┐
+                                   ├─ T-18 ────────┤
+                                   └─ T-19 ────────┴─ T-20
 ```
 
-**Kritik yol:** T-01 → T-04 → T-05/T-07 → T-14 → T-20 → T-21
+**Kritik yol:** ~~T-01~~ → T-04 → T-05/T-07 → T-14 → T-20
 **Paralel çalışılabilir:** T-02, T-03, T-08, T-09 (ve T-09'a bağlı T-10/T-12) erken aşamada birbirinden bağımsız ilerleyebilir.
 
 ---
