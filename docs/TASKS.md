@@ -13,7 +13,7 @@ GitHub'a gidiyor. Git geçmişi projenin nasıl inşa edildiğini gösteriyor; t
 hem incelemesi hem geri alması kolay. Bir task'ın mimari kararı varsa `docs/DECISIONS.md`
 güncellemesi de aynı commit'te yer alır.
 
-**Depo:** https://github.com/eemreayy/incident-report-be
+**Depo:** https://github.com/eemreayy/incident-report
 
 **Durum lejantı:** ☐ bekliyor · ◐ devam ediyor · ☑ tamamlandı
 
@@ -30,7 +30,7 @@ yönetimi parent'ta; modüle özgü kütüphaneler ilgili modülün pom'unda. Pr
 - **Karşılar:** NFR-01, NFR-05 (kısmen)
 - **DoD:** `./mvnw verify` geçer; uygulama ayağa kalkar.
 - **Sonuç:** Spring Boot **3.5.16**, JDK **21.0.12**. Reactor 6 modülü sırayla derliyor,
-  `/actuator/health` → `UP`, `app/target/incident-report-be.jar` içinde dört modül jar'ı var.
+  `/actuator/health` → `UP`, `backend/app/target/incident-report-be.jar` içinde dört modül jar'ı var.
   `maven-compiler-plugin` `<release>21</release>` ile API yüzeyini 21'e sabitliyor;
   `maven-enforcer-plugin` JDK tabanını (≥21) ve Maven sürümünü (≥3.9) zorunlu kılıyor.
 - **Modül sınırı doğrulandı:** `ingestion` içinden `analysis` sınıfına erişim denendi, build
@@ -255,7 +255,7 @@ raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
   gidebilmesi için öne alındı)*
 - **Karşılar:** NFR-11
 - **DoD:** Kaynak kod GitHub üzerinden erişilebilir.
-- **Sonuç:** https://github.com/eemreayy/incident-report-be — public, default branch `main`,
+- **Sonuç:** https://github.com/eemreayy/incident-report — public, default branch `main`,
   ilk commit `e497e84` (25 dosya). Yerel ve uzak HEAD aynı.
 - **Yetkilendirme:** GitHub CLI (`gh`) kuruldu; kullanıcı `gh auth login --git-protocol https --web`
   ile kendi tarayıcısından giriş yaptı. Token macOS keychain'de; sohbete hiçbir kimlik bilgisi
@@ -263,6 +263,10 @@ raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
   hiçbir aşamada devreye girmiyor.
 - **Commit kimliği:** Repo-local olarak `eemreayy <12291082+eemreayy@users.noreply.github.com>`.
   Global git ayarları değiştirilmedi; noreply adresi e-postayı public geçmişten uzak tutuyor.
+- **Sonraki yapısal değişiklik:** Depo önce `incident-report-be` adıyla açıldı ve kompozisyon için
+  ayrı bir `incident-report-devops` repo'su kuruldu (ADR-015). Ardından tek repo'ya geçildi:
+  depo `incident-report` olarak yeniden adlandırıldı, içerik `backend/` altına taşındı, devops
+  içeriği köke alındı. Yeniden adlandırma sayesinde geçmiş korundu; gerekçe **ADR-016**'da.
 
 ---
 

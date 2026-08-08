@@ -4,7 +4,7 @@
 |---|---|
 | **Sürüm** | 1.0 |
 | **Tarih** | 2026-08-08 |
-| **Kapsam** | Yalnızca backend (`incident-report-be`) |
+| **Kapsam** | Yalnızca backend (`backend/` modülü) |
 | **Durum** | Onay bekliyor |
 | **Kaynak** | `TeknikDegerlendirmeProjesi.pdf` + tasarım notları |
 
@@ -37,7 +37,7 @@ Sistem, kaynak dokümandaki üç örnek metni uçtan uca doğru ayrıştırabili
 ### 2.2 Dahil değil
 | Kapsam dışı | Gerekçe |
 |---|---|
-| Frontend (ReactJS) | Ayrı repo/session; bu PRD backend sözleşmesini tanımlar |
+| Frontend (ReactJS) | Ayrı modül (`frontend/`) ve ayrı session; bu PRD backend sözleşmesini tanımlar |
 | Kimlik doğrulama, yetkilendirme, kullanıcı yönetimi | Kaynak dokümanda ister olarak geçmiyor; bkz. `docs/DECISIONS.md` → "İleride" |
 | Harita/coğrafi görselleştirme (GIS, poligon, koordinat) | İl, kod ve isim düzeyinde tutulur; harita çizimi frontend işidir |
 | Ham metin üzerinde full-text arama | Tablo ve grafik verisi yapılandırılmış katmandan (PostgreSQL) beslenir |
@@ -80,7 +80,7 @@ Backend, iki çekirdek modülden oluşan bir **modular monolith**'tir.
                       HTTP (REST)                       SSE (tek yönlü)
                            │                                   ▲
 ┌──────────────────────────┼───────────────────────────────────┼────────────┐
-│  incident-report-be      ▼                                   │            │
+│  backend                 ▼                                   │            │
 │                                                                           │
 │   ┌────────────────────────────┐    Spring    ┌───────────────────────┐   │
 │   │  ingestion                 │  Application │  analysis             │   │
@@ -336,7 +336,7 @@ Kaynak dokümanın her maddesinin bu PRD'de karşılığı:
 | Kaynak maddesi | Karşılık |
 |---|---|
 | Backend Java (Spring Boot) ile geliştirilecektir | NFR-01 |
-| Frontend ReactJS ile geliştirilecektir | Kapsam dışı (§2.2) — ayrı repo |
+| Frontend ReactJS ile geliştirilecektir | Kapsam dışı (§2.2) — `frontend/` modülü |
 | Veri katmanında hem PostgreSQL hem MongoDB kullanılacaktır | §5, FR-02, FR-08 |
 | Ham metin Mongo'ya kaydedilir, log niteliğindedir | FR-02 |
 | Bir kaydın hangi metinden üretildiği izlenebilmelidir | FR-08 |

@@ -1,81 +1,34 @@
-# Brings up the whole system with a single `docker compose up --build` (NFR-03).
+# Full-system composition: the single entry point that brings the whole system
+# up with `docker compose up --build` from the repository root (NFR-03).
 #
-# Every value has an inline default, so a fresh clone starts with no setup at all.
-# Copy .env.example to .env only when you want to override something.
+# It does NOT redefine the backend's services. `include` pulls in the backend
+# module's own compose file as-is, so the app, PostgreSQL and MongoDB have
+# exactly one definition and it lives next to the code that owns them.
+# Relative paths inside an included file resolve against that file's own
+# directory, so the backend build context stays correct.
 #
-# Both databases run as a single instance each - no replica set, no cluster (ADR-010).
+# The backend module stays independently runnable: `cd backend && docker compose up`
+# starts the backend and its databases without the rest of the system.
 
 name: incident-report
 
-services:
+include:
+  - path: backend/docker-compose.yml
 
-  postgres:
-    image: postgres:17-alpine
-    container_name: incident-report-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-incident_report}
-      POSTGRES_USER: ${POSTGRES_USER:-incident}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-incident}
-    ports:
-      # Published so the `local` profile can run the app outside Docker
-      # against these same databases.
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-incident} -d ${POSTGRES_DB:-incident_report}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-
-  mongodb:
-    image: mongo:8
-    container_name: incident-report-mongodb
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-incident}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-incident}
-      MONGO_INITDB_DATABASE: ${MONGO_DB:-incident_report}
-    ports:
-      - "${MONGO_PORT:-27017}:27017"
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: incident-report-app
-    depends_on:
-      # Wait for the databases to report healthy, not merely to have started.
-      # `service_started` would let the app race the database on first boot.
-      postgres:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-
-      # Standard Spring property names, so wiring the drivers in T-04 needs no
-      # change here. Host names are the compose service names.
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-incident_report}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-incident}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-incident}
-
-      # authSource=admin because the root user created by MONGO_INITDB_* lives
-      # in the admin database, not in the application database.
-      SPRING_DATA_MONGODB_URI: mongodb://${MONGO_USER:-incident}:${MONGO_PASSWORD:-incident}@mongodb:27017/${MONGO_DB:-incident_report}?authSource=admin
-    ports:
-      - "${APP_PORT:-8080}:8080"
-
-volumes:
-  postgres-data:
-  mongo-data:
+# The frontend module is not implemented yet. When it is, the service below is
+# uncommented - nothing else here needs to change.
+#
+# services:
+#   frontend:
+#     build:
+#       context: ./frontend
+#     container_name: incident-report-frontend
+#     depends_on:
+#       app:
+#         condition: service_healthy
+#     environment:
+#       # Browser-side calls go to the published host port, not the compose
+#       # network name, because the request originates outside Docker.
+#       VITE_API_BASE_URL: http://localhost:${APP_PORT:-8080}
+#     ports:
+#       - "${FRONTEND_PORT:-3000}:3000"

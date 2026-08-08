@@ -5,11 +5,24 @@ behind every architectural choice. Those are the source of truth; this file is t
 
 ## Project in three sentences
 
-Backend for an **incident reporting system**: a user submits free-form Turkish text from an open
-source (news, report, social media), and the system extracts **date, province, event type and
-numeric metrics** from it. Raw text is stored verbatim in MongoDB (immutable audit log); the
-extracted structured data is stored in PostgreSQL and drives filtered tables and per-event-type
-charts. New structured records are pushed to connected clients over one-way SSE.
+An **incident reporting system**: a user submits free-form Turkish text from an open source (news,
+report, social media), and the system extracts **date, province, event type and numeric metrics**
+from it. Raw text is stored verbatim in MongoDB (immutable audit log); the extracted structured
+data is stored in PostgreSQL and drives filtered tables and per-event-type charts. New structured
+records are pushed to connected clients over one-way SSE.
+
+## Repository layout
+
+Monorepo. One `CLAUDE.md`, at the root, covering every module.
+
+```
+docker-compose.yml   full system - the entry point, `docker compose up --build`
+docs/                PRD, DECISIONS, TASKS - project-wide
+backend/             Java 21 / Spring Boot; the Maven reactor root lives HERE, not at repo root
+frontend/            ReactJS (not implemented yet)
+```
+
+Run Maven from `backend/`. There is no `pom.xml` at the repository root.
 
 ## Commands
 
@@ -20,21 +33,30 @@ Maven command will fail the enforcer rule:
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 ```
 
-Run Maven from the repository root — it is the aggregator for all modules.
+Maven runs from `backend/` (the reactor root). Compose runs from the repository root.
 
 ```
+cd backend
 ./mvnw verify                          # all modules: build + tests (JaCoCo gate lands in T-03)
 ./mvnw -pl analysis -am verify         # one module and what it depends on
 ./mvnw test -Dtest=ClassName           # single test class
 ./mvnw -pl app spring-boot:run         # run locally, `local` profile is the default
-java -jar app/target/incident-report-be.jar
+java -jar backend/app/target/incident-report-be.jar
 curl -s localhost:8080/actuator/health
-docker compose up --build              # whole system: app + mongodb + postgres
+```
+
+```
+docker compose up --build              # from repo root: the whole system
 docker compose up -d postgres mongodb  # databases only, for the `local` profile
 docker compose ps                      # service status incl. health
 docker compose logs -f app
 docker compose down -v                 # tear down including volumes
 ```
+
+There are two compose files and they do not duplicate anything: the root one `include`s
+`backend/docker-compose.yml`, which owns the app and both databases. Consequences — keep the
+backend compose file includable (no absolute paths, no assumption it is the only compose file),
+and add frontend/cross-service wiring to the root file only.
 
 Compose carries inline defaults for every setting, so it runs on a fresh clone with no `.env`.
 The app image is layered (dependencies / loader / application), so a code change rebuilds only the

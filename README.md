@@ -1,16 +1,28 @@
-# Olay Bildirim Sistemi — Backend
-
-> ### 🚀 Tüm sistemi (backend + frontend + veri tabanları) tek komutla ayağa kaldırmak için
-> ### → **[incident-report-devops](https://github.com/eemreayy/incident-report-devops)**
->
-> Bu repo projenin **yalnızca backend** bacağıdır ve buradaki `docker compose up` yalnızca
-> backend'i ve veri tabanlarını başlatır — backend üzerinde çalışmak için yeterlidir.
-> Sistemin tamamı için yukarıdaki repo'yu kullanın. Gerekçe: [ADR-015](docs/DECISIONS.md#adr-015--üç-repoluk-yapı-ve-ayrı-devops-reposu).
+# Olay Bildirim Sistemi
 
 Açık kaynaklardan (haber, rapor, sosyal medya vb.) elde edilen **serbest metin** olay bildirimlerini
 otomatik olarak ayrıştırıp **Tarih, İl, Olay Tipi ve sayısal metrikler**'den oluşan yapılandırılmış
 veriye dönüştüren; bu veriyi filtrelenebilir tablo ve olay tipi bazlı grafiklerle sunan ve yeni
-bildirim girildiğinde bağlı istemcileri gerçek zamanlı bilgilendiren backend servisi.
+bildirim girildiğinde arayüzü gerçek zamanlı güncelleyen bir web uygulaması.
+
+Sistemin tamamı tek komutla ayağa kalkar:
+
+```bash
+docker compose up --build
+```
+
+## Repo yapısı
+
+```
+incident-report/
+├── docker-compose.yml     tüm sistem (giriş noktası)
+├── docs/                  PRD, tasarım kararları, task kırılımı
+├── backend/               Java 21 · Spring Boot · MongoDB + PostgreSQL
+└── frontend/              ReactJS  (henüz oluşturulmadı)
+```
+
+Backend kendi içinde bir **modular monolith**'tir; ayrıntısı aşağıda. Tek repo tercihinin
+gerekçesi [ADR-016](docs/DECISIONS.md#adr-016--tek-repo-monorepo)'da.
 
 ---
 
@@ -72,7 +84,7 @@ Backend, tek deploy edilebilir bir **modular monolith**'tir.
                       HTTP (REST)                       SSE (tek yönlü)
                            │                                   ▲
 ┌──────────────────────────┼───────────────────────────────────┼────────────┐
-│  incident-report-be      ▼                                   │            │
+│  backend                 ▼                                   │            │
 │                                                                           │
 │   ┌────────────────────────────┐    Spring    ┌───────────────────────┐   │
 │   │  ingestion                 │  Application │  analysis             │   │
@@ -89,10 +101,11 @@ Backend, tek deploy edilebilir bir **modular monolith**'tir.
            └─────────────┘                          └──────────────┘
 ```
 
-Her modül **ayrı bir Maven modülüdür** ve kendi `pom.xml`'ine sahiptir:
+Her modül **ayrı bir Maven modülüdür** ve kendi `pom.xml`'ine sahiptir. Maven reactor'ın kökü
+`backend/` dizinidir:
 
 ```
-incident-report-be   (parent, packaging=pom — ortak sürüm ve plugin yönetimi)
+backend/             (parent, packaging=pom — ortak sürüm ve plugin yönetimi)
 ├── shared           hiçbir modüle bağımlı değil — modüller arası event'ler, hata sözleşmesi
 ├── ingestion        → shared
 ├── analysis         → shared
@@ -195,12 +208,14 @@ wrapper'ını (`./mvnw`) taşır.
 
 ### Tek komutla çalıştırma
 
+Repo kökünde:
+
 ```bash
 docker compose up --build
 ```
 
 Başka hiçbir hazırlık gerekmez; `.env` dosyası oluşturmanız da gerekmez (aşağıya bakın).
-Komut üç servisi ayağa kaldırır ve uygulama, veri tabanları **sağlıklı** olana kadar bekler:
+Komut tüm servisleri ayağa kaldırır ve uygulama, veri tabanları **sağlıklı** olana kadar bekler:
 
 | Servis | Adres | Açıklama |
 |---|---|---|
@@ -239,18 +254,30 @@ Uygulamayı IDE'den veya Maven'dan çalıştırıp yalnızca veri tabanlarını 
 
 ```bash
 docker compose up -d postgres mongodb
-export JAVA_HOME=$(/usr/libexec/java_home -v 21)
-./mvnw -pl app spring-boot:run
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+cd backend && ./mvnw -pl app spring-boot:run
 ```
 
 Bu akışta `local` profili devreye girer (varsayılan) ve uygulama `localhost` üzerindeki
 veri tabanlarına bağlanır.
 
-Testleri ve derlemeyi çalıştırmak için:
+Maven reactor'ın kökü `backend/` dizinidir; derleme ve testler oradan çalıştırılır:
 
 ```bash
-./mvnw verify
+cd backend
+./mvnw verify                  # tüm modüller: derleme + testler
+./mvnw -pl analysis -am verify # tek modül ve bağımlılıkları
 ```
+
+Yalnızca backend'i ve veri tabanlarını ayağa kaldırmak isterseniz `backend/` dizininin kendi
+compose dosyası vardır:
+
+```bash
+cd backend && docker compose up --build
+```
+
+Kökteki compose bu dosyayı `include` ile olduğu gibi kullanır, yani servis tanımları
+tek yerdedir ve iki dosya arasında kopyalama yoktur.
 
 ### Durdurma ve temizlik
 

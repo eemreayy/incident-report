@@ -22,7 +22,8 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-012](#adr-012--reprocess-yeteneği) | Reprocess yeteneği | Kabul edildi |
 | [ADR-013](#adr-013--maven--flyway--openapi) | Maven + Flyway + OpenAPI | Kabul edildi |
 | [ADR-014](#adr-014--tarih-çözümleme-ve-referans-tarih) | Tarih çözümleme ve referans tarih | Kabul edildi |
-| [ADR-015](#adr-015--üç-repoluk-yapı-ve-ayrı-devops-reposu) | Üç repo'luk yapı ve ayrı devops repo'su | Kabul edildi |
+| [ADR-015](#adr-015--üç-repoluk-yapı-ve-ayrı-devops-reposu) | Üç repo'luk yapı ve ayrı devops repo'su | **Geçersiz** — yerini [ADR-016](#adr-016--tek-repo-monorepo) aldı |
+| [ADR-016](#adr-016--tek-repo-monorepo) | Tek repo (monorepo) | Kabul edildi |
 
 ---
 
@@ -345,6 +346,10 @@ Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalı
 
 ## ADR-015 — Üç Repo'luk Yapı ve Ayrı DevOps Repo'su
 
+> ⚠️ **Bu karar geçersizdir; yerini [ADR-016](#adr-016--tek-repo-monorepo) almıştır.**
+> Kayıt, kararın neden alındığını ve neden geri alındığını göstermek için burada bırakılmıştır.
+> Aşağıdaki metin, geri alınmadan önceki haliyle korunmuştur.
+
 **Karar.** Proje üç repo'ya bölünür: `incident-report-be` (backend), `incident-report-fe` (frontend) ve `incident-report-devops` (kompozisyon). Full-system `docker compose up`, servis repo'larını **git submodule** olarak bağlayan devops repo'sundan çalıştırılır. Her servis repo'su ayrıca **tek başına** çalıştırılabilir kalır.
 
 | Repo | İçerik | Bağımsız çalışır |
@@ -373,3 +378,44 @@ Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalı
 - Backend'in compose dosyası artık "dahil edilebilir" olmak zorunda — mutlak yol veya tek-compose varsayımı yapamaz.
 
 **İleride.** Servisler GHCR'a imaj yayınlayan bir CI hattı kazandığında devops repo'suna ikinci bir compose dosyası (`docker-compose.images.yml`) eklenip "derlemeden çalıştır" seçeneği sunulabilir; submodule'lü kaynaktan derleme yolu geliştirme için kalır. Aynı repo, Kubernetes'e geçiş halinde Helm chart'larının ve ortam bazlı (staging/prod) değerlerin de doğal evi olur — bugün compose'un durduğu yerde.
+
+---
+
+## ADR-016 — Tek Repo (Monorepo)
+
+**Karar.** Proje **tek bir repo**'da toplanır: `incident-report`. Backend ve frontend, repo kökündeki birer dizin (modül) olarak yaşar. Full-system `docker-compose.yml` **repo kökündedir**; ayrı bir `devops` modülü yoktur.
+
+```
+incident-report/
+├── docker-compose.yml     full-system compose (giriş noktası)
+├── .env.example
+├── CLAUDE.md              tek çalışma sözleşmesi, tüm proje için
+├── docs/                  PRD, DECISIONS, TASKS - proje geneli
+├── backend/               Java 21 / Spring Boot, kendi Maven reactor'ı
+│   ├── pom.xml            parent
+│   ├── docker-compose.yml backend + veri tabanları
+│   └── shared/ ingestion/ analysis/ realtime/ app/
+└── frontend/              ReactJS (henüz oluşturulmadı)
+```
+
+**Bağlam.** ADR-015, backend ve frontend'in ayrı repo'larda geliştirilmesi varsayımı üzerine kuruluydu ve kompozisyonu üçüncü bir repo'ya (`incident-report-devops`) koyuyordu. Yapı kurulup çalıştırıldıktan sonra, ayrılığın kendisinin bu projede maliyeti faydasından fazla olduğu görüldü.
+
+**Gerekçe.**
+- **Değerlendirici deneyimi belirleyici oldu.** Kaynak doküman "Sistem `docker-compose up` komutu ile tek seferde ayağa kalkmalıdır" diyor. Tek repo'da bu birebir gerçekleşiyor: klonla, kökte `docker compose up --build`. Üç repo'lu yapıda değerlendiricinin önce doğru repo'yu bulması, sonra `--recurse-submodules` ile klonlaması gerekiyordu. ADR-015 bu riski zaten "gerçek risk" olarak kaydediyordu; riski README uyarısıyla yönetmek yerine ortadan kaldırmak daha doğru.
+- **Atomik değişiklik.** Backend API'si değiştiğinde frontend'in uyumu aynı commit'te yapılabiliyor. Ayrı repo'larda bu iki commit ve bir sürüm koordinasyonu demekti.
+- **Submodule maliyeti kayboldu.** Pointer'ı elle ilerletme, unutulan `--recurse-submodules`, "hangi backend hangi frontend ile" eşlemesi — hepsi konu olmaktan çıktı.
+- **Ayrı devops modülüne gerek kalmadı.** Submodule yönetimi ortadan kalkınca `devops/` dizininin tek içeriği full-system compose olacaktı; o da isterin lafzına uymak için köke taşındı. Var olmayan bir modülü kurmamak, boş bir modül kurmaktan iyi.
+- Proje ölçeği bunu kaldırıyor: iki uygulama modülü ve iki veri tabanı. Ayrı repo'ların çözdüğü problemler (bağımsız sürümleme, ayrı erişim kontrolü, ayrı release kadansı) bu projede yok.
+
+**Alternatifler.**
+- *ADR-015'te kalmak:* Servislerin bağımsız sürümlenmesini korurdu. Ancak bu projede bağımsız sürümleme bir ihtiyaç değil; karşılığında değerlendirici sürtünmesi ve submodule bakımı ödeniyordu.
+- *Monorepo ama compose `devops/` altında:* Modül ayrımı daha saf olurdu; `docker compose up` kökte çalışmaz, `-f devops/docker-compose.yml` gerekirdi. İsterin lafzı köke işaret ediyor.
+- *Backend ve frontend'i tek Maven reactor'ında birleştirmek:* Frontend Maven projesi değil; yapay bir sarmalayıcı gerektirirdi.
+
+**Sonuçlar.**
+- Maven reactor'ın kökü artık `backend/`. Komutlar `cd backend && ./mvnw ...` şeklinde; kökte `pom.xml` yok.
+- İki compose dosyası var: kökteki (full-system) ve `backend/`dekі (yalnız backend + veri tabanları). Tekrar yok — kökteki, `include:` ile backend'inkini olduğu gibi tüketiyor. Backend'in compose'u "dahil edilebilir" kalmak zorunda (ADR-015'ten devralınan kısıt).
+- Repo geçmişi ADR-015'in kurulup geri alındığını gösteriyor. Bu bilinçli olarak temizlenmedi: karar günlüğünün işi, hangi yolun neden denendiğini ve neden bırakıldığını kayıt altına almak.
+- Tüm modüller aynı anda klonlanıyor; repo büyüdükçe klon boyutu da büyüyecek. Bu ölçekte önemsiz.
+
+**İleride.** Modüllerden biri bağımsız release kadansı ya da ayrı erişim kontrolü gerektirirse, `git filter-repo --subdirectory-filter backend` ile o dizin kendi geçmişiyle birlikte ayrı bir repo'ya çıkarılabilir — monorepo bu kapıyı kapatmıyor. CI tarafında yol bazlı tetikleyiciler (`paths: backend/**`) ile modüller ayrı ayrı derlenip test edilebilir; tek repo, tek pipeline demek değil.

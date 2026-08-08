@@ -1,4 +1,8 @@
-### Maven ###
+# Monorepo: this file covers every module. Patterns without a leading slash
+# match at any depth, so `target/` and `node_modules/` apply under backend/
+# and frontend/ alike.
+
+### Java / Maven ###
 target/
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -12,49 +16,43 @@ pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
 pom.xml.next
-
-### Java ###
 *.class
 *.jar
 *.war
-*.ear
-*.nar
 hs_err_pid*
 replay_pid*
 
-### IntelliJ IDEA ###
+### Node / frontend ###
+node_modules/
+dist/
+build/
+.next/
+.vite/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+### IDE ###
 .idea/
 *.iws
 *.iml
 *.ipr
 out/
-
-### Eclipse / VS Code ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
 .vscode/
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+.classpath
+.project
+.settings/
+.apt_generated
+.factorypath
 
 ### macOS ###
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
-
-### Logs ###
-*.log
-logs/
 
 ### Environment / secrets ###
 .env
@@ -66,6 +64,7 @@ logs/
 ### Docker ###
 docker-compose.override.yml
 
-### Test & coverage output ###
-/coverage/
+### Logs & test output ###
+*.log
+logs/
 *.exec
