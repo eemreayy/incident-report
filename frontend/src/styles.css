@@ -1,0 +1,80 @@
+/* Plain CSS with custom properties. No styling framework: the interface is a
+   single dashboard, and a framework would add a build step and a vocabulary
+   without removing any decision that actually has to be made. */
+
+:root {
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-text: #1c2024;
+  --color-muted: #5b6470;
+  --color-border: #dfe3e8;
+  --color-up: #1b7f4b;
+  --color-down: #b3261e;
+  --space: 1rem;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: calc(var(--space) * 1.5);
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space);
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.app-subtitle,
+.backend-status {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.backend-status[data-state='up'] {
+  color: var(--color-up);
+}
+
+.backend-status[data-state='down'] {
+  color: var(--color-down);
+}
+
+.placeholder {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: calc(var(--space) * 1.5);
+  margin-top: calc(var(--space) * 1.5);
+}
+
+.placeholder h2 {
+  margin-top: 0;
+  font-size: 1.125rem;
+}

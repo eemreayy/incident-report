@@ -510,7 +510,7 @@ Tüm frontend task'ları [ADR-022](DECISIONS.md#adr-022--frontend-teknoloji-taba
 (React + TypeScript + Vite) ve [ADR-024](DECISIONS.md#adr-024--frontend-coverage-kapısı) (%80 kapısı)
 altında çalışır; her task kendi testlerini taşır.
 
-### ☐ T-23 · Frontend iskeleti, kalite kapısı ve Docker
+### ☑ T-23 · Frontend iskeleti, kalite kapısı ve Docker
 Vite + React + TypeScript projesi `frontend/` altında. Test koşucusu ve **coverage eşiği %80**,
 build'i kıracak şekilde. Lint/format. Çok aşamalı `Dockerfile` (build → statik sunucu). Kök
 `docker-compose.yml`'de yorumda bekleyen `frontend` servisi açılır.
@@ -523,6 +523,37 @@ olarak yazılır (ADR-022 bunları bilinçli olarak açık bırakmıştı).
 - **Karşılar:** NFR-02, NFR-03, NFR-12, NFR-15 · **Çözer:** TC-17
 - **DoD:** `docker compose up --build` sonrası tarayıcıdan tek adres açılıyor ve uygulama yükleniyor;
   kasten düşürülen coverage build'i kırıyor; API adresi ortam değişkeninden geliyor, koda gömülü değil.
+- **Kararlar:** **ADR-025** (aynı köken, nginx reverse proxy — TC-17 çözüldü) ve **ADR-026**
+  (kütüphane seti: TanStack Query · React Router · Recharts · Vitest · düz CSS).
+- **Sonuç:** React 19.2 · TypeScript 6.0 · Vite 8.2 · Vitest 4.1. 10 test geçiyor, coverage %100.
+  Üretim bundle'ı 264 kB (gzip 84 kB). `docker compose up --build` dört servisi ayağa kaldırıyor,
+  dördü de `healthy`.
+- **DoD maddeleri tek tek doğrulandı (çalışan sistem):**
+  - Tarayıcıdan `http://localhost:3000` → uygulama yükleniyor, konsol temiz, "Sunucu: bağlı".
+  - `fetch('/actuator/health')` → `sameOrigin: true`, 200, backend `UP` (`db` + `mongo`).
+  - Derin bağlantı `/incidents/123` → 200 (SPA fallback); `/actuator/env` proxy'ye **düşmüyor**,
+    `index.html` dönüyor — yalnızca `health` açık.
+  - Coverage kapısı: kapsanmayan bir dosya eklendiğinde `EXIT=1` +
+    `ERROR: Coverage for lines (70.58%) does not meet global threshold (80%)`; dosya silinince
+    `EXIT=0`. Probe dosyası sonrasında kaldırıldı.
+- **DoD'nin son maddesi karar gereği değişti.** "API adresi ortam değişkeninden gelir" yerine
+  **hiçbir mutlak adres yok**: aynı köken seçilince istekler göreli oldu ve `VITE_API_BASE_URL`
+  gereksizleşti (ADR-025). NFR-15 daha güçlü biçimde karşılanıyor — yapılandırılacak bir adres
+  kalmadığı için yanlış yapılandırılamıyor da. Bir testle sabitlendi: probe'un `/actuator/health`
+  göreli yolunu çağırdığı doğrulanıyor.
+- **İki tuzak yakalandı ve düzeltildi:**
+  - **Healthcheck IPv6.** `wget http://localhost:3000/` container içinde "connection refused"
+    veriyordu; `/etc/hosts` `localhost`'u `::1`'e de eşliyor, nginx ise yalnız IPv4 dinliyor.
+    Servis doğru çalışırken `unhealthy` görünüyordu. `127.0.0.1`'e sabitlendi.
+  - **Coverage sağlayıcısı.** v8'in bileşenleri tek satır saydığını görüp istanbul'a geçildi;
+    ölçüldüğünde istanbul'un da aynı sayıyı verdiği anlaşıldı — sebep sağlayıcı değil, gövdesi tek
+    bir JSX `return`'ü olan bileşenin tek statement olması. v8'e (varsayılan, ek bağımlılık yok)
+    geri dönüldü ve sayının ne ölçtüğü yorumda yazıldı. Bkz. ADR-024 "Sonuçlar".
+- **Doğrulanamayan tek şey — dürüstlük kaydı.** `nginx.conf`'taki SSE bloğu (`proxy_buffering off`,
+  `proxy_read_timeout 1h`) **çalışırken test edilmedi**, çünkü `/api/v1/stream/incidents` ucu henüz
+  yok (T-18). Yapılandırma yerinde ve gerekçesi yorumda; fiilen doğrulanması T-29'a ait.
+- **Not:** Recharts iskelette kullanılmıyor; ilk kullanıcısı T-28. Şimdi kurulmasının sebebi
+  ADR-026'da: React 19 ile çözülüp derlendiğini bugün öğrenmek.
 
 ### ☐ T-24 · API istemcisi ve tipli sözleşme
 Tek bir API katmanı: uç çağrıları, RFC 7807 (`application/problem+json`) hatalarının tipli
@@ -669,5 +700,5 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | T-27 |
 | TC-15 | İstemci durumu ile sunucu durumunun ayrımı | T-26 |
 | TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |
-| TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | T-23 |
+| TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | **Karara bağlandı → ADR-025** (T-23) |
 | TC-18 | Anahtar kelime vurgulamasının hizalanması | T-14 (offset üretimi) + T-30 (vurgulama) |

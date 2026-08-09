@@ -22,8 +22,8 @@ docs/                PRD, DECISIONS, TASKS - project-wide
 docs/postman/        API collection; examples captured from a running instance, never hand-written.
                      Extend it when endpoints land; `npx newman run` verifies it still fits.
 backend/             Java 21 / Spring Boot; the Maven reactor root lives HERE, not at repo root
-frontend/            React + TypeScript + Vite (ADR-022). Not scaffolded yet - T-23 owns that,
-                     including the Dockerfile and enabling the commented-out compose service
+frontend/            React + TypeScript + Vite (ADR-022). Talks to the API on its own origin -
+                     nginx proxies /api to the backend, so no CORS and no absolute URL (ADR-025)
 ```
 
 There is no `pom.xml` at the repository root.
@@ -54,9 +54,12 @@ docker compose up -d postgres mongodb  # databases only, for the `local` profile
 docker compose ps / logs -f app / down -v
 ```
 
-Frontend commands run from `frontend/` and land with T-23. **`verify` needs a running Docker
-daemon** — Testcontainers starts real Postgres and Mongo. The image build does not: the Dockerfile
-packages with `-DskipTests`.
+From `frontend/`: `npm run dev` (Vite on :3000, proxies /api to :8080), `npm run verify`
+(lint + type-check + build + coverage gate), `npm test`.
+
+**`./mvnw verify` needs a running Docker daemon** — Testcontainers starts real Postgres and Mongo.
+Neither image build does: the backend packages with `-DskipTests`, the frontend image type-checks
+and bundles but runs no tests. The image build is not the quality gate; `verify` is.
 
 Two compose files, no duplication: the root one `include`s `backend/docker-compose.yml`, which owns
 the app and both databases. So keep the backend file includable (no absolute paths, no assumption it
@@ -131,9 +134,9 @@ Rules that follow, and that queries and DTOs must respect:
 - **Never drop it either.** A province-filtered view surfaces it as a separate, labelled item, so
   per-province totals and the grand total can be reconciled. When several provinces are selected it
   is counted **once** — join through the link table with `DISTINCT`, do not sum per province.
-- Build incidents through `Incident.forProvince` / `sharedAcross` / `withoutProvince`. There is no
-  constructor that can attach a single province to a `SHARED` record, and the schema enforces the
-  same thing via `incident_province_matches_scope`.
+- Build incidents through `Incident.forProvince` / `sharedAcross` / `withoutProvince`. No constructor
+  can attach a single province to a `SHARED` record; the schema enforces the same via
+  `incident_province_matches_scope`.
 - Metrics are one row per metric (ADR-020), keyed by catalog name. Adding a metric must never
   require a migration.
 - Entity `toString()` must not touch a lazy association — it explodes from inside the logging call.
@@ -157,8 +160,10 @@ Rules that follow, and that queries and DTOs must respect:
 
 Frontend (from T-23 on):
 
-- React + TypeScript + Vite (ADR-022), no SSR. Chart and data-layer libraries are chosen in T-23 and
-  recorded as an ADR there — do not pick one silently.
+- React + TypeScript + Vite (ADR-022), no SSR. TanStack Query for server state, React Router for
+  routing and URL state, Recharts for charts, Vitest + Testing Library for tests (ADR-026).
+- **No absolute API address anywhere** (ADR-025). Requests are relative; nginx (prod) and the Vite
+  proxy (dev) put the API on the same origin. Adding a base-URL setting undoes that decision.
 - Three layers: API client / state / view (PRD §5.4). Derived numbers are **not** the view's job —
   cumulative sums, aggregation and filtering come from the server. Never reimplement a rule the
   backend owns; two copies in two languages drift. One API layer, RFC 7807 parsed there once,

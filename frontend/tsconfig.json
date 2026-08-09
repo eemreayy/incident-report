@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vitest/globals", "@testing-library/jest-dom", "vite/client", "node"],
+
+    /* Vite compiles each file on its own and never type-checks; `npm run build`
+       runs `tsc --noEmit` separately so a type error fails the build. */
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    /* The point of choosing TypeScript (ADR-022) was that a deviation from the
+       API contract shows up at build time. Loose settings would give that away. */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["src", "vite.config.ts", "vitest.setup.ts"]
+}

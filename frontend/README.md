@@ -1,13 +1,36 @@
 # Frontend
 
-React arayüzü. **Henüz oluşturulmadı** — iskeleti [`docs/TASKS.md`](../docs/TASKS.md) içindeki
-**T-23** kuracak. Bu dosya, o task başlamadan önce verilmiş kararları ve uyulacak kısıtları taşır.
+React arayüzü. İskeleti **T-23** ile kuruldu; ekranlar T-25'ten itibaren geliyor
+([`docs/TASKS.md`](../docs/TASKS.md) Faz 7).
 
 ## Teknoloji
 
-React + **TypeScript** + **Vite** — [ADR-022](../docs/DECISIONS.md#adr-022--frontend-teknoloji-tabanı-react--typescript--vite).
-SSR yok. Grafik ve veri katmanı kütüphaneleri bilinçli olarak açık bırakıldı; T-23'te seçilip aynı
-dosyaya ADR olarak yazılacak.
+React + **TypeScript** + **Vite** ([ADR-022](../docs/DECISIONS.md#adr-022--frontend-teknoloji-tabanı-react--typescript--vite)), SSR yok.
+Kütüphane seti ([ADR-026](../docs/DECISIONS.md#adr-026--frontend-kütüphane-seti)):
+
+| Amaç | Seçim | Neden |
+|---|---|---|
+| Sunucu verisi | TanStack Query | Önbellek + stale-while-revalidate hazır; SSE sinyali `invalidateQueries`'e iniyor |
+| Yönlendirme / URL durumu | React Router | Filtreler URL'de yaşayacak (FR-21), detay ekranları adreslenebilir |
+| Grafik | Recharts | **SVG çiziyor** → grafik mock'suz test edilebilir (ADR-024'ün kapısı altında belirleyici) |
+| Test | Vitest + Testing Library | Vite ile aynı dönüşüm hattı |
+| Stil | Düz CSS | Tek panel; bir çatı hiçbir kararı ortadan kaldırmıyor |
+
+## Komutlar
+
+```bash
+npm install
+npm run dev       # Vite dev sunucusu :3000, /api isteklerini :8080'e proxy'ler
+npm run verify    # lint + tip kontrolü + build + coverage kapısı
+npm test          # yalnızca testler
+npm run build     # tsc --noEmit && vite build
+```
+
+`npm run verify` **coverage eşiğinin altında build'i kırar** (satır bazında %80). Kapı fiilen
+doğrulandı: kapsanmayan bir dosya eklendiğinde çıkış kodu 1 oluyor.
+
+> Sayıyı okurken: gövdesi tek bir JSX `return`'ü olan bir bileşen **tek satır** sayılıyor. Yani
+> oran mantık dosyalarından oluşuyor; görünümleri tutan şey oran değil, davranış testleridir.
 
 ## Ne yapıyor
 
@@ -49,16 +72,22 @@ Bunlar tercih değil, karar:
 7. **Tazeleme sırasında görünüm boşaltılmaz.** Yeni veri gelene kadar eski veri ekranda kalır;
    aksi halde her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenmesidir.
 
-## Çalıştırma
+## Çalıştırma ve API erişimi
 
-T-23 tamamlandığında kök dizindeki `docker compose up --build` frontend'i de ayağa kaldıracak:
-kök [`docker-compose.yml`](../docker-compose.yml) içinde yorum satırı olarak bekleyen `frontend`
-servisi açılır ve backend'in `service_healthy` durumuna bağlanır.
+Kök dizinde `docker compose up --build` → **http://localhost:3000**. Frontend container'ı statik
+dosyaları nginx ile sunar ve `/api/*` ile `/actuator/health` isteklerini compose ağı üzerinden
+`app:8080`'e proxy'ler.
 
-Tarayıcı ile API arasında **aynı köken (reverse proxy)** mi yoksa **CORS** mu kullanılacağı henüz
-karara bağlanmadı (PRD §10, TC-17) — kararı T-23 verecek ve compose'daki taslak ona göre
-kesinleşecek. Bugünkü yorum satırı doğrudan çağrıyı (dolayısıyla CORS'u) varsayıyor; bu bir
-taahhüt değil, yer tutucudur.
+**TC-17 karara bağlandı: aynı köken** ([ADR-025](../docs/DECISIONS.md#adr-025--aynı-köken-nginx-reverse-proxy-cors-yerine)).
+Sonuçları:
+
+- Backend'de **CORS yapılandırması yok**; kaynak kodda **mutlak API adresi yok**. `VITE_API_BASE_URL`
+  diye bir ayar da yok — istekler göreli. Bir ayar eklemek bu kararı geri almak olur.
+- Geliştirmede aynı davranışı Vite dev proxy'si veriyor, yani `npm run dev` ile Docker aynı şekilde
+  çalışıyor.
+- [`nginx.conf`](nginx.conf)'taki en kritik satır **`proxy_buffering off`**: SSE için kapatılmazsa
+  nginx olayları tamponlar ve akış hiçbir hata vermeden ölü görünür. O blok yerinde ama **henüz
+  çalışırken doğrulanmadı** — stream ucu T-18'le geliyor, fiili doğrulama T-29'a ait.
 
 Backend API sözleşmesi için [`docs/PRD.md`](../docs/PRD.md) §8 ve §8.2'ye bakın. §8.2, frontend'in
 sözleşmeden beklediği ve **bugün henüz mevcut olmayan** maddeleri (C-1…C-8) listeler.

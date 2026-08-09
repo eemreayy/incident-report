@@ -18,7 +18,7 @@ incident-report/
 ├── docker-compose.yml     tüm sistem (giriş noktası)
 ├── docs/                  PRD, tasarım kararları, task kırılımı
 ├── backend/               Java 21 · Spring Boot · MongoDB + PostgreSQL
-└── frontend/              React · TypeScript · Vite  (henüz oluşturulmadı — T-23)
+└── frontend/              React · TypeScript · Vite · nginx
 ```
 
 Backend kendi içinde bir **modular monolith**'tir; ayrıntısı aşağıda. Tek repo tercihinin
@@ -247,10 +247,15 @@ Komut tüm servisleri ayağa kaldırır ve uygulama, veri tabanları **sağlıkl
 
 | Servis | Adres | Açıklama |
 |---|---|---|
-| `frontend` | http://localhost:3000 | React arayüzü — **henüz oluşturulmadı**, kök compose'da yorum satırında bekliyor (T-23) |
+| `frontend` | **http://localhost:3000** | React arayüzü — sistemin giriş noktası; API'yi aynı köken üzerinden proxy'ler |
 | `app` | http://localhost:8080 | Backend API |
 | `postgres` | `localhost:5432` | PostgreSQL 17 — normalize/analitik veri |
 | `mongodb` | `localhost:27017` | MongoDB 8 — ham metin (log) |
+
+Kullanıcı olarak açmanız gereken tek adres **http://localhost:3000**. API'ye giden istekler aynı
+köken üzerinden geçtiği için tarayıcının backend portunu bilmesine gerek yoktur
+([ADR-025](docs/DECISIONS.md#adr-025--aynı-köken-nginx-reverse-proxy-cors-yerine)); 8080 yine de
+curl/Postman ve `local` profili için yayımlanmış durumda.
 
 Sağlık kontrolü:
 

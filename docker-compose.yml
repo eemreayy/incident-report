@@ -15,20 +15,35 @@ name: incident-report
 include:
   - path: backend/docker-compose.yml
 
-# The frontend module is not implemented yet. When it is, the service below is
-# uncommented - nothing else here needs to change.
+services:
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: incident-report-frontend
+    restart: unless-stopped
+    depends_on:
+      # Wait for the API to report healthy. The frontend would serve fine
+      # without it, but the first thing a user does is load data.
+      app:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      # 127.0.0.1 rather than localhost: the container resolves localhost to ::1
+      # first and nginx listens on IPv4 only.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+# There is deliberately no API address configured above. The browser reaches the
+# API on this same origin: nginx inside this container proxies /api and
+# /actuator/health to `app:8080` over the compose network (ADR-025). So the API
+# never appears in a URL the browser can see, there is no CORS configuration in
+# the backend, and the user opens exactly one address - http://localhost:3000.
 #
-# services:
-#   frontend:
-#     build:
-#       context: ./frontend
-#     container_name: incident-report-frontend
-#     depends_on:
-#       app:
-#         condition: service_healthy
-#     environment:
-#       # Browser-side calls go to the published host port, not the compose
-#       # network name, because the request originates outside Docker.
-#       VITE_API_BASE_URL: http://localhost:${APP_PORT:-8080}
-#     ports:
-#       - "${FRONTEND_PORT:-3000}:3000"
+# Publishing the backend on 8080 stays useful for curl, Postman and the `local`
+# profile, but the frontend does not go through it.

@@ -32,6 +32,8 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-022](#adr-022--frontend-teknoloji-tabanı-react--typescript--vite) | Frontend teknoloji tabanı: React + TypeScript + Vite | Kabul edildi |
 | [ADR-023](#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) | Coğrafi izlenebilirlik: harita yerine il kırılımı | Kabul edildi |
 | [ADR-024](#adr-024--frontend-coverage-kapısı) | Frontend coverage kapısı | Kabul edildi |
+| [ADR-025](#adr-025--aynı-köken-nginx-reverse-proxy-cors-yerine) | Aynı köken: nginx reverse proxy (CORS yerine) | Kabul edildi · **TC-17 çözüldü** |
+| [ADR-026](#adr-026--frontend-kütüphane-seti) | Frontend kütüphane seti | Kabul edildi |
 
 ---
 
@@ -643,6 +645,60 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - *Daha düşük eşik (%60–70):* İsteri kısmen karşılar; sayının neden düşürüldüğünü savunmak gerekir ve savunma zayıftır.
 - *Sayısal kapı yok, yalnızca kritik akışlar:* En hızlı yol. Kaynak dokümanın açık bir isterinden bilinçli sapma olurdu ve README'de gerekçelendirilmesi gerekirdi.
 
-**Sonuçlar.** Her frontend task'ı kendi test yükünü taşıyor. Snapshot testleri kapsamı ucuza şişirdiği için tercih edilmiyor; ölçülen şey davranış olmalı (TC-16). SSE, zamanlayıcı ve grafik gibi zamanlama/çizim içeren kod deterministik test için sahte zaman ve sahte akış gerektiriyor — bu, tasarımı da doğru yöne itiyor: yan etkiler enjekte edilebilir olmak zorunda.
+**Sonuçlar.** T-23'te ölçüldü: bir bileşenin gövdesi tek bir JSX `return`'ü olduğu için **tek satır** sayılıyor (v8 ve istanbul sağlayıcıları aynı sonucu veriyor). Yani oran, görünüm katmanından değil **mantık dosyalarından** oluşuyor — kapının dişi API istemcisi ve durum katmanında. Bu, kararın gerekçesiyle uyumlu ama sayının ne ölçtüğünü bilerek okumak gerekiyor: görünümleri tutan şey oran değil, davranış testleri. Her frontend task'ı kendi test yükünü taşıyor. Snapshot testleri kapsamı ucuza şişirdiği için tercih edilmiyor; ölçülen şey davranış olmalı (TC-16). SSE, zamanlayıcı ve grafik gibi zamanlama/çizim içeren kod deterministik test için sahte zaman ve sahte akış gerektiriyor — bu, tasarımı da doğru yöne itiyor: yan etkiler enjekte edilebilir olmak zorunda.
 
 **İleride.** Eşik tek bir yapılandırma değerinden yönetiliyor; olgunlaştıkça yükseltilebilir. Uçtan uca (E2E) testler bu kapının kapsamına girmez — kabul kriterleri (§11) onların alanı; ikisini karıştırmak coverage sayısını anlamsızlaştırır.
+
+---
+
+## ADR-025 — Aynı Köken: nginx Reverse Proxy (CORS Yerine)
+
+**Karar.** Tarayıcı API'ye **kendi kökeni üzerinden** ulaşır. Frontend container'ındaki nginx statik dosyaları sunar ve `/api/*` ile `/actuator/health` isteklerini compose ağı üzerinden `app:8080`'e proxy'ler. Backend'de **CORS yapılandırması yoktur**; frontend kaynak kodunda **mutlak API adresi yoktur**. Geliştirmede aynı davranışı Vite'ın dev proxy'si verir.
+
+**Bağlam.** PRD bunu TC-17 olarak açık bırakmıştı. Frontend ayrı bir portta yayınlanacağı için tarayıcının `localhost:3000`'den `localhost:8080`'e yapacağı çağrılar çapraz kökenli olurdu. Kök `docker-compose.yml`'de bekleyen taslak `VITE_API_BASE_URL` geçiyordu, yani örtük olarak CORS'u varsayıyordu — ama bu bir karar değil, yer tutucuydu.
+
+**Gerekçe.**
+- **Backend'de sıfır değişiklik.** CORS bir güvenlik yüzeyidir: hangi kökene, hangi metotlara, hangi başlıklara izin verildiği yanlış yapılabilecek bir liste. Aynı köken bu yüzeyi hiç açmıyor.
+- **Geliştirme ve üretim aynı şekilde davranıyor.** Vite dev proxy ile nginx aynı yolları aynı hedefe gönderiyor; "bende çalışıyordu" sınıfı bir fark kalmıyor.
+- **NFR-03'ün lafzı.** Kullanıcı **tek adres** açıyor: `http://localhost:3000`. API'nin portu kullanıcının bileceği bir şey olmaktan çıkıyor.
+- **Yapılandırılacak bir adres kalmıyor.** İstekler göreli olduğu için `VITE_API_BASE_URL` gereksizleşti — NFR-15'in "adres koda gömülü olmasın" isteri, adresi ortam değişkenine taşıyarak değil **ortadan kaldırarak** karşılanıyor. Bir testle sabitlendi: probe'un göreli yol çağırdığı doğrulanıyor.
+- Kimlik doğrulama ileride eklenirse (ADR-011 "İleride") çerez tabanlı oturum aynı kökende sorunsuz çalışır; çapraz kökende `SameSite`/`credentials` ayrı bir iş olurdu.
+
+**Alternatifler.**
+- *CORS:* Container daha basit olurdu (yalnız statik dosya sunucusu, nginx konfigürasyonu yok). Karşılığında backend'e yeni bir güvenlik yüzeyi, her istekten önce preflight, dışarı açılan ikinci bir port ve API adresinin build ya da çalışma zamanında enjekte edilmesi gereği gelirdi.
+- *Frontend'i backend'in içinden (Spring static resources) sunmak:* Tek origin'i bedavaya verirdi ama iki build'i tek artifact'a bağlar, frontend'in bağımsız dağıtımını ve Vite'ın geliştirme deneyimini kaybettirirdi.
+- *Ayrı bir reverse proxy servisi (üçüncü container):* Daha "doğru" bir topoloji ama compose'a bir servis daha ekler; bu ölçekte frontend container'ının kendi nginx'i yeterli.
+
+**Sonuçlar.**
+- Bir `nginx.conf` bakım yükü doğdu. İçindeki en kritik satır `proxy_buffering off`: SSE için kapatılmazsa nginx olayları tamponlar, akış **sessizce ölü görünür** ve hiçbir yerde hata çıkmaz. Bu yüzden stream yolu kendi `location` bloğunda, `proxy_read_timeout 1h` ile birlikte duruyor.
+- `/actuator` altından yalnızca `health` proxy'leniyor; gerisi operasyonel yüzey ve tarayıcıya açılmasının bir sebebi yok. Doğrulandı: `/actuator/env` proxy'ye düşmüyor, SPA fallback'i olarak `index.html` dönüyor.
+- Derin bağlantılar için `try_files ... /index.html` gerekiyor, yoksa `/incidents/123` 404 olurdu (PRD §5.4'teki adreslenebilir ekranlar).
+- Backend 8080'de yayımlanmaya devam ediyor — curl, Postman ve `local` profili için — ama frontend oradan geçmiyor.
+- **Doğrulandı** (T-23, çalışan sistem): tarayıcıdan `http://localhost:3000` açıldığında uygulama yükleniyor ve `fetch('/actuator/health')` çağrısı `sameOrigin: true` ile 200 dönüyor; backend `UP`, `db` ve `mongo` bileşenleriyle birlikte.
+
+**İleride.** Üretimde TLS sonlandırma gerekirse aynı nginx'e girer; frontend kodunda hiçbir değişiklik olmaz çünkü adresler zaten göreli. Backend birden fazla örneğe çıkarsa `proxy_pass` bir upstream bloğuna dönüşür — ama SSE yapışkan oturum ister, o noktada ADR-004'ün "İleride" notundaki fan-out katmanı gündeme gelir. Frontend ayrı bir CDN'den sunulmak istenirse aynı köken kaybolur ve CORS kararı yeniden açılır; o durumda bu ADR'nin yerini yeni bir karar alır.
+
+---
+
+## ADR-026 — Frontend Kütüphane Seti
+
+**Karar.** Sunucu verisi için **TanStack Query**, yönlendirme ve URL durumu için **React Router**, grafik için **Recharts**. Test tarafı **Vitest + Testing Library**, stil için ek bir çatı kullanılmadan **düz CSS**. ADR-022 bu seçimleri bilinçli olarak açık bırakmıştı; T-23'te karara bağlandı.
+
+**Bağlam.** PRD §5.4 arayüzü üç katmana ayırıyor (API istemcisi / durum / görünüm) ve şunları isteriz kılıyor: tazeleme sırasında görünümün boşaltılmaması (FR-25), filtre durumunun adres çubuğunda yaşaması (FR-21), çok serili ve kümülatif grafik (FR-23, FR-24), ve %80 coverage kapısı (ADR-024).
+
+**Gerekçe.**
+- **TanStack Query.** İhtiyaç duyulan davranışlar zaten içinde: önbellek, `keepPreviousData` ile stale-while-revalidate (FR-25'in "görünüm boşaltılmaz" isteri birebir bu), eşzamanlı isteklerin birleştirilmesi, yeniden bağlanınca tazeleme. SSE sinyali geldiğinde yapılacak iş `invalidateQueries` çağrısına iniyor (TC-13). Elle yazılsaydı bunların hepsi yazılacak **ve** %80 kapısının altında test edilecekti.
+- **React Router.** Filtre durumu URL'de yaşayacak (FR-21) ve iki detay ekranı adreslenebilir olacak (PRD §5.4). İskelette tek route var; sonradan takılmak yerine baştan yerinde.
+- **Recharts.** Belirleyici olan **SVG çizmesi**: grafik DOM'da gerçek düğümler olarak var, dolayısıyla "doğru seriler çizildi mi" sorusu mock'suz sorulabiliyor. Canvas tabanlı bir kütüphanede (ECharts, Chart.js) aynı soru ancak taklit katmanıyla sorulur — ADR-024'ün kapısı altında bu doğrudan maliyet demek. Bildirimsel React bileşenleri çoklu seri, yığılmış görünüm ve seri gizle/göster ihtiyaçlarını doğrudan karşılıyor.
+- **Vitest.** Vite ile aynı dönüşüm hattını paylaşıyor; ayrı bir derleyici yapılandırması taşımıyor.
+- **Düz CSS.** Arayüz tek bir panel; bir stil çatısı build adımı ve öğrenilecek bir sözlük ekler, ama alınması gereken hiçbir kararı ortadan kaldırmaz.
+
+**Alternatifler.**
+- *Sade hook + `fetch`:* Sıfır bağımlılık. Önbellek, stale-while-revalidate, istek birleştirme ve geçersizleştirme elle yazılırdı — yani TanStack Query'nin daha az test edilmiş bir kopyası.
+- *Redux Toolkit + RTK Query:* Aynı yetenekler artı global istemci durumu. Bu ölçekte fazla tören: paylaşılan istemci durumu neredeyse yok, filtreler zaten URL'de duracak.
+- *ECharts / Chart.js:* Görsel olarak daha zengin, canvas çizdikleri için test edilebilirlikleri düşük; ECharts ayrıca büyük bir bundle ve imperatif yapılandırma getiriyor.
+- *Tailwind:* Geliştirmeyi hızlandırırdı; bu boyutta düz CSS'in üstüne çıkacak bir kazanç yok.
+
+**Sonuçlar.** Beş üretim bağımlılığı: React, React DOM, React Router, TanStack Query, Recharts. Recharts iskelette **kullanılmıyor** — ilk kullanıcısı T-28. Şimdi kurulmasının sebebi kararın kaydedilmesi ve React 19 ile birlikte çözülüp derlendiğinin doğrulanması; bu tür bir uyumsuzluğu T-28'de değil bugün öğrenmek gerekiyordu (doğrulandı: `npm run build` temiz geçiyor, üretim bundle'ı 264 kB / gzip 84 kB). TanStack Query'nin önbellek anahtarları filtre durumuyla birebir eşleşmek zorunda; bu, T-26'da filtre durumu tasarlanırken dikkat edilecek nokta.
+
+**İleride.** Grafik ihtiyacı Recharts'ın sınırını zorlarsa (çok büyük veri, özel etkileşim) geçiş yalnızca grafik bileşenlerini etkiler — veri sunucudan hazır geldiği için (NFR-13) dönüştürme mantığı taşınmaz. TanStack Query'nin `invalidateQueries` yüzeyi, SSE sinyalinin bağlanacağı tek nokta olduğu için ileride taşımaya (WebSocket, polling) geçilse bile değişen yer tek kalır.
