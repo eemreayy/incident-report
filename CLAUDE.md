@@ -216,8 +216,8 @@ Frontend (from T-23 on):
 ## Open technical challenges
 
 `docs/PRD.md` §10 lists TC-1…TC-18 — decisions deferred out of the PRD (number↔metric matching,
-relative date ranges, SSE lifecycle, live-refresh strategy, frontend deployment, …). TC-1, TC-2 and
-TC-12 are already decided. Do not silently pick one of the rest: surface the trade-off, decide
+relative date ranges, SSE lifecycle, live-refresh strategy, frontend deployment, …). TC-1, TC-2, TC-5
+and TC-12 are already decided. Do not silently pick one of the rest: surface the trade-off, decide
 explicitly, then record it in `docs/DECISIONS.md`.
 
 ## Doc discipline

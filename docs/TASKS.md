@@ -360,12 +360,38 @@ kataloğu ve il listesini sunar.
 - **Test altyapısı:** `Province` mock'lamak üç kez iç içe stubbing tuzağına düşürdü.
   `ProvinceFixture` gerçek nesne kuruyor; tuzak tamamen kalktı.
 
-### ☐ T-09 · Türkçe metin normalizasyonu ve cümle bölme
+### ☑ T-09 · Türkçe metin normalizasyonu ve cümle bölme
 Locale duyarlı büyük/küçük harf (i/İ/ı/I), Unicode normalizasyonu, noktalama ve apostrof işleme,
 cümle segmentasyonu (kısaltmalar ve `20.04.2020` gibi noktalı tarihler cümle sonu sanılmamalı).
 - **Bağımlılık:** T-01
-- **Çözer:** TC-5
+- **Çözer:** TC-5 · **İlgili karar:** ADR-027
 - **DoD:** `"İZMİR"` doğru küçültülüyor; tarih içeren cümle yanlış bölünmüyor; tablo bazlı testler mevcut.
+- **Sonuç:** 190 test geçiyor, `analysis` coverage **%98**, yeni `analysis.text` paketi **%99**
+  (`TurkishTextNormalizer` ve `NormalizedText` %100). Dört sınıf: `TurkishTextNormalizer`,
+  `NormalizedText`, `SentenceSplitter`, `Sentence`.
+- **Normalizasyon ham metindeki konumu kaybetmiyor.** Sözleşme çıkarılan anahtar kelimenin ham
+  metindeki offset'ini istiyor (C-3, TC-18), normalizasyon ise uzunluğu değiştiriyor — ölçüldü:
+  aynı metnin NFD hâli 21, NFC hâli 15 karakter. Bu yüzden çıktı düz `String` değil; her
+  karakteri hangi ham aralıktan geldiğini taşıyan `NormalizedText`. Sonradan eklenemeyecek bir
+  özellik: `String`→`String` yazılsaydı bilgi geri dönüşsüz kaybolurdu.
+- **`BreakIterator` ölçüldü ve elendi — iki isterde de yanılıyor:**
+  - `"... tespit edildi. 1 kişi vefat etti."` → **tek** cümle sayıyor (rakamdan önce bölmüyor).
+    Bir cümledeki sayının başka cümlenin metriğine yazılması demek; TC-3'ün engellemesi gereken hata.
+  - `"Dr. Ahmet açıklama yaptı."` → `Dr.`'yi ayrı cümle yapıyor.
+  Elle yazılan bölücü ikisini de doğru işliyor; kural sayısı az ve her biri kaynak dokümanda
+  fiilen geçen bir duruma karşılık geliyor.
+- **DoD fiilen doğrulandı:** `"İZMİR"` → `izmir` (root locale `i̇zmi̇r` üretiyor — 7 karakter, hiçbir
+  ille eşleşmez; test bu farkı da sabitliyor). Kaynak dokümandaki **üç örnek metnin üçü de** tam üç
+  cümleye bölünüyor ve her cümle `originalTextIn` ile ham metindeki karşılığına birebir dönüyor.
+  53 tablo bazlı test (20 bölücü + 33 normalizasyon).
+- **Ölçüm iki gerçek hata yakaladı:**
+  - `String.isBlank()` **kırılmaz boşluğu (U+00A0) boşluk saymıyor** — `Character.isWhitespace`
+    onu bilerek dışlıyor. Webden yapıştırılan metinde çok yaygın; kelimeyi sessizce birleşik
+    bırakıyordu. Boşluk kontrolü `SPACE_SEPARATOR` kategorisini de kapsayacak şekilde düzeltildi.
+  - `SentenceSplitter` bean değildi; `app` context testi bunu ilk denemede yakaladı.
+- **Bölücü bilerek bölmemeye eğimli.** Yanlış birleştirilen cümle her sayıyı kendi anahtar
+  kelimesinin yanında tutar; yanlış bölünen cümle ikisini ayırır ve sayı kaybolur ya da yanlış
+  metriğe yazılır. Birinci hata isabeti, ikincisi doğruluğu düşürür.
 
 ### ☐ T-10 · Sayı ayrıştırma (rakam + Türkçe sözcük)
 Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (`on iki`=12, `kırk beş`=45,
@@ -709,7 +735,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-2 | Metrik veri modeli | T-04 |
 | TC-3 | Sayı ↔ metrik eşleştirme | T-14 |
 | TC-4 | Türkçe bileşik sayı sözcükleri | T-10 |
-| TC-5 | Türkçe normalizasyon | T-09 |
+| TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
 | TC-6 | Tarih ayrıştırma ve göreli ifadeler | T-11 |
 | TC-7 | İl tanıma | T-12 |
 | TC-8 | Sınıflandırma skorlaması ve eşik | T-13 |

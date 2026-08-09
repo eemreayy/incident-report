@@ -712,3 +712,27 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** Beş üretim bağımlılığı: React, React DOM, React Router, TanStack Query, Recharts. Recharts iskelette **kullanılmıyor** — ilk kullanıcısı T-28. Şimdi kurulmasının sebebi kararın kaydedilmesi ve React 19 ile birlikte çözülüp derlendiğinin doğrulanması; bu tür bir uyumsuzluğu T-28'de değil bugün öğrenmek gerekiyordu (doğrulandı: `npm run build` temiz geçiyor, üretim bundle'ı 264 kB / gzip 84 kB). TanStack Query'nin önbellek anahtarları filtre durumuyla birebir eşleşmek zorunda; bu, T-26'da filtre durumu tasarlanırken dikkat edilecek nokta.
 
 **İleride.** Grafik ihtiyacı Recharts'ın sınırını zorlarsa (çok büyük veri, özel etkileşim) geçiş yalnızca grafik bileşenlerini etkiler — veri sunucudan hazır geldiği için (NFR-13) dönüştürme mantığı taşınmaz. TanStack Query'nin `invalidateQueries` yüzeyi, SSE sinyalinin bağlanacağı tek nokta olduğu için ileride taşımaya (WebSocket, polling) geçilse bile değişen yer tek kalır.
+
+---
+
+## ADR-027 — Türkçe Normalizasyon: Konum Koruyan Metin ve Elle Yazılmış Cümle Bölücü
+
+**Karar.** Metin, eşleştirmeden önce tek bir yerde normalize edilir (`analysis.text` paketi): NFC birleştirme, **Türkçe locale ile** küçültme, kesme işareti ve görünmez karakter katlama, boşluk sadeleştirme. Normalizasyonun çıktısı düz bir `String` değil, **ham metindeki konumu taşıyan** bir `NormalizedText`'tir. Cümle bölme `BreakIterator` ile değil, elle yazılmış bir kuralla yapılır. TC-5 böylece karara bağlanır.
+
+**Bağlam.** Çıkarım normalize metin üzerinde çalışmak zorunda: `İZMİR`, `İzmir'de`, `izmir` aynı ile işaret ediyor. Ama sözleşme (PRD §8.2, C-3) çıkarılan anahtar kelimenin **ham metindeki offset'ini** dönmeyi, TC-18 de bu offset'in Türkçe ve Unicode karakterlerde kaymamasını istiyor. Normalizasyon ise uzunluğu değiştiriyor: ölçüldü, ayrıştırılmış (NFD) bir metin 21 karakterken NFC'si 15 karakter. İki isteri aynı anda karşılamanın tek yolu, normalize metnin her karakterinin hangi ham aralıktan üretildiğini hatırlaması.
+
+**Gerekçe.**
+- **Konum koruma, sonradan eklenemeyecek bir özellik.** Normalizasyon `String`→`String` olarak yazılırsa bilgi geri dönüşsüz kaybolur; C-3 daha sonra ancak ham metinde ikinci bir arama yaparak — yani aynı işi ikinci kez, farklı kurallarla — karşılanabilirdi. `NormalizedText` bu ikinci kopyayı en baştan gereksiz kılıyor.
+- **Grafem kümesi bazında dolaşma.** Taban harf ile birleşen işaretleri birlikte tutuyor; aksi hâlde birleştirme yarım karakteri yanlış offset'e bağlayabilirdi.
+- **`BreakIterator` ölçüldü ve elendi.** İki isterde de yanılıyor: `"... tespit edildi. 1 kişi vefat etti."` ifadesini **tek** cümle sayıyor (rakamdan önce bölmeyi reddediyor), `"Dr."`den sonra ise bölüyor. Birincisi bir cümledeki sayının başka bir cümlenin metriğiyle eşleşmesine yol açar — TC-3'ün tam olarak engellemesi gereken hata. İkisi de sessiz.
+- **Bölücü, bölmemeye eğimli.** Yanlış birleştirilen cümle her sayıyı kendi anahtar kelimesinin yanında tutar; yanlış bölünen cümle ikisini ayırır ve sayı ya kaybolur ya yanlış metriğe yazılır. Birinci hata isabeti, ikincisi doğruluğu düşürür.
+
+**Alternatifler.**
+- *Sadece `toLowerCase(Locale.of("tr"))`, offset taşımadan:* En ucuz yol. C-3 ve TC-18 karşılanamazdı.
+- *`BreakIterator.getSentenceInstance`:* Standart, bakımsız. Ölçüm iki kritik durumda da yanlış sonuç verdiğini gösterdi.
+- *ICU4J:* Daha iyi bir bölücü getirirdi; ~13 MB'lık bir bağımlılığı, elle yazılmış ~40 satırın çözdüğü bir sorun için taşımak orantısız.
+- *Cümleye hiç bölmemek:* Metrik eşleştirmenin (T-14) dayandığı yakınlık kavramı ortadan kalkardı.
+
+**Sonuçlar.** `analysis.text` paketi çıkarımın tek girişi oldu; T-10…T-14 ham `String` değil `NormalizedText` görecek ve küçültme/kesme işareti sorunlarını tekrar çözmeyecek. Kısaltma listesi bakım gerektiren bir veri; eksik bir kısaltma cümlenin fazladan bölünmesine yol açar. Kaynak dokümandaki üç örnek metnin üçü de tam üç cümleye bölünüyor ve her cümle ham metindeki karşılığına birebir geri dönüyor — teste sabitlendi. Ölçüm sırasında `String.isBlank()`'in **kırılmaz boşluğu (U+00A0) boşluk saymadığı** ortaya çıktı; webden yapıştırılan metinde sık görülen bu karakter kelimeyi sessizce birleşik bırakıyordu, bu yüzden boşluk kontrolü `SPACE_SEPARATOR` kategorisini de kapsıyor.
+
+**İleride.** Kısaltma listesi büyürse kataloğun yanında YAML'a taşınabilir — ADR-007'nin olay tipleri için kurduğu düzenin aynısı. Çıkarım kalitesi bölme hatalarına takılmaya başlarsa ICU4J yeniden değerlendirilebilir; `SentenceSplitter` tek bir arayüz arkasında olduğu için değişim tek sınıfta kalır. `NormalizedText` şu an karakter bazında offset taşıyor; arayüz vurgulamayı UTF-16 yerine kod noktası bazında isterse (TC-18) dönüşüm bu sınıfa eklenir, çağıranlara yayılmaz.
