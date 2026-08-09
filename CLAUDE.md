@@ -8,8 +8,9 @@ behind every architectural choice. Those are the source of truth; this file is t
 An **incident reporting system**: a user submits free-form Turkish text from an open source (news,
 report, social media), and the system extracts **date, province, event type and numeric metrics**
 from it. Raw text is stored verbatim in MongoDB (immutable audit log); the extracted structured
-data is stored in PostgreSQL and drives filtered tables and per-event-type charts. New structured
-records are pushed to connected clients over one-way SSE.
+data is stored in PostgreSQL and drives filtered tables and per-event-type charts. A ReactJS
+frontend is where all of this is entered and read; connected clients are told over one-way SSE
+that something changed, and refetch.
 
 ## Repository layout
 
@@ -18,26 +19,23 @@ Monorepo. One `CLAUDE.md`, at the root, covering every module.
 ```
 docker-compose.yml   full system - the entry point, `docker compose up --build`
 docs/                PRD, DECISIONS, TASKS - project-wide
-docs/postman/        API collection; examples are captured from a running instance, never written
-                     by hand. Extend it when endpoints land: `npx newman run` verifies it still fits.
+docs/postman/        API collection; examples captured from a running instance, never hand-written.
+                     Extend it when endpoints land; `npx newman run` verifies it still fits.
 backend/             Java 21 / Spring Boot; the Maven reactor root lives HERE, not at repo root
-frontend/            ReactJS (not implemented yet)
+frontend/            React + TypeScript + Vite (ADR-022). Not scaffolded yet - T-23 owns that,
+                     including the Dockerfile and enabling the commented-out compose service
 ```
 
-Run Maven from `backend/`. There is no `pom.xml` at the repository root.
+There is no `pom.xml` at the repository root.
 
 ## Commands
 
-**JDK 21 is required and is not this machine's default** (default is 17). Export it first, or every
-Maven command will fail the enforcer rule:
+**JDK 21 is required and is not this machine's default** (default is 17). Export it first or every
+Maven command fails the enforcer rule. Maven runs from `backend/` (the reactor root), compose from
+the repository root.
 
 ```
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
-```
-
-Maven runs from `backend/` (the reactor root). Compose runs from the repository root.
-
-```
 cd backend
 ./mvnw verify                          # all modules: build + tests + coverage gate
 ./mvnw -pl analysis -am verify         # one module and what it depends on
@@ -48,25 +46,23 @@ curl -s localhost:8080/actuator/health
 open app/target/site/jacoco-aggregate/index.html   # project-wide coverage report
 ```
 
-**`verify` needs a running Docker daemon** — Testcontainers starts real Postgres and Mongo.
-The image build does not: the Dockerfile packages with `-DskipTests`.
+From the repository root:
 
 ```
-docker compose up --build              # from repo root: the whole system
+docker compose up --build              # the whole system
 docker compose up -d postgres mongodb  # databases only, for the `local` profile
-docker compose ps                      # service status incl. health
-docker compose logs -f app
-docker compose down -v                 # tear down including volumes
+docker compose ps / logs -f app / down -v
 ```
 
-There are two compose files and they do not duplicate anything: the root one `include`s
-`backend/docker-compose.yml`, which owns the app and both databases. Consequences — keep the
-backend compose file includable (no absolute paths, no assumption it is the only compose file),
-and add frontend/cross-service wiring to the root file only.
+Frontend commands run from `frontend/` and land with T-23. **`verify` needs a running Docker
+daemon** — Testcontainers starts real Postgres and Mongo. The image build does not: the Dockerfile
+packages with `-DskipTests`.
 
-Compose carries inline defaults for every setting, so it runs on a fresh clone with no `.env`.
-The app image is layered (dependencies / loader / application), so a code change rebuilds only the
-~100 KB application layer — do not collapse those COPY steps back into one.
+Two compose files, no duplication: the root one `include`s `backend/docker-compose.yml`, which owns
+the app and both databases. So keep the backend file includable (no absolute paths, no assumption it
+is the only one) and put frontend/cross-service wiring in the root file only. Compose carries inline
+defaults for every setting, so a fresh clone runs with no `.env`. The app image is layered
+(dependencies / loader / application) — do not collapse those COPY steps back into one.
 
 ## Architecture — hard constraints
 
@@ -77,7 +73,7 @@ its own pom, and the module graph *is* the architecture boundary:
 shared      depends on no other module — cross-module events, error contract
 ingestion   -> shared    receives raw text, stores it verbatim, reads it, reprocess.  MongoDB only
 analysis    -> shared    parses, classifies, persists, serves queries/aggregations.   PostgreSQL only
-realtime    -> shared    broadcasts new structured records over SSE.                  no database
+realtime    -> shared    signals connected clients that new records exist.            no database
 app         -> all       the only deployable artifact: @SpringBootApplication + application*.yml
 ```
 
@@ -91,16 +87,31 @@ Rules that must never be broken:
    internal service.
 2. `ingestion` never touches PostgreSQL. `analysis` never touches MongoDB.
    Module-specific libraries go in that module's pom, never in the parent.
-3. **Raw text is immutable.** No update, no delete endpoint. Store it byte-for-byte as submitted,
-   before any normalization.
+3. **The raw record is write-once.** Store the text byte-for-byte as submitted, before any
+   normalization. No update, no delete endpoint — and nothing writes to that document again after
+   the insert, not even to record how analysis went (ADR-005, ADR-021).
 4. **Raw text is stored even when analysis fails.** Persisting the raw report and analyzing it are
-   separate concerns; an analysis failure marks the report `FAILED`, it does not roll back the write.
-5. Module-to-module messaging is **synchronous** (`ApplicationEventPublisher` + `@EventListener`).
+   separate concerns; a failure is recorded on the `analysis` side and does not roll back the write,
+   does not mutate the raw document, and does not fail the caller's request.
+5. **Each module publishes only the data it owns** (ADR-021). `ingestion` owns the raw text;
+   `analysis` owns the structured records *and the analysis outcome* — status, warnings, analyzed-at.
+   Events flow **one way only**: `ingestion` -> `analysis`. Never add a return event, and never put
+   an analysis field on an ingestion DTO or document.
+6. **Submission returns a receipt, not a result.** `POST /incident-reports` answers with the raw
+   report's id and submission time. The client reads what was extracted through
+   `GET /incidents?rawReportId=...`. Reprocess answers the same way.
+7. **SSE is a refresh trigger, not a data source.** No data is reachable only through the stream:
+   the event carries enough to judge relevance, the client refetches. If the stream dies, nothing
+   becomes unreachable — only "live" is lost (ADR-004, ADR-021).
+8. Module-to-module messaging is **synchronous** (`ApplicationEventPublisher` + `@EventListener`).
    Do not introduce `@Async`, brokers, or Spring Modulith's async `@ApplicationModuleListener`.
-6. **Two-way traceability** between the raw Mongo document and its derived Postgres rows is a
-   requirement, not a nice-to-have.
-7. Event types, their trigger keywords and their metrics live in **YAML configuration**, never
-   hardcoded. Adding an event type must not require a code change.
+   Synchrony is an implementation detail — it must stay invisible in the client contract.
+9. **Two-way traceability** between the raw Mongo document and its derived Postgres rows is a
+   requirement, not a nice-to-have. The raw -> records direction is served by the `rawReportId`
+   filter, not by an ingestion endpoint that returns derived ids.
+10. Event types, their trigger keywords and their metrics live in **YAML configuration**, never
+    hardcoded. Adding an event type must not require a code change. The frontend has no hardcoded
+    catalog either — every dropdown is fed from the metadata endpoint.
 
 ## Data model — hard constraints
 
@@ -117,10 +128,9 @@ Rules that follow, and that queries and DTOs must respect:
 
 - **Never split a `SHARED` figure across its provinces.** Even distribution invents data the text
   does not contain. It is not added to any single province's total, ever.
-- **Never drop it either.** A province-filtered view must be able to surface it as a separate,
-  labelled item, so per-province totals and the grand total can be reconciled by the reader.
-- **Count it once when several provinces are selected** — join through the link table with
-  `DISTINCT`, do not sum per province.
+- **Never drop it either.** A province-filtered view surfaces it as a separate, labelled item, so
+  per-province totals and the grand total can be reconciled. When several provinces are selected it
+  is counted **once** — join through the link table with `DISTINCT`, do not sum per province.
 - Build incidents through `Incident.forProvince` / `sharedAcross` / `withoutProvince`. There is no
   constructor that can attach a single province to a `SHARED` record, and the schema enforces the
   same thing via `incident_province_matches_scope`.
@@ -134,22 +144,35 @@ Rules that follow, and that queries and DTOs must respect:
 - Package root `com.emreay.incidentreport`, then one package per module, then layers inside it.
 - **Everything inside a file is English** — code, identifiers, comments, Javadoc, log messages, API
   paths, enum constants, commit messages, and comments in `pom.xml`, YAML, SQL and Dockerfiles.
-  There are no exceptions: a Turkish comment in a config file is as wrong as a Turkish method name.
+  A Turkish comment in a config file is as wrong as a Turkish method name.
   **Only `.md` files under `docs/` and `README.md` are Turkish**; this file stays English.
+  **One carve-out:** user-facing UI strings are Turkish, because the user is (PRD §2.2). They are
+  content, not code — keep them in one place, never inline in components, and keep everything
+  around them English.
 - Never expose entities/documents through controllers — always DTOs. Prefer `record` for DTOs and events.
 - Errors: `@RestControllerAdvice` returning RFC 7807 `application/problem+json`. No stack traces in responses.
 - Constructor injection only. No field injection.
 - `spring.jpa.hibernate.ddl-auto=validate`. Schema changes go into a new Flyway migration.
 - Log with the raw report id as correlation key so a submission can be traced ingestion → analysis → SSE.
 
+Frontend (from T-23 on):
+
+- React + TypeScript + Vite (ADR-022), no SSR. Chart and data-layer libraries are chosen in T-23 and
+  recorded as an ADR there — do not pick one silently.
+- Three layers: API client / state / view (PRD §5.4). Derived numbers are **not** the view's job —
+  cumulative sums, aggregation and filtering come from the server. Never reimplement a rule the
+  backend owns; two copies in two languages drift. One API layer, RFC 7807 parsed there once,
+  filter state in the URL.
+- Province is a breakdown dimension, not just a filter (ADR-023).
+
 ## Testing
 
 - JaCoCo gate at **80% lines, per module**, wired into `verify` — an aggregate number would let a
   well-tested module hide an untested one. `app` also emits a project-wide aggregate report.
   Coverage is a floor, not a goal — cover real behavior, not getters. See ADR-018.
-- Surefire runs with `failIfNoTests=true`, because JaCoCo silently skips its check in a module that
-  produced no `.exec` file — a module with code and no tests would otherwise sail through the gate.
-  `realtime` carries an explicit override until it has code (T-18); do not add more.
+- Surefire runs with `failIfNoTests=true`: JaCoCo silently skips its check in a module with no
+  `.exec` file, so a module with code and no tests would sail through. `realtime` carries an
+  explicit override until it has code (T-18); do not add more.
 - Architecture rules live in `app/src/test/java/.../architecture/ArchitectureRulesTest.java`
   (ArchUnit — see ADR-017). `app` is the only module that sees all the others, so cross-module
   rules can only be expressed there. Add new rules to that file, not to individual modules.
@@ -159,6 +182,9 @@ Rules that follow, and that queries and DTOs must respect:
   `docs/PRD.md` §11. They must also pass with their sentences shuffled.
 - Unit tests use plain JUnit 5 + Mockito, no Spring context. Repository/integration tests use
   Testcontainers against real Mongo and Postgres, pinned to the same image tags compose runs.
+- The frontend carries the **same 80% gate**, breaking its own build (ADR-024). Test behavior, not
+  snapshots — a snapshot inflates the number without asserting anything. The API-client and state
+  layers are testable without a DOM; lean on that rather than on rendering everything.
 
 ## Gotchas
 
@@ -168,21 +194,23 @@ Rules that follow, and that queries and DTOs must respect:
   does not behave as expected around apostrophes — province names arrive suffixed
   (`Ankara'da`, `Kocaeli'nde`, `İzmir'de`).
 - Numbers may be digits *or* Turkish words, including compounds (`on iki` = 12, `kırk beş` = 45).
-- **Dates have three sources, not two** (`EXPLICIT` / `RELATIVE` / `DEFAULTED`). A relative phrase
-  like `Son 24 saatte` is an *extraction*, not a fallback — never collapse it into `DEFAULTED`.
-  The reference date for `RELATIVE` and `DEFAULTED` is the report's **original submission date**,
-  never `now()`; otherwise reprocess would shift historical dates. See FR-06 and ADR-014.
+- **Dates have three sources, not two** (`EXPLICIT` / `RELATIVE` / `DEFAULTED`). `Son 24 saatte` is
+  an *extraction*, not a fallback — never collapse it into `DEFAULTED`. The reference date is the
+  report's **original submission date**, never `now()`, or reprocess shifts history (ADR-014).
 - A single text may carry several provinces and several metric sets; some numbers cannot be
   attributed to any single province (`her iki ilde toplam 10 kişi`). Never double-count.
 - The synchronous listener runs inside the request. Watch the transaction boundary: the Mongo write
   must not be undone by a downstream Postgres failure.
+- The SSE signal is published inside that same request, so a client's own submission can reach it
+  **before** the POST response does. Correct either way — the client refetches — but do not write
+  frontend code that assumes the id is known first.
 
 ## Open technical challenges
 
-`docs/PRD.md` §10 lists TC-1…TC-11 — decisions deliberately deferred out of the PRD (record
-granularity, metric storage model, number↔metric matching, relative date ranges, SSE lifecycle, …).
-Do not silently pick one. Surface the trade-off, decide explicitly, then record it in
-`docs/DECISIONS.md`.
+`docs/PRD.md` §10 lists TC-1…TC-18 — decisions deferred out of the PRD (number↔metric matching,
+relative date ranges, SSE lifecycle, live-refresh strategy, frontend deployment, …). TC-1, TC-2 and
+TC-12 are already decided. Do not silently pick one of the rest: surface the trade-off, decide
+explicitly, then record it in `docs/DECISIONS.md`.
 
 ## Doc discipline
 

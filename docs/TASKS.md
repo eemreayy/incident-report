@@ -1,7 +1,12 @@
 # Task Kırılımı
 
-[`docs/PRD.md`](PRD.md) v1.0 onaylandıktan sonra üretilmiştir. Her task; kapsamını, bağımlılıklarını,
-karşıladığı isterleri (FR/NFR) ve çözdüğü teknik challenge'ları (TC) taşır.
+[`docs/PRD.md`](PRD.md) v1.0 onaylandıktan sonra üretilmiş, **v2.0 ile güncellenmiştir**. Her task;
+kapsamını, bağımlılıklarını, karşıladığı isterleri (FR/NFR) ve çözdüğü teknik challenge'ları (TC) taşır.
+
+> **PRD v2.0 (2026-08-09) bu dosyaya ne getirdi.** Frontend kapsama alındı → **Faz 7** (T-23…T-31).
+> Modül sahipliği kararı ([ADR-021](DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı))
+> → **Faz 2B / T-22**, tamamlanmış T-07'ye kısmi geri dönüş. Ayrıca frontend'in sözleşme
+> beklentileri (PRD §8.2, C-1…C-8) mevcut T-14, T-16, T-17 ve T-18'in kapsamına yazıldı.
 
 **Sıralama stratejisi:** Önce iskelet ve kalite kapısı, sonra veri modeli kararı, ardından **uçtan uca
 çalışan ince bir dikey dilim**. Analiz motorunun asıl zorluğuna ancak boru hattı baştan sona
@@ -251,6 +256,47 @@ iki yönlü bağlar. Analiz hatası ham metnin kaydını geri almaz — ham kay�
 - **İki yönlü izlenebilirlik (FR-08) çalışan sistemde doğrulandı:** Postgres `raw_report_id` →
   Mongo `_id`, ve ters yönde sorgu. İki ayrı bildirim birbirine karışmıyor.
 
+> **Kısmen geçersiz — PRD v2.0.** Bu task'ta kurulan **dönüş yolu** (`RawReportAnalyzedEvent` →
+> `ingestion` dökümanını günceller) [ADR-021](DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)
+> ile kaldırılıyor: analiz sonucu onu üreten modülde yaşayacak. Yukarıdaki "Event iki yönlü"
+> maddesi **T-22 ile yerini yeni kurguya bırakır**; task'ın geri kalanı (dikey dilim, extractor
+> seam'i, reprocess'in yapısal güvenliği, iki yönlü izlenebilirlik) aynen geçerli.
+> Dürüstlük kaydı: burada yazılan çalışan koda bilinçli bir geri dönüş var; gerekçesi ADR-021'de.
+
+---
+
+## Faz 2B — Sahiplik Düzeltmesi *(PRD v2.0 ile geldi)*
+
+### ☐ T-22 · Analiz sonucunun sahipliği
+[ADR-021](DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)'in
+uygulanması. Analiz sonucu (durum, uyarılar, analiz zamanı) onu üreten modüle taşınır; ham döküman
+write-once olur; gönderim cevabı makbuza indirgenir.
+
+**Silinecek** (`ingestion`): `RawReportAnalyzedEvent` ve `shared`'daki tanımı,
+`RawReportAnalyzedEventListener`, `IngestionService.markAnalyzed`, `ProcessingStatus`,
+`IncidentReportResponse`'un `status` ve `warnings` alanları — testleriyle birlikte.
+Mongo dökümanından `status`, `warnings`, `analyzedAt`, `failureReason` alanları kalkar.
+
+**Eklenecek** (`analysis`): ham bildirim başına analiz sonucu kaydı — durum (`ANALYZED`/`FAILED`),
+uyarılar, analiz zamanı ve başarısızlık nedeni (yalnızca sunucu tarafında; cevaba girmez, T-06 kuralı).
+Yeni Flyway migration. Reprocess aynı kaydın üzerine yazar, ikinci satır açmaz.
+
+- **Bağımlılık:** T-07
+- **Karşılar:** FR-02, FR-09, FR-13, FR-14, FR-15, FR-19 · **Çözer:** TC-12 · **Karar:** ADR-021
+  *(ADR-003 revize edildi; ADR-004 ve ADR-005 not düzeyinde netleşti)*
+- **DoD:**
+  - `ingestion` modülünde `analysis`'e ait hiçbir kavram kalmadı; ham döküman yazıldıktan sonra
+    **hiç güncellenmiyor** (testle sabitlenir: kayıt sonrası döküman sürümü değişmiyor).
+  - `POST /incident-reports` yalnızca kimlik ve gönderim zamanı dönüyor; `status`/`warnings` yok.
+  - Analiz patladığında ham metin yine hayatta ve çağırana hata dönmüyor (Kural 4 korunuyor);
+    başarısızlık `analysis` tarafındaki kayıttan okunabiliyor.
+  - `shared` içinde `analysis → ingestion` yönünde event tipi kalmadı; ArchUnit çevrim kuralı temiz.
+- **Not — dürüstlük kaydı:** Bu task T-07'de yazılmış çalışan koda **bilinçli bir geri dönüştür**.
+  Gerekçe ADR-021'de: derleme grafiğinde görünmeyen ama anlamsal ve zamansal olarak var olan bir
+  bağımlılık, ancak taşıma katmanı değiştiğinde faturasını keserdi. Bugün ödemek ucuz.
+- **Not — sıralama:** T-16 ve T-18 bu task'a bağlı. Frontend fazı da (T-24'ten itibaren) bu
+  sözleşmeyi varsayıyor; erken yapılması paralel çalışmayı açıyor.
+
 ---
 
 ## Faz 3 — Analiz Motoru *(projenin asıl zorluğu)*
@@ -305,9 +351,14 @@ korunur, cevaba uyarı eklenir.
 Sayı ↔ metrik eşleştirmesi (cümle içi yakınlık kuralları). Cümlede birden fazla il varsa sayıların doğru
 ile bağlanması (`"Bursa'da 8, Kocaeli'nde 6 trafik kazası"`). İle atanamayan toplamların
 (`"her iki ilde toplam 10 kişi"`) T-04'te kararlaştırılan modele göre temsili — **çift sayım yok**.
+- **Ek kapsam (PRD v2.0 · C-3):** Çıkarılan anahtar kelimeler **ham metindeki konumlarıyla**
+  (başlangıç/bitiş offset'i) ve hangi çıkarımı tetiklediğiyle saklanır. Frontend, vurgulamayı
+  metni yeniden aramadan yapmak zorunda (TC-18): Türkçe ek ve apostrof toleransı yüzünden
+  istemcide arama yanlış yeri işaretler.
 - **Bağımlılık:** T-04, T-10, T-12, T-13
-- **Karşılar:** FR-03, FR-07 · **Çözer:** TC-3
-- **DoD:** Örnek 3'ün Bursa/Kocaeli kırılımı doğru; toplam yaralı hiçbir ile iki kez yazılmıyor.
+- **Karşılar:** FR-03, FR-07, FR-17 · **Çözer:** TC-3
+- **DoD:** Örnek 3'ün Bursa/Kocaeli kırılımı doğru; toplam yaralı hiçbir ile iki kez yazılmıyor;
+  anahtar kelime offset'i ham metinde doğru aralığı işaret ediyor.
 
 ### ☐ T-15 · Golden testler
 PRD §11'deki üç örnek metin uçtan uca doğrulanır. Her örnek ayrıca **cümleleri karıştırılmış** halleriyle
@@ -324,16 +375,36 @@ de test edilir; çıktı değişmemelidir.
 `GET /incidents` — olay tipi, il, tarih aralığı ve anahtar kelime filtreleri (birlikte uygulanabilir),
 sayfalama ve sıralama. `GET /incidents/{id}` metrikleri, anahtar kelimeleri ve kaynak ham bildirim
 referansını döner.
-- **Bağımlılık:** T-14
-- **Karşılar:** FR-10, FR-17, FR-08
-- **DoD:** Filtreler tekil ve kombine çalışıyor; anahtar kelimeler hangi çıkarımı tetiklediğiyle birlikte görünüyor.
+- **Ek kapsam (PRD v2.0):**
+  - **C-5 · `rawReportId` filtresi.** Model 2'de gönderim cevabı yalnızca kimlik döndüğü için,
+    sonucu getirmenin **tek** yolu bu filtre. Aynı filtre FR-08'in "ham bildirimden türeyen
+    kayıtlara ulaşma" yönünü ve ham bildirim detay ekranını da besliyor.
+  - **C-4 · analiz sonucu cevapta.** T-22'de `analysis`'e taşınan durum ve uyarılar bu uçtan döner.
+  - **C-7 · toplam kayıt sayısı.** Sayfalama cevabı toplam sayıyı içerir; "sonuç yok" ile
+    "sayfa boş" ayrımı istemcide ancak böyle yapılabilir.
+- **Bağımlılık:** T-14, T-22
+- **Karşılar:** FR-10, FR-17, FR-08, FR-19
+- **DoD:** Filtreler tekil ve kombine çalışıyor; anahtar kelimeler hangi çıkarımı tetiklediğiyle
+  birlikte görünüyor; `rawReportId` ile tek istekte o bildirimden türeyen tüm kayıtlar (+ analiz
+  durumu ve uyarılar) dönüyor.
 
 ### ☐ T-17 · Zaman serisi, özet ve kümülatif
 `GET /analytics/time-series` — olay tipi bazlı, metriklere ayrılmış seriler; opsiyonel il ve tarih aralığı;
 `cumulative` parametresi. `GET /analytics/summary` — özet tablo agregasyonu.
+- **Ek kapsam (PRD v2.0):**
+  - **C-1 · il kırılımı.** İl yalnızca filtre değil, **seri boyutu** olmalı (`groupBy=province`).
+    FR-24 ve [ADR-023](DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı):
+    "coğrafi bölge bazında izlenebilirlik" tek il seçip bakmak değil, iller arası karşılaştırma.
+    Bu olmadan istemci toplama yapmak zorunda kalır — NFR-13'e aykırı.
+  - **C-2 · `SHARED` ve `UNKNOWN` ayrı ve etiketli.** Agregasyon uçları bu kapsamları ne
+    bölüştürür ne düşürür; ayrı satır/seri olarak döner ki okuyucu il toplamı ile genel toplamı
+    uzlaştırabilsin (ADR-019). Birden fazla il seçildiğinde `SHARED` kayıt link tablosu üzerinden
+    `DISTINCT` ile **bir kez** sayılır.
 - **Bağımlılık:** T-16
-- **Karşılar:** FR-11, FR-12
-- **DoD:** Kümülatif modda her nokta kendisi ve öncekilerin toplamı; agregasyon SQL üzerinde yapılıyor (bellekte değil).
+- **Karşılar:** FR-11, FR-12, FR-22, FR-24
+- **DoD:** Kümülatif modda her nokta kendisi ve öncekilerin toplamı; agregasyon SQL üzerinde
+  yapılıyor (bellekte değil); il kırılımlı sorguda örnek 3'ün `SHARED` yaralı toplamı ayrı ve
+  etiketli dönüyor, Bursa+Kocaeli birlikte seçildiğinde iki kez sayılmıyor.
 
 ---
 
@@ -342,9 +413,16 @@ referansını döner.
 ### ☐ T-18 · SSE yayını
 `GET /stream/incidents` — yeni normalize kayıt üretildiğinde bağlı tüm istemcilere tek yönlü yayın.
 Bağlantı yaşam döngüsü: timeout, heartbeat, kopma/temizlik, çok istemcili yayın.
-- **Bağımlılık:** T-07, T-14
-- **Karşılar:** FR-13 · **Çözer:** TC-10 · **İlgili karar:** ADR-004
-- **DoD:** İki istemci bağlıyken gönderilen bildirim ikisine de ulaşıyor; kopan bağlantı sunucuda kaynak sızdırmıyor.
+- **Kapsam daraldı (PRD v2.0 · C-8).** Olay bir **sinyaldir, veri taşıyıcısı değil**: istemcinin
+  ilgisini belirlemesine yetecek kadar bilgi taşır (olay kaydı kimliği, ham bildirim kimliği,
+  tarih, il, olay tipi), satır çizmeye yetecek kadar değil. Gerekçe
+  [ADR-021](DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı):
+  veri taşıyan bir payload tablo sütunlarını akış sözleşmesine bağlar ve veriyi tek kanala emanet eder.
+- **Sonucu:** `realtime` modülünün pom'undaki `failIfNoTests` override'ı bu task'ta kaldırılır (T-03/T-05 notu).
+- **Bağımlılık:** T-14, T-22
+- **Karşılar:** FR-13 · **Çözer:** TC-10 · **İlgili kararlar:** ADR-004, ADR-021
+- **DoD:** İki istemci bağlıyken gönderilen bildirim ikisine de ulaşıyor; kopan bağlantı sunucuda
+  kaynak sızdırmıyor; olay veri taşımıyor — istemci sinyali alıp sorgu uçlarından tazeliyor.
 
 ### ☐ T-19 · Reprocess ve mükerrer gönderim
 `POST /incident-reports/{id}/reprocess` — güncel kurallarla yeniden analiz. Ham metin değişmez; önceki
@@ -362,9 +440,14 @@ normalize kayıtların yerini yeni sonuç alır, mükerrer kayıt oluşmaz. Ayn�
 springdoc-openapi devreye alınır. README'deki `TODO` bölümleri doldurulur: gereksinimler, tek komutla
 çalıştırma, yapılandırma/ortam değişkenleri, yerel geliştirme, durdurma, API örnekleri, test ve kapsam
 raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
-- **Bağımlılık:** T-17, T-18, T-19
+- **Ek kapsam (PRD v2.0):** README **frontend'i de** kapsar (kurulum, çalıştırma, test, kapsam);
+  "Nasıl Çalışır" akışı Model 2'ye göre güncellenir (5 adım); mimari şemasındaki dönüş oku kalkar;
+  API tablosunda `POST`'un daralan sorumluluğu ve `rawReportId` filtresi yazılır; "Tanınmayan olay
+  tipi" bölümünde uyarıların hangi uçtan döndüğü düzeltilir. Frontend coverage oranı da ölçülür.
+- **Bağımlılık:** T-17, T-19, T-31
 - **Karşılar:** NFR-07, NFR-10, NFR-02
-- **DoD:** README'de `TODO` kalmadı; temiz makinede talimatlar birebir izlenerek sistem ayağa kalkıyor; coverage ≥ %80.
+- **DoD:** README'de `TODO` kalmadı; temiz makinede talimatlar birebir izlenerek **frontend dahil**
+  sistem ayağa kalkıyor; backend ve frontend coverage ≥ %80.
 
 ### ☑ T-21 · Git deposu ve GitHub'a ilk push  *(T-01 sonrasına alındı)*
 `git init`, ilk commit, GitHub deposu ve push.
@@ -387,12 +470,118 @@ raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
 
 ---
 
+## Faz 7 — Frontend *(PRD v2.0 ile geldi)*
+
+Sıralama mantığı backend'inkiyle aynı: önce iskelet ve kalite kapısı, sonra sözleşme katmanı,
+ardından **uçtan uca çalışan ince bir dikey dilim** (metin gir → sonucu gör). Grafik ve canlı akış
+gibi zor parçalara ancak boru hattı tarayıcıda baştan sona çalıştıktan sonra giriliyor.
+
+Tüm frontend task'ları [ADR-022](DECISIONS.md#adr-022--frontend-teknoloji-tabanı-react--typescript--vite)
+(React + TypeScript + Vite) ve [ADR-024](DECISIONS.md#adr-024--frontend-coverage-kapısı) (%80 kapısı)
+altında çalışır; her task kendi testlerini taşır.
+
+### ☐ T-23 · Frontend iskeleti, kalite kapısı ve Docker
+Vite + React + TypeScript projesi `frontend/` altında. Test koşucusu ve **coverage eşiği %80**,
+build'i kıracak şekilde. Lint/format. Çok aşamalı `Dockerfile` (build → statik sunucu). Kök
+`docker-compose.yml`'de yorumda bekleyen `frontend` servisi açılır.
+
+Bu task'ta **TC-17 karara bağlanır**: tarayıcı ile API arasında **aynı köken (reverse proxy)** mı
+yoksa **CORS** mu (C-6). Proxy seçilirse SSE için tamponlamanın kapatılması gerektiği not edilir.
+Ayrıca grafik ve veri katmanı kütüphaneleri seçilir. Her iki karar da `docs/DECISIONS.md`'e ADR
+olarak yazılır (ADR-022 bunları bilinçli olarak açık bırakmıştı).
+- **Bağımlılık:** —
+- **Karşılar:** NFR-02, NFR-03, NFR-12, NFR-15 · **Çözer:** TC-17
+- **DoD:** `docker compose up --build` sonrası tarayıcıdan tek adres açılıyor ve uygulama yükleniyor;
+  kasten düşürülen coverage build'i kırıyor; API adresi ortam değişkeninden geliyor, koda gömülü değil.
+
+### ☐ T-24 · API istemcisi ve tipli sözleşme
+Tek bir API katmanı: uç çağrıları, RFC 7807 (`application/problem+json`) hatalarının tipli
+çözümlenmesi, sayfalama zarfı. Katalog metadata ucunun (FR-16) yüklenmesi ve tüm seçim kutularının
+tek kaynağı hâline gelmesi.
+- **Bağımlılık:** T-23, T-08 *(metadata ucu)*, T-22 *(cevap şekilleri)*
+- **Karşılar:** FR-27, NFR-13, NFR-14
+- **DoD:** Hiçbir olay tipi/metrik/il listesi arayüzde sabit yazılı değil; sunucu hatası tek yerde
+  çözümlenip kullanıcıya okunur mesaja dönüşüyor; ham JSON veya teknik ayrıntı ekrana basılmıyor.
+
+### ☐ T-25 · Bildirim girişi ve sonucun gösterilmesi *(dikey dilim)*
+Tek metin alanı, gönderim, ardından **kimlikle sorgu** ile sonucun aynı ekranda gösterilmesi.
+Uyarılar, `UNCLASSIFIED` etiketi ve tarih kaynağı (`EXPLICIT`/`RELATIVE`/`DEFAULTED`) görünür.
+Gönderim sırasında düğme kilidi, boş/uzun metin kontrolü, karakter sayacı.
+- **Bağımlılık:** T-24
+- **Karşılar:** FR-18, FR-19, FR-20
+- **DoD:** Üç örnek metin arayüzden girildiğinde sonuç anında görünüyor; SSE hiç bağlı değilken de
+  çalışıyor (sonuç sorgudan geliyor); sıfır kayıt üreten metinde ekran boş kalmıyor, nedeni yazıyor.
+
+### ☐ T-26 · Kayıt listesi, filtreler ve adres çubuğu durumu
+Sayfalanmış tablo; olay tipi, il, tarih aralığı ve anahtar kelime filtreleri. Filtreleme, sıralama
+ve sayfalama **sunucuda**. Aktif filtreler adres çubuğuna yansır. Grafik ve özetle paylaşılan tek
+filtre kaynağı.
+- **Bağımlılık:** T-25, T-16
+- **Karşılar:** FR-21 · **Çözer:** TC-15
+- **DoD:** Filtreli görünümün adresi kopyalanıp yeni sekmede açıldığında aynı görünüm geliyor;
+  istemcide filtreleme yapılmıyor (ağ isteği ile doğrulanır); boş sonuçta boş durum mesajı çıkıyor.
+
+### ☐ T-27 · Özet tablo ve il kırılımı
+Olay tipi / il / metrik kırılımında agrega görünüm; agregasyon ucundan gelir, istemcide toplanmaz.
+`SHARED` ve `UNKNOWN` kapsamlı toplamlar ayrı ve **etiketli** satır olarak gösterilir.
+- **Bağımlılık:** T-26, T-17
+- **Karşılar:** FR-22, FR-24 · **Çözer:** TC-14 · **Karar:** ADR-019, ADR-023
+- **DoD:** Örnek 3 girildiğinde Bursa ve Kocaeli ayrı satırlarda; 10 yaralı hiçbir ile eklenmemiş,
+  "her iki ilde toplam" olarak ayrı satırda; iki il birlikte seçildiğinde bir kez sayılıyor;
+  il toplamları ile genel toplam okuyucu tarafından uzlaştırılabiliyor.
+
+### ☐ T-28 · Grafik: olay tipi serileri, il kırılımı ve kümülatif
+Olay tipi seçimine bağlı metrik serileri; il kırılımı; kümülatif anahtarı. Kümülatif dönüşüm ve
+agregasyon **sunucudan** istenir. Seri gizle/göster; çok il seçildiğinde okunabilirlik.
+- **Bağımlılık:** T-27
+- **Karşılar:** FR-23, FR-24 · **Karar:** ADR-023
+- **DoD:** Seçilen tipin metrikleri ayrı seriler olarak çiziliyor; kümülatif modda her nokta kendisi
+  ve öncekilerin toplamı; grafik ile tablo aynı filtre durumunu gösteriyor — ikisi farklı veri
+  gösteremiyor.
+
+### ☐ T-29 · Canlı akış: SSE aboneliği ve tazeleme
+`EventSource` ile akışa abonelik; sinyal geldiğinde liste, özet ve grafiğin tazelenmesi. Bağlantı
+durumu göstergesi (bağlı / yeniden bağlanıyor / kopuk), otomatik yeniden bağlanma ve yeniden
+bağlanınca tazeleme. Sayfa kapanınca bağlantının kapatılması.
+
+**TC-13 burada karara bağlanır:** art arda gelen sinyaller nasıl birleştirilir (debounce/coalesce)
+ve aktif filtreye uymayan olay ne yapar. Tazeleme sırasında görünüm **boşaltılmaz** — aksi halde
+her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenmesinden farksızdır.
+- **Bağımlılık:** T-28, T-18
+- **Karşılar:** FR-25 · **Çözer:** TC-13 · **Karar:** ADR-004, ADR-021
+- **DoD:** İki sekme açıkken birinde girilen bildirim diğerinde sayfa yenilenmeden listeye, özete
+  ve grafiğe yansıyor; akış kapatıldığında gönderen sekme kendi sonucunu görmeye devam ediyor;
+  on bildirim peş peşe girildiğinde on ayrı tazeleme yapılmıyor.
+
+### ☐ T-30 · İzlenebilirlik ekranları ve reprocess
+Olay kaydı detayı (metrikler, anahtar kelimeler, tarih kaynağı, kapsam, kaynak bildirim bağlantısı)
+ve ham bildirim detayı (değiştirilmemiş metin, **anahtar kelimelerin metin üzerinde vurgulanması**,
+türeyen kayıtlar, reprocess eylemi). İki yön de gezinilebilir.
+- **Bağımlılık:** T-26, T-19, T-14 *(offset'ler)*
+- **Karşılar:** FR-26, FR-08, FR-17 · **Çözer:** TC-18
+- **DoD:** Kayıttan ham metne ve ham metinden kayıtlara gidilebiliyor; vurgulama offset'leri Türkçe
+  karakterlerde kaymıyor; reprocess arayüzden tetiklenip sonuç aynı ekranda güncelleniyor ve
+  mükerrer kayıt görünmüyor.
+
+### ☐ T-31 · Frontend kapanışı: durumlar, erişilebilirlik, kapsam
+Her veri getiren görünüm için yükleniyor/hata/boş durumları. Backend erişilemezken beyaz ekrana
+düşmeme. Form etiketleri, klavye erişimi, durumun yalnızca renkle taşınmaması. Gerçek coverage
+oranının ölçülmesi ve %80 eşiğinin doğrulanması.
+- **Bağımlılık:** T-29, T-30
+- **Karşılar:** FR-28, NFR-16, NFR-02 · **Çözer:** TC-16
+- **DoD:** Backend kapalıyken arayüz anlaşılır hata ve tekrar deneme yolu gösteriyor; kapsam ≥ %80
+  ve sayı snapshot testleriyle değil davranış testleriyle tutuluyor.
+
+---
+
 ## Bağımlılık Özeti
+
+**Backend**
 
 ```
 T-01 ✔ ─┬─ T-21 ✔  (depo hazır; her task ayrı commit)
-        ├─ T-02
-        ├─ T-03
+        ├─ T-02 ✔
+        ├─ T-03 ✔
         ├─ T-08 ──────────────┐
         ├─ T-09 ─┬─ T-10 ─┐   │
         │        ├─ T-12 ─┤   │
@@ -406,10 +595,27 @@ T-01 ✔ ─┬─ T-21 ✔  (depo hazır; her task ayrı commit)
                                    ├─ T-16 ─ T-17 ─┐
                                    ├─ T-18 ────────┤
                                    └─ T-19 ────────┴─ T-20
+
+T-07 ─ T-22 ─┬─ T-16          (sahiplik düzeltmesi — ADR-021, PRD v2.0 ile geldi)
+             ├─ T-18
+             └─ Faz 7'nin tamamı
 ```
 
-**Kritik yol:** ~~T-01~~ → T-04 → T-05/T-07 → T-14 → T-20
-**Paralel çalışılabilir:** T-02, T-03, T-08, T-09 (ve T-09'a bağlı T-10/T-12) erken aşamada birbirinden bağımsız ilerleyebilir.
+**Frontend** *(T-23 hiçbir backend task'ına bağlı değil — ilk günden paralel başlayabilir)*
+
+```
+T-23 ─ T-24 ─ T-25 ─ T-26 ─┬─ T-27 ─ T-28 ─ T-29 ─┬─ T-31 ─ T-20
+                           └─ T-30 ───────────────┘
+
+  bağlandığı backend uçları:  T-24←T-08 · T-25/T-26←T-16 · T-27/T-28←T-17
+                              T-29←T-18 · T-30←T-14, T-19
+  hepsinin varsaydığı sözleşme: T-22
+```
+
+**Kritik yol:** ~~T-01~~ → ~~T-04~~ → ~~T-05/T-07~~ → **T-22** → T-14 → T-16/T-17 → T-29 → T-31 → T-20
+**Paralel çalışılabilir:** T-08, T-09 (ve T-09'a bağlı T-10/T-12) backend tarafında; **T-23 ve T-24
+tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı backend'den bağımsız ilerler.
+**Öne alınması önerilen:** T-22, çünkü hem T-16/T-18'i hem de tüm frontend fazını bloke ediyor.
 
 ---
 
@@ -426,5 +632,12 @@ T-01 ✔ ─┬─ T-21 ✔  (depo hazır; her task ayrı commit)
 | TC-7 | İl tanıma | T-12 |
 | TC-8 | Sınıflandırma skorlaması ve eşik | T-13 |
 | TC-9 | Mükerrer gönderim | T-19 |
-| TC-10 | SSE bağlantı yönetimi | T-18 |
-| TC-11 | Anlamlı %80 kapsam | T-03 (altyapı) + her task'ın kendi testleri |
+| TC-10 | SSE bağlantı yönetimi (sunucu) | T-18 |
+| TC-11 | Anlamlı %80 kapsam (backend) | T-03 (altyapı) + her task'ın kendi testleri |
+| TC-12 | Gönderim sonrası sonucun getirilmesi | **Karara bağlandı → ADR-021** · uygulaması T-22 |
+| TC-13 | Canlı akışta agregasyon tazeleme | T-29 |
+| TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | T-27 |
+| TC-15 | İstemci durumu ile sunucu durumunun ayrımı | T-26 |
+| TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |
+| TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | T-23 |
+| TC-18 | Anahtar kelime vurgulamasının hizalanması | T-14 (offset üretimi) + T-30 (vurgulama) |

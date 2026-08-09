@@ -10,9 +10,9 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 |---|---|---|
 | [ADR-001](#adr-001--modular-monolith) | Modular monolith | Kabul edildi |
 | [ADR-002](#adr-002--iki-veri-tabanının-rol-ayrımı) | İki veri tabanının rol ayrımı | Kabul edildi |
-| [ADR-003](#adr-003--modüller-arası-senkron-spring-application-event) | Modüller arası senkron Spring Application Event | Kabul edildi |
-| [ADR-004](#adr-004--gerçek-zamanlı-bildirim-için-sse) | Gerçek zamanlı bildirim için SSE | Kabul edildi |
-| [ADR-005](#adr-005--ham-kaydın-değiştirilemez-olması) | Ham kaydın değiştirilemez olması | Kabul edildi |
+| [ADR-003](#adr-003--modüller-arası-senkron-spring-application-event) | Modüller arası senkron Spring Application Event | Kabul edildi · **[ADR-021](#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı) ile revize edildi** |
+| [ADR-004](#adr-004--gerçek-zamanlı-bildirim-için-sse) | Gerçek zamanlı bildirim için SSE | Kabul edildi · v2.0'da netleştirildi |
+| [ADR-005](#adr-005--ham-kaydın-değiştirilemez-olması) | Ham kaydın değiştirilemez olması | Kabul edildi · v2.0'da güçlendirildi |
 | [ADR-006](#adr-006--tanınmayan-olay-tipi-davranışı) | Tanınmayan olay tipi davranışı | Kabul edildi |
 | [ADR-007](#adr-007--konfigürasyondan-yönetilen-olay-kataloğu) | Konfigürasyondan yönetilen olay kataloğu | Kabul edildi |
 | [ADR-008](#adr-008--kuralregex-tabanlı-çıkarım-ml-yerine) | Kural/regex tabanlı çıkarım (ML yerine) | Kabul edildi |
@@ -28,6 +28,10 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-018](#adr-018--coverage-kapısı-modül-başına-eşik--proje-geneli-rapor) | Coverage kapısı: modül başına eşik + proje geneli rapor | Kabul edildi |
 | [ADR-019](#adr-019--kayıt-granülaritesi) | Kayıt granülaritesi: (ham bildirim, tarih, il, olay tipi) | Kabul edildi · **TC-1 çözüldü** |
 | [ADR-020](#adr-020--metrik-veri-modeli-metrik-başına-satır) | Metrik veri modeli: metrik başına satır | Kabul edildi · **TC-2 çözüldü** |
+| [ADR-021](#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı) | Analiz sonucunun sahipliği ve gönderim cevabının kapsamı | Kabul edildi · **TC-12 çözüldü** |
+| [ADR-022](#adr-022--frontend-teknoloji-tabanı-react--typescript--vite) | Frontend teknoloji tabanı: React + TypeScript + Vite | Kabul edildi |
+| [ADR-023](#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) | Coğrafi izlenebilirlik: harita yerine il kırılımı | Kabul edildi |
+| [ADR-024](#adr-024--frontend-coverage-kapısı) | Frontend coverage kapısı | Kabul edildi |
 
 ---
 
@@ -90,6 +94,8 @@ backend/             (parent, packaging=pom)
 
 ## ADR-003 — Modüller Arası Senkron Spring Application Event
 
+> **Revize edildi (PRD v2.0 · [ADR-021](#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)).** Aşağıdaki gerekçenin ikinci maddesi — *"senkron olması, kullanıcının bildirimi gönderir göndermez sonucu ve uyarıları görmesini sağlıyor"* — **artık geçerli değil**: gönderim cevabı analiz sonucunu taşımıyor ve `analysis`'ten `ingestion`'a dönüş event'i kaldırıldı. Event'in senkron olması korunuyor; değişen şey, senkronluğun **istemci sözleşmesinin parçası olmaktan çıkması**. Aşağıdaki "İleride" merdiveni ancak bu değişiklikle gerçekten tırmanılabilir hale geliyor.
+
 **Karar.** `ingestion` modülü ham metni kaydettikten sonra bir domain event yayınlar; `analysis` modülü bu event'i **senkron** olarak dinler ve analizi aynı istek içinde tamamlar. Süreç içi `ApplicationEventPublisher` kullanılır.
 
 **Bağlam.** İki modülün birbirini doğrudan çağırmaması ama kullanıcının gönderim sonucunu (analiz özeti ve uyarılar) hemen görebilmesi isteniyor.
@@ -116,6 +122,8 @@ Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalı
 
 ## ADR-004 — Gerçek Zamanlı Bildirim için SSE
 
+> **Netleştirildi (PRD v2.0 · [ADR-021](#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)).** SSE bir **tazeleme tetikleyicisidir, veri kaynağı değildir.** Olay, istemcinin ilgisini belirlemesine yetecek kadar bilgi taşır (kimlikler, tarih, il, olay tipi); veriyi istemci sorgu uçlarından alır. Sonucu: akış tamamen çökse bile hiçbir veriye erişim kaybolmaz, yalnızca "anlık"lık kaybedilir. Bu, aşağıdaki "Sonuçlar" bölümündeki bağlantı yönetimi riskini de küçültüyor — kaçan bir olay veri kaybı değil, gecikmiş tazeleme demek.
+
 **Karar.** Yeni normalize veri üretildiğinde istemciler **Server-Sent Events** ile bilgilendirilecek. Akış tek yönlüdür (sunucu → istemci).
 
 **Bağlam.** İster, yeni bildirim girildiğinde tablo ve grafiklerin sayfa yenilemeden güncellenmesi (FR-13). Veri akışı yalnızca sunucudan istemciye.
@@ -136,6 +144,8 @@ Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalı
 ---
 
 ## ADR-005 — Ham Kaydın Değiştirilemez Olması
+
+> **Güçlendirildi (PRD v2.0 · [ADR-021](#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)).** Bu karar başlangıçta ham **metnin** değişmezliğini garanti ediyordu; döküman ise analiz bitince `status` ve `warnings` ile güncelleniyordu. ADR-021 ile bu güncelleme kalktı: artık **kaydın tamamı write-once**. Değişmezlik bir konvansiyon olmaktan çıkıp yazma yolunun yapısal özelliği oldu.
 
 **Karar.** Ham bildirim yazıldıktan sonra güncellenemez ve silinemez. `ingestion` modülü Create + Read + Reprocess sunar; Update/Delete uçları yoktur.
 
@@ -539,3 +549,100 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** Bir kaydın tüm metriklerini okumak join gerektiriyor; satır sayısı kayıt sayısının birkaç katı. Bu ölçekte önemsiz. `metric_value` `integer`: katalogdaki metriklerin tamamı sayım. `metric_type` veri tabanı tarafından doğrulanmıyor — yazım hatası kataloğun kendi başlangıç doğrulamasında yakalanmalı (ADR-007).
 
 **İleride.** Parasal hasar gibi tam sayı olmayan bir metrik gerekirse `metric_value` `numeric`'e çevrilebilir; ileri yönlü, veri kaybı olmayan bir migration. Sorgu hacmi büyürse `(event_type, occurred_on, metric_type)` üzerinde materialized view ya da tarih bazlı partitioning devreye alınabilir — tablo şekli buna hazır.
+
+---
+
+## ADR-021 — Analiz Sonucunun Sahipliği ve Gönderim Cevabının Kapsamı
+
+**Karar.** Analiz sonucu — durum (`ANALYZED` / `FAILED`), uyarılar ve analiz zamanı — **`analysis` modülüne aittir** ve orada saklanır. `analysis`'ten `ingestion`'a **dönüş event'i yoktur**: `RawReportAnalyzedEvent` ve dinleyicisi kaldırılır, ham döküman yazıldıktan sonra hiç güncellenmez. `POST /incident-reports` yalnızca **ham kaydın makbuzunu** döner (kimlik + gönderim zamanı); analiz sonucunu ve uyarıları taşımaz. İstemci sonucu `GET /incidents?rawReportId=...` ile okur. SSE ise bir **tazeleme tetikleyicisidir, veri kaynağı değildir**.
+
+**Bağlam.** ADR-003 modüller arası iletişimi senkron Spring event'i olarak kurdu ve gerekçelerinden biri "kullanıcı gönderir göndermez sonucu ve uyarıları görsün"dü. Bunun sonucu olarak `analysis` işini bitirince `RawReportAnalyzedEvent` yayınlıyor, `ingestion` bunu dinleyip Mongo dökümanını `status` ve `warnings` ile güncelliyordu (T-07). Frontend kapsama alınırken (PRD v2.0) bu akış yeniden incelendi: gönderim cevabının ne söylemesi gerektiği, sonucun kullanıcıya hangi kanaldan ulaşacağı ve modüllerin ileride ayrıştırılabilirliği birlikte tartışıldı.
+
+**Gerekçe.**
+- **Sahiplik.** `analysis`'in ürettiği veriyi `ingestion` yayınlıyordu. Bir modülün sahibi olmadığı veriyi kendi cevabında temsil etmesi, o verinin şekli değiştiğinde **iki yerde** kırılma demektir. Sahiplik sınırı, modül sınırının veri düzeyindeki karşılığıdır.
+- **Görünmeyen bağımlılık, görünenden tehlikeli.** Derleme grafiğinde `ingestion → analysis` kenarı zaten yoktu ve ArchUnit temizdi; ama bağımlılık **anlamsal ve zamansal** düzeyde vardı: `ingestion`'ın döküman şeması `analysis`'in kelimelerini taşıyordu ve yazma yolu `analysis` cevap verene kadar bitmiş sayılmıyordu. Derleyicinin göremediği bu bağ, ancak taşıma katmanı değiştiğinde faturasını keser.
+- **Ham kayıt gerçekten write-once oluyor.** ADR-005 metnin değişmezliğini garanti ediyordu; döküman ise sonradan güncelleniyordu. Artık kaydın tamamı değişmez (bkz. ADR-005 notu).
+- **Senkronluk sözleşmeden çıkıyor.** Event bugün senkron kalıyor, ama istemci bunu görmüyor. Taşıma ileride süreç dışına (ör. RabbitMQ) taşınırsa **hiçbir istemci sözleşmesi değişmez**; o noktada sorgu "henüz analiz edilmedi" döner ve sonucu akış tetikler. ADR-003'ün "İleride" merdiveni ancak böyle tırmanılabilir.
+- **Hiçbir veri tek kanala emanet edilmiyor.** SSE tetikleyici olduğu için akış çökse bile gönderen kendi sonucunu sorguyla görür; diğer istemciler de yeniden bağlandıklarında doğru duruma yakınsar. Kırılganlık, SSE'nin kendisinde değil ona veri emanet etmekteydi.
+
+**Alternatifler.**
+- *Bugünkü model (dönüş event'i + cevapta `status`/`warnings`):* Sıfır rework. Sahiplik ihlali ve döküman mutasyonu sürer; broker'a geçişte request/reply (RabbitMQ `direct reply-to`) zorunlu hale gelir — bu da broker'ın asıl faydasını (tamponlama, backpressure, dayanıklı teslim) büyük ölçüde harcayıp yerine ağ üzerinden senkronluk koyar. Ayrıca "ham metin analiz patlasa da hayatta kalır" kuralı, timeout ve broker erişilemezliği yazma yolunun içine girdiği için zorlaşır.
+- *Cevabın normalize kayıtları da taşıması:* Kullanıcıya tek istekte her şey. Ham kayıt ile türetilmiş kaydın sözleşmelerini birbirine bağlar; `ingestion` `analysis`'in DTO'suna bağımlı hale gelir — yani bugünkü sorunun daha ağır hali.
+- *SSE'yi kaldırıp yalnızca sorgu:* FR-13'ü düşürürdü. Kaynak dokümanın "grafik ve özet tablolar anlık olarak güncellenir" isterini yalnızca gönderimi yapan sekme için karşılar; açık duran ikinci sekme güncellenmez. `realtime` modülü, ADR-004 ve T-18 de birlikte düşerdi.
+- *`app` katmanında birleştiren bir okuma cephesi:* `app` tüm modülleri gören tek modül olduğu için `GET /incident-reports/{id}`'yi ham kayıt + analiz sonucu olarak birleştirebilirdi ve FR-14 olduğu gibi kalırdı. Yeni bir mimari eleman ve ek dolaylılık getiriyor; v1'de iki isteğe değmedi. İhtiyaç doğarsa sonradan eklenebilir — sahiplik kuralını bozmuyor.
+
+**Sonuçlar.**
+- **Silinecek kod:** `RawReportAnalyzedEvent`, `RawReportAnalyzedEventListener`, `IngestionService.markAnalyzed`, `ProcessingStatus`, `IncidentReportResponse`'un `status` ve `warnings` alanları — testleriyle birlikte. T-07'de yazılan çalışan koda geri dönüş; bedeli bilinçli ödeniyor.
+- **Eklenecek kod:** `analysis` tarafında ham bildirim başına analiz sonucu kaydı ve `GET /incidents`'a `rawReportId` filtresi (T-22, T-16).
+- **İstemci gönderimden sonra bir ek istek atıyor.** Analiz bugün senkron olduğu için bu sorgu yarış koşulu taşımaz: cevap döndüğünde kayıtlar Postgres'te hazırdır.
+- **`GET /incident-reports/{id}` daraldı:** analiz durumu ve türeyen kayıt kimlikleri dönmüyor (FR-14 güncellendi). İzlenebilirliğin ham bildirim → olay kayıtları yönü `rawReportId` filtresiyle karşılanıyor; FR-08 korunuyor.
+- **SSE payload'ı küçüldü:** olay satır çizmeye değil, ilgi belirlemeye yetecek kadar veri taşıyor. T-18'in kapsamı daraldı.
+- ADR-003'ün gerekçelerinden biri geçersizleşti ve o karar revize edildi; ADR-004 ve ADR-005 not düzeyinde netleşti.
+
+**İleride.** Asenkrona geçiş artık sözleşmeyi kırmadan yapılabilir: dinleyici `@Async` ile ayrılır ya da event bir broker'a taşınır; istemci tarafında değişen tek şey, sorgunun bir süre "henüz analiz edilmedi" dönmesi olur — ki arayüz bu durumu zaten ele almak zorunda. Gönderimi yapan istemciye özel bir akış (yalnızca kendi bildirimlerini dinleme) istenirse korelasyon anahtarı (`rawReportId`) sinyalde zaten var. Analiz sonucu kaydı, ileride analiz sürüm bilgisi (hangi katalog sürümüyle üretildi) taşıyacak doğal yerdir — reprocess'in neyi neden yeniden işlediğini de o zaman söyleyebilir.
+
+---
+
+## ADR-022 — Frontend Teknoloji Tabanı: React + TypeScript + Vite
+
+**Karar.** Frontend **ReactJS** ile geliştirilecek; dil **TypeScript**, araç zinciri **Vite**. Grafik ve veri katmanı kütüphaneleri bu kararda sabitlenmiyor; iskelet task'ında (T-23) seçilip aynı dosyaya ayrıca kaydedilecek.
+
+**Bağlam.** Kaynak doküman "Frontend ReactJS ile geliştirilecektir" diyor; dil ve araç zinciri serbest bırakılmış. PRD v2.0 frontend'i kapsama aldı (NFR-12).
+
+**Gerekçe.**
+- **TypeScript, backend'de kurulan çizginin istemci karşılığı.** Bu projede sınır ihlalleri çalışma zamanına bırakılmıyor: modül grafiği derlemede kırılıyor (ADR-001), şema uyuşmazlığı `ddl-auto=validate` ile açılışta patlıyor, mimari kurallar ArchUnit'le test ediliyor (ADR-017). API sözleşmesinden sapmanın build'de görünmesi bu tutumun devamı.
+- **Vite:** statik çıktı üretiyor (çalışma zamanında Node gerekmez), çok aşamalı Docker imajıyla doğal uyum, geliştirmede yerleşik proxy — TC-17'de "aynı köken" kararı verilirse geliştirme ve üretim davranışı aynı olur.
+- **SSR gereksiz:** tek kullanıcılı analist arayüzü, veri canlı, SEO ihtiyacı yok.
+
+**Alternatifler.**
+- *JavaScript:* Daha hızlı başlangıç, daha az yapılandırma. Sözleşme değişikliği çalışma zamanında ortaya çıkar; bu projede backend paralel geliştiği ve sözleşme henüz oturmadığı için maliyeti yüksek.
+- *Next.js:* SSR ve routing hazır gelir. Bu arayüz için SSR'ın karşılığı yok; çalışma zamanında Node sunucusu, daha ağır imaj ve `docker compose` tarafında fazladan bir servis davranışı demek.
+- *Create React App:* Bakımı durmuş; yeni proje için tercih edilmez.
+
+**Sonuçlar.** Build'e bir Node araç zinciri giriyor (backend Maven, frontend npm — iki ayrı build). API tipleri v1'de elle yazılıyor; bu, sözleşme değiştiğinde iki yerde güncelleme demek. İmaj statik dosyalardan ve onları yayınlayan hafif bir sunucudan oluşuyor.
+
+**İleride.** springdoc'un ürettiği OpenAPI şemasından (`NFR-07`) tip üretimi (`openapi-typescript` benzeri) devreye alınırsa elle yazılan tipler ortadan kalkar ve sözleşme sapması build'de yakalanır — bugünkü tercih bunu engellemiyor, yalnızca ertelemiş oluyor.
+
+---
+
+## ADR-023 — Coğrafi İzlenebilirlik: Harita Yerine İl Kırılımı
+
+**Karar.** Kaynak dokümanın "zaman içinde, **coğrafi bölge bazında** grafiksel olarak izlenebilme" isteri, ilin grafik ve özet tabloda bir **kırılım boyutu** olmasıyla karşılanır. v1'de harita (choropleth, GIS, koordinat) yoktur.
+
+**Bağlam.** PRD v1.0 haritayı "frontend işi" diyerek kapsam dışı bırakmıştı; frontend kapsama girince bu gerekçe düştü ve kararın kendi başına savunulması gerekti (FR-24, §2.2).
+
+**Gerekçe.**
+- **Kaynak doküman "grafiksel" diyor, "haritasal" demiyor.** Zaman ekseni + il kırılımı isteri lafzıyla ve amacıyla karşılıyor: iller arası karşılaştırma ve zaman içindeki seyir görülebiliyor.
+- **`SHARED` kapsamlı kayıtlar haritada tanımsız.** ADR-019 gereği bu sayılar hiçbir tek ile ait değil; haritada boyanacak bir il yok. Bölüştürmek metinde olmayan veriyi uydurmak, gizlemek ise toplamı bozmak olur. Harita bu kayıt için ya yalan söyler ya da susar. Çubuk/çizgi grafikte ise ayrı ve etiketli bir seri olarak **dürüstçe** gösterilebilir; okuyucu il toplamları ile genel toplamı uzlaştırabilir.
+- **`UNKNOWN` kapsam için de aynı sorun geçerli:** ilsiz kayıt haritada yer bulamaz, grafikte "il belirtilmemiş" olarak durabilir.
+- Efor, projenin asıl zorluğu olan Türkçe metin çıkarımında kalıyor.
+
+**Alternatifler.**
+- *Choropleth harita:* Görsel etkisi yüksek. Maliyeti 81 il geometrisi, `SHARED`/`UNKNOWN` için ayrıca bir harita-dışı gösterim ve ek test yükü. Kazanılan şey isterin karşılanması değil, sunumu.
+- *Harita + grafik birlikte:* En kapsamlı ve en pahalı; v1 kapsamını asıl işten uzaklaştırır.
+- *Yalnızca il filtresi (kırılım yok):* İsteri karşılamaz. "İl bazında izlenebilirlik" tek il seçip bakmak değil, iller arası karşılaştırmadır.
+
+**Sonuçlar.** Çok il seçildiğinde grafikteki seri sayısı artıyor; okunabilirlik için seçim sınırı veya yığılmış (stacked) gösterim gerekebilir — T-28'in kapsamında. Veri modelinde hiçbir değişiklik gerekmiyor.
+
+**İleride.** Harita eklenmek istenirse veri modeli hazır: il zaten kırılım boyutu ve plaka koduyla kayıtlı (ADR-019). Eklenecek tek şey geometri ve `SHARED`/`UNKNOWN` kayıtlar için haritanın yanında duran bir gösterim — bu iki kapsam haritaya hiçbir zaman boyanmayacak.
+
+---
+
+## ADR-024 — Frontend Coverage Kapısı
+
+**Karar.** Frontend'de de satır bazında **≥ %80** coverage eşiği uygulanır ve eşik altında **build kırılır**. Kapı, backend'deki JaCoCo kapısıyla (ADR-018) simetriktir.
+
+**Bağlam.** Kaynak doküman: *"Yazılım geliştirilirken birim testleri yazılmalıdır. Birim testlerin kapsayıcılığı en az yüzde 80 oranında olmalı ve tüm önemli fonksiyonları kapsayıcı olmalıdır."* Cümle backend'e daraltılmamış. PRD v1.0 frontend'i kapsam dışı bıraktığı için NFR-02 fiilen yalnızca backend'e uygulanıyordu; v2.0 ile bu boşluk kapanıyor.
+
+**Gerekçe.**
+- **İster tek bir sistem için yazılmış.** Frontend teslimatın parçası olduğuna göre kapı da onu kapsamalı; aksi halde isterin yarısı karşılanmamış olur ve bunun README'de savunulması gerekirdi.
+- **Katman ayrımı bunu mümkün kılıyor.** PRD §5.4'teki üç katmandan ikisi (API istemcisi, durum/veri katmanı) DOM'suz test edilebiliyor. Yani kapsam sayısı görünüm katmanına yaslanmak zorunda değil — anlamlı testle tutulabilir.
+- **Simetri.** İki tarafta iki farklı standart, pratikte düşük olanın standart olması demektir.
+
+**Alternatifler.**
+- *Daha düşük eşik (%60–70):* İsteri kısmen karşılar; sayının neden düşürüldüğünü savunmak gerekir ve savunma zayıftır.
+- *Sayısal kapı yok, yalnızca kritik akışlar:* En hızlı yol. Kaynak dokümanın açık bir isterinden bilinçli sapma olurdu ve README'de gerekçelendirilmesi gerekirdi.
+
+**Sonuçlar.** Her frontend task'ı kendi test yükünü taşıyor. Snapshot testleri kapsamı ucuza şişirdiği için tercih edilmiyor; ölçülen şey davranış olmalı (TC-16). SSE, zamanlayıcı ve grafik gibi zamanlama/çizim içeren kod deterministik test için sahte zaman ve sahte akış gerektiriyor — bu, tasarımı da doğru yöne itiyor: yan etkiler enjekte edilebilir olmak zorunda.
+
+**İleride.** Eşik tek bir yapılandırma değerinden yönetiliyor; olgunlaştıkça yükseltilebilir. Uçtan uca (E2E) testler bu kapının kapsamına girmez — kabul kriterleri (§11) onların alanı; ikisini karıştırmak coverage sayısını anlamsızlaştırır.

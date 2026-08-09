@@ -18,7 +18,7 @@ incident-report/
 ├── docker-compose.yml     tüm sistem (giriş noktası)
 ├── docs/                  PRD, tasarım kararları, task kırılımı
 ├── backend/               Java 21 · Spring Boot · MongoDB + PostgreSQL
-└── frontend/              ReactJS  (henüz oluşturulmadı)
+└── frontend/              React · TypeScript · Vite  (henüz oluşturulmadı — T-23)
 ```
 
 Backend kendi içinde bir **modular monolith**'tir; ayrıntısı aşağıda. Tek repo tercihinin
@@ -42,20 +42,29 @@ gerekçesi [ADR-016](docs/DECISIONS.md#adr-016--tek-repo-monorepo)'da.
 ## Nasıl Çalışır
 
 ```
-Kullanıcı serbest metin girer
+Kullanıcı arayüzdeki metin alanına serbest metin girer
         │
         ▼
-1. Ham metin, hiç değiştirilmeden MongoDB'ye yazılır  (log / audit — silinemez, güncellenemez)
+1. Ham metin, hiç değiştirilmeden MongoDB'ye yazılır  (log / audit — yazıldıktan sonra hiç dokunulmaz)
         │
         ▼
 2. Analiz: tarih · il · olay tipi · sayısal metrikler · anahtar kelimeler çıkarılır
         │
         ▼
-3. Normalize veri PostgreSQL'e yazılır ve ham kayda iki yönlü bağlanır
+3. Normalize veri **ve analiz sonucu** (durum, uyarılar) PostgreSQL'e yazılır,
+   ham kayda iki yönlü bağlanır
         │
         ▼
-4. Yeni kayıt SSE ile bağlı istemcilere yayınlanır → tablo ve grafik sayfa yenilenmeden güncellenir
+4. Bağlı istemcilere SSE ile "yeni kayıt üretildi" **sinyali** gider
+        │
+        ▼
+5. Arayüz normalize veriyi sorgular → tablo, özet ve grafik sayfa yenilenmeden güncellenir
 ```
+
+Gönderim isteği yalnızca **kayıt makbuzu** döner (kimlik + gönderim zamanı); ne çıkarıldığını arayüz
+o kimlikle sorgulayarak öğrenir. Böylece hiçbir modül sahibi olmadığı veriyi yayınlamaz ve hiçbir
+veri tek bir kanala emanet edilmez — SSE koptuğunda bile her şey sorguyla erişilebilir kalır
+([ADR-021](docs/DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)).
 
 **Örnek girdi:**
 
@@ -78,20 +87,27 @@ hangi kaynaktan geldiğini (`EXPLICIT` / `RELATIVE` / `DEFAULTED`) taşır.
 
 ## Mimari
 
-Backend, tek deploy edilebilir bir **modular monolith**'tir.
+Sistem iki dağıtım birimidir: tarayıcıda çalışan **React uygulaması** ve tek deploy edilebilir bir
+**modular monolith** backend.
 
 ```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  frontend (React · TypeScript)                                            │
+│  • bildirim giriş formu   • kayıt listesi   • özet tablo   • grafik       │
+└──────────────────────────┬───────────────────────────────────▲────────────┘
                       HTTP (REST)                       SSE (tek yönlü)
-                           │                                   ▲
+                           │                                   │
 ┌──────────────────────────┼───────────────────────────────────┼────────────┐
 │  backend                 ▼                                   │            │
 │                                                                           │
 │   ┌────────────────────────────┐    Spring    ┌───────────────────────┐   │
 │   │  ingestion                 │  Application │  analysis             │   │
 │   │  • ham metni al            │    Event     │  • metni ayrıştır     │   │
-│   │  • değiştirmeden sakla ────┼─────────────▶│  • sınıflandır        │   │
-│   │  • oku / listele           │  (senkron)   │  • normalize veri üret│   │
-│   │  • reprocess tetikle       │◀─────────────┤  • sorgula / agrega   │   │
+│   │  • değiştirmeden sakla ────┼──(senkron,──▶│  • sınıflandır        │   │
+│   │  • oku / listele           │   tek yön)   │  • normalize veri üret│   │
+│   │  • reprocess tetikle       │              │  • analiz sonucunu    │   │
+│   │                            │              │    sahiplen           │   │
+│   │                            │              │  • sorgula / agrega   │   │
 │   └─────────────┬──────────────┘              └───────────┬───────────┘   │
 └─────────────────┼─────────────────────────────────────────┼───────────────┘
                   ▼                                         ▼
@@ -118,8 +134,9 @@ backend/             (parent, packaging=pom — ortak sürüm ve plugin yönetim
 | `shared` | Modüller arası domain event'ler ve ortak hata sözleşmesi | — |
 | `ingestion` | Ham metni almak, değiştirmeden saklamak, okumak, reprocess tetiklemek | MongoDB (yalnız bu modül) |
 | `analysis` | Ayrıştırma, sınıflandırma, normalize veri üretimi, sorgu/agregasyon | PostgreSQL (yalnız bu modül) |
-| `realtime` | Yeni normalize kaydı SSE ile yayınlamak | — |
+| `realtime` | Yeni normalize kayıt üretildiğini SSE ile bildirmek (sinyal; veri taşımaz) | — |
 | `app` | Modülleri birbirine bağlayan bootstrap; `application*.yml` burada | — |
+| `frontend` | Giriş formu, liste, özet, grafik, canlı akış aboneliği | — (yalnız API tüketir) |
 
 `ingestion` ile `analysis` arasında **bilinçli olarak bağımlılık yoktur** — iletişim yalnızca
 `shared`'daki domain event'ler üzerindendir. Bu bir konvansiyon değil, build garantisi:
@@ -127,7 +144,13 @@ backend/             (parent, packaging=pom — ortak sürüm ve plugin yönetim
 derlemede kırılır. Modüle özgü kütüphaneler de o modülün pom'unda durur, yani `analysis`'in
 Mongo sürücüsüne fiilen erişimi yoktur.
 
+Sınır yalnızca derleme grafiğinde değil, **veri sahipliğinde** de var: her modül yalnızca ürettiği
+veriyi yayınlar. Analiz sonucu (durum, uyarılar) `analysis`'e aittir; bu yüzden `analysis`'ten
+`ingestion`'a dönüş event'i yoktur ve ham döküman yazıldıktan sonra hiç güncellenmez. Senkronluk
+istemci sözleşmesinin parçası değildir — taşıma ileride bir broker'a taşınırsa API değişmez.
+
 **Teknoloji:** Java 21 · Spring Boot 3.5.x · MongoDB · PostgreSQL · Flyway · Maven · Docker Compose
+· React · TypeScript · Vite
 
 ---
 
@@ -160,8 +183,9 @@ ve "İleride" notlarıyla birlikte [`docs/DECISIONS.md`](docs/DECISIONS.md) dosy
 > Kaynak doküman bu davranışı tasarım tercihimize bırakıyor ve gerekçesini burada açıklamamızı istiyor.
 
 **Tercih:** Bildirim **reddedilmez**. Ham metin her koşulda MongoDB'ye yazılır, olay kaydı `OTHER`
-tipi ve `UNCLASSIFIED` durumuyla üretilir, çıkarılabilen tarih/il/sayılar korunur ve API cevabında
-kullanıcıyı bilgilendiren bir uyarı listesi döner.
+tipi ve `UNCLASSIFIED` durumuyla üretilir, çıkarılabilen tarih/il/sayılar korunur ve kullanıcıyı
+bilgilendiren bir uyarı listesi olay kaydı sorgusuyla birlikte döner — arayüzde bu uyarılar
+kullanıcıya gösterilir, sessizce yutulmaz.
 
 **Neden:**
 
@@ -182,13 +206,17 @@ kullanıcıyı bilgilendiren bir uyarı listesi döner.
 |---|---|---|
 | Modular monolith | Net domain sınırları + tek komutla ayağa kalkma; dağıtık sistem maliyeti olmadan mikroservise geçiş hattı hazır | [ADR-001](docs/DECISIONS.md#adr-001--modular-monolith) |
 | Mongo = ham metin, Postgres = analitik | Şemasız/yalnız-yazılır kayıt ile agregasyon yükü farklı araçlar ister; ayrım modül sınırını fiziksel olarak da güçlendirir | [ADR-002](docs/DECISIONS.md#adr-002--iki-veri-tabanının-rol-ayrımı) |
-| Senkron Spring Event | Modüller arası gevşek bağ + kullanıcının sonucu ve uyarıları anında görmesi; ek altyapı yok | [ADR-003](docs/DECISIONS.md#adr-003--modüller-arası-senkron-spring-application-event) |
-| SSE (WebSocket yerine) | İhtiyaç tek yönlü; tarayıcıda yerleşik `EventSource`, otomatik yeniden bağlanma, düşük altyapı sürtünmesi | [ADR-004](docs/DECISIONS.md#adr-004--gerçek-zamanlı-bildirim-için-sse) |
-| Ham kayıt değiştirilemez | İzlenebilirlik ancak kaynak değişmezse anlamlı; reprocess'i güvenli kılar | [ADR-005](docs/DECISIONS.md#adr-005--ham-kaydın-değiştirilemez-olması) |
+| Senkron Spring Event | Modüller arası gevşek bağ, ek altyapı yok; senkronluk **sözleşmenin parçası değil**, implementasyon detayı | [ADR-003](docs/DECISIONS.md#adr-003--modüller-arası-senkron-spring-application-event) |
+| Her modül yalnızca sahibi olduğu veriyi yayınlar | `ingestion` analiz sonucunu temsil etmez; dönüş event'i yok, ham kayıt write-once, gönderim cevabı makbuz | [ADR-021](docs/DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı) |
+| SSE (WebSocket yerine) — ve **tetikleyici** olarak | İhtiyaç tek yönlü; tarayıcıda yerleşik `EventSource`. Akış veri taşımaz, tazelemeyi tetikler: koptuğunda hiçbir veri erişilemez olmaz | [ADR-004](docs/DECISIONS.md#adr-004--gerçek-zamanlı-bildirim-için-sse) |
+| Ham kayıt değiştirilemez | İzlenebilirlik ancak kaynak değişmezse anlamlı; reprocess'i güvenli kılar. Yalnız metin değil, **kaydın tamamı** write-once | [ADR-005](docs/DECISIONS.md#adr-005--ham-kaydın-değiştirilemez-olması) |
 | Tarih kaynağı kayıtta saklanır | Göreli ifade (`Son 24 saatte`) bir çıkarımdır, varsayım değil; referans gönderim tarihidir ki reprocess geçmiş tarihleri kaydırmasın | [ADR-014](docs/DECISIONS.md#adr-014--tarih-çözümleme-ve-referans-tarih) |
 | Katalog YAML'dan yönetilir | Yeni olay tipi = konfigürasyon değişikliği; veri ile algoritma ayrışır | [ADR-007](docs/DECISIONS.md#adr-007--konfigürasyondan-yönetilen-olay-kataloğu) |
 | Kural/regex tabanlı çıkarım (ML yerine) | Deterministik, açıklanabilir, test edilebilir; ağır bağımlılık yok | [ADR-008](docs/DECISIONS.md#adr-008--kuralregex-tabanlı-çıkarım-ml-yerine) |
 | Auth kapsam dışı | Kaynak dokümanda ister değil; efor asıl teknik zorluk olan metin analizine ayrıldı | [ADR-011](docs/DECISIONS.md#adr-011--kimlik-doğrulamanın-kapsam-dışı-bırakılması) |
+| Frontend: React + TypeScript + Vite | ReactJS isteri; TypeScript, backend'deki "ihlal derlemede patlasın" çizgisinin istemci karşılığı; SSR'ın karşılığı yok | [ADR-022](docs/DECISIONS.md#adr-022--frontend-teknoloji-tabanı-react--typescript--vite) |
+| İl, harita yerine grafik kırılımı | Kaynak "grafiksel" diyor, "haritasal" demiyor; `SHARED` sayılar haritada tanımsız — boyanamaz, bölüştürülemez | [ADR-023](docs/DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) |
+| Frontend'de de %80 coverage kapısı | Kaynak dokümandaki ister backend'e daraltılmamış; iki farklı standart, düşük olanın standart olması demek | [ADR-024](docs/DECISIONS.md#adr-024--frontend-coverage-kapısı) |
 
 ---
 
@@ -219,6 +247,7 @@ Komut tüm servisleri ayağa kaldırır ve uygulama, veri tabanları **sağlıkl
 
 | Servis | Adres | Açıklama |
 |---|---|---|
+| `frontend` | http://localhost:3000 | React arayüzü — **henüz oluşturulmadı**, kök compose'da yorum satırında bekliyor (T-23) |
 | `app` | http://localhost:8080 | Backend API |
 | `postgres` | `localhost:5432` | PostgreSQL 17 — normalize/analitik veri |
 | `mongodb` | `localhost:27017` | MongoDB 8 — ham metin (log) |
@@ -296,16 +325,16 @@ Uçlar `/api/v1` altındadır:
 
 | Uç | Açıklama |
 |---|---|
-| `POST /incident-reports` | Ham metin gönderimi; kayıt + analiz + uyarılarla birlikte sonuç özeti |
+| `POST /incident-reports` | Ham metin gönderimi; **kayıt makbuzu** döner (kimlik + gönderim zamanı) |
 | `GET /incident-reports` | Ham bildirimleri sayfalı listeleme |
-| `GET /incident-reports/{id}` | Tekil ham bildirim + türeyen olay kayıtları |
+| `GET /incident-reports/{id}` | Tekil ham bildirim (metin + gönderim zamanı) |
 | `POST /incident-reports/{id}/reprocess` | Güncel kurallarla yeniden analiz |
-| `GET /incidents` | Normalize kayıtlar; olay tipi / il / tarih aralığı / keyword filtreleri + sayfalama |
+| `GET /incidents` | Normalize kayıtlar + analiz durumu ve uyarılar; olay tipi / il / tarih aralığı / keyword / **`rawReportId`** filtreleri + sayfalama |
 | `GET /incidents/{id}` | Tekil olay kaydı + metrikler + anahtar kelimeler + kaynak referansı |
 | `GET /analytics/time-series` | Olay tipi bazlı zaman serisi; `cumulative` parametresi ile kümülatif |
 | `GET /analytics/summary` | Özet tablo agregasyonu |
 | `GET /metadata` | Desteklenen olay tipleri, metrikleri ve il listesi |
-| `GET /stream/incidents` | SSE akışı (tek yönlü) |
+| `GET /stream/incidents` | SSE akışı (tek yönlü); yeni kayıt **sinyali** — veri taşımaz |
 
 Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 
@@ -320,6 +349,7 @@ assertion.
 <!-- TODO: test çalıştırma komutları ve kapsam raporunun konumu eklenecek. -->
 
 - Birim test kapsamı **en az %80**; eşik build'de zorunludur ve altına düşüldüğünde build kırılır.
+  Aynı kapı **backend ve frontend için ayrı ayrı** geçerlidir (ADR-018, ADR-024).
 - Kaynak dokümandaki üç örnek metin **altın (golden) test** olarak sabittir; cümleleri karıştırılmış
   halleriyle de doğrulanır.
 - Veri tabanına dokunan testler Testcontainers ile gerçek MongoDB ve PostgreSQL üzerinde çalışır.
