@@ -1,0 +1,9 @@
+# Smallest catalog that passes validation - used to prove the location is configurable.
+event-types:
+  - key: EPIDEMIC
+    label: Salgın
+    keywords: [salgın]
+    metrics:
+      - key: NEW_CASE
+        label: Yeni vaka
+        keywords: [vaka]

@@ -49,6 +49,11 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <jacoco.version>0.8.15</jacoco.version>
+
+        <!-- The gate that stops a module with code and no tests from slipping past JaCoCo
+             (ADR-018). Overridable so that running one test class - `-Dtest=Foo` - does not fail
+             every other module for having run nothing. -->
+        <surefire.failIfNoTests>true</surefire.failIfNoTests>
         <archunit.version>1.5.0</archunit.version>
 
         <!-- NFR-02: unit test coverage must be at least 80%. This is a floor the
@@ -165,7 +170,7 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <configuration>
-                        <failIfNoTests>true</failIfNoTests>
+                        <failIfNoTests>${surefire.failIfNoTests}</failIfNoTests>
                     </configuration>
                 </plugin>
 

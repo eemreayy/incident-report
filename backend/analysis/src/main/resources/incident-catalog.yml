@@ -1,0 +1,107 @@
+# The event types this system recognises: what triggers each one, and which numbers it carries.
+#
+# Configuration rather than code (ADR-007). Adding an event type or a metric must touch nothing but
+# this file - no Java change, and no migration, which is why metrics are rows rather than columns
+# (ADR-020). The source document asks us to derive the catalog from examples, so it was incomplete
+# by construction and will keep growing.
+#
+# Labels are Turkish because they are shown to the user, who is (PRD 2.2). They live here rather
+# than in the interface for the same reason the rest of this file does: if the frontend held them,
+# adding an event type would require a frontend release, and the requirement says configuration
+# alone should be enough. They reach the interface through the metadata endpoint.
+#
+# Validated at startup, and a catalog that cannot be trusted stops the application rather than
+# quietly recognising less than it should. The rules are in IncidentCatalogLoader; the ones worth
+# knowing while editing:
+#   - keys are UPPER_SNAKE, unique, and at most 48 characters (the width of the columns storing them)
+#   - a metric key means the same thing everywhere, so it carries the same label in every event type
+#   - OTHER is reserved: it is what an unrecognised report is filed under, not something to define
+#   - every event type needs at least one keyword and one metric, or it can never match or extract
+
+event-types:
+
+  - key: EPIDEMIC
+    label: Salgın
+    keywords: [salgın, pandemi, vaka, virüs, karantina, test]
+    metrics:
+      - key: NEW_CASE
+        label: Yeni vaka
+        keywords: [yeni vaka, vaka]
+      - key: DEATH
+        label: Can kaybı
+        keywords: [vefat, hayatını kaybet, can kaybı, öldü, ölü]
+      - key: RECOVERED
+        label: Taburcu
+        keywords: [taburcu, iyileşen, şifa buldu]
+      - key: TEST
+        label: Yapılan test
+        keywords: [test]
+
+  - key: EARTHQUAKE
+    label: Deprem
+    keywords: [deprem, sarsıntı, artçı, enkaz, hasar]
+    metrics:
+      - key: DAMAGED_BUILDING
+        label: Hasarlı bina
+        keywords: [bina hasar, hasarlı bina, hasar gören bina, yıkılan bina]
+      - key: DEATH
+        label: Can kaybı
+        keywords: [vefat, hayatını kaybet, can kaybı, öldü, ölü]
+      - key: RESCUED
+        label: Kurtarılan
+        keywords: [kurtarıl, enkazdan çıkarıl, sağ kurtarıl]
+      - key: INJURED
+        label: Yaralı
+        keywords: [yaralı, yaralandı]
+
+  - key: TRAFFIC_ACCIDENT
+    label: Trafik kazası
+    keywords: [trafik kazası, kaza, çarpışma, devrilme]
+    metrics:
+      - key: ACCIDENT_COUNT
+        label: Kaza sayısı
+        keywords: [trafik kazası, kaza]
+      - key: DEATH
+        label: Can kaybı
+        keywords: [vefat, hayatını kaybet, can kaybı, öldü, ölü]
+      - key: INJURED
+        label: Yaralı
+        keywords: [yaralı, yaralandı]
+
+  # FLOOD and FIRE are not in the source document's examples. They are here to show that the
+  # catalog grows without a code change - which is the whole claim of ADR-007, and a claim worth
+  # demonstrating rather than asserting.
+
+  - key: FLOOD
+    label: Sel
+    keywords: [sel, su baskını, taşkın]
+    metrics:
+      - key: DEATH
+        label: Can kaybı
+        keywords: [vefat, hayatını kaybet, can kaybı, öldü, ölü]
+      - key: INJURED
+        label: Yaralı
+        keywords: [yaralı, yaralandı]
+      - key: EVACUATED
+        label: Tahliye edilen
+        keywords: [tahliye]
+      - key: AFFECTED_BUILDING
+        label: Etkilenen bina
+        keywords: [su basan, etkilenen bina, zarar gören bina]
+
+  - key: FIRE
+    label: Yangın
+    keywords: [yangın, alev, itfaiye]
+    metrics:
+      - key: DEATH
+        label: Can kaybı
+        keywords: [vefat, hayatını kaybet, can kaybı, öldü, ölü]
+      - key: INJURED
+        label: Yaralı
+        keywords: [yaralı, yaralandı]
+      - key: EVACUATED
+        label: Tahliye edilen
+        keywords: [tahliye]
+      - key: AFFECTED_BUILDING
+        label: Etkilenen bina
+        keywords: [etkilenen bina, zarar gören bina, kül olan]

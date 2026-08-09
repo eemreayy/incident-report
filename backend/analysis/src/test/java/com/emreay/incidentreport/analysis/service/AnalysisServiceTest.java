@@ -7,6 +7,8 @@ import com.emreay.incidentreport.analysis.domain.IncidentMetric;
 import com.emreay.incidentreport.analysis.domain.KeywordRole;
 import com.emreay.incidentreport.analysis.domain.Province;
 import com.emreay.incidentreport.analysis.domain.ProvinceScope;
+
+import static com.emreay.incidentreport.analysis.domain.ProvinceFixture.province;
 import com.emreay.incidentreport.analysis.extraction.ExtractedIncident;
 import com.emreay.incidentreport.analysis.extraction.ExtractedKeyword;
 import com.emreay.incidentreport.analysis.extraction.ExtractionResult;
@@ -82,7 +84,7 @@ class AnalysisServiceTest {
 
     @Test
     void storesWhatWasExtractedAndLinksItBackToTheReport() {
-        Province ankara = province((short) 6, "Ankara");
+        Province ankara = province(6, "Ankara");
         when(provinces.findById((short) 6)).thenReturn(Optional.of(ankara));
         when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SINGLE,
@@ -108,8 +110,8 @@ class AnalysisServiceTest {
     /** A figure the text gives for several provinces at once keeps all of them (ADR-019). */
     @Test
     void aSharedFigureKeepsEveryProvinceItCovers() {
-        Province bursa = province((short) 16, "Bursa");
-        Province kocaeli = province((short) 41, "Kocaeli");
+        Province bursa = province(16, "Bursa");
+        Province kocaeli = province(41, "Kocaeli");
         when(provinces.findAllById(any())).thenReturn(List.of(bursa, kocaeli));
         when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.RELATIVE, ProvinceScope.SHARED,
@@ -189,8 +191,7 @@ class AnalysisServiceTest {
 
     @Test
     void refusesASharedFigureNamingAProvinceThatDoesNotExist() {
-        // Built before stubbing: creating a mock inside when(...) leaves Mockito mid-stubbing.
-        Province bursa = province((short) 16, "Bursa");
+        Province bursa = province(16, "Bursa");
         when(provinces.findAllById(any())).thenReturn(List.of(bursa));
         when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.RELATIVE, ProvinceScope.SHARED,
@@ -279,11 +280,4 @@ class AnalysisServiceTest {
                 null, null, "OTHER", ClassificationStatus.UNCLASSIFIED, Map.of(), List.of());
     }
 
-    /** Provinces come from a Flyway migration, so there is no public constructor to call. */
-    private static Province province(short code, String name) {
-        Province province = mock(Province.class);
-        when(province.getCode()).thenReturn(code);
-        when(province.getName()).thenReturn(name);
-        return province;
-    }
 }

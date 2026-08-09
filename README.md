@@ -157,7 +157,7 @@ istemci sözleşmesinin parçası değildir — taşıma ileride bir broker'a ta
 ## Olay Tipi ve Metrik Kataloğu
 
 Katalog **konfigürasyondan (YAML)** yönetilir — yeni bir olay tipi eklemek kod değişikliği
-gerektirmez.
+gerektirmez. Dosya: [`backend/analysis/src/main/resources/incident-catalog.yml`](backend/analysis/src/main/resources/incident-catalog.yml)
 
 | Olay Tipi | Örnek tetikleyici kelimeler | Metrikler |
 |---|---|---|
@@ -170,6 +170,15 @@ gerektirmez.
 
 İlk üç tip kaynak dokümandaki örneklerden türetilmiştir. `FLOOD` ve `FIRE`, kataloğun kod değişmeden
 genişleyebildiğini göstermek için eklenmiştir.
+
+Katalog **uygulama başlangıcında doğrulanır**: anahtar biçimi ve uzunluğu, tekrar eden anahtarlar,
+kelimesiz ya da metriksiz girdiler, aynı metrik anahtarının farklı etiket taşıması. Bir sorun varsa
+uygulama ayağa kalkmaz ve **bulunan tüm problemleri birden** yazar — yarım tanıyan bir sistem,
+tanımadığı metinleri kataloğun gerçek boşluğu gibi gösterirdi.
+
+Arayüzdeki her seçenek `GET /api/v1/metadata` ucundan beslenir; frontend'in kendi kataloğu yoktur.
+Kullanıcıya görünen etiketler de bu dosyada durur — arayüzde olsalardı yeni bir olay tipi eklemek
+bir frontend sürümü de gerektirirdi.
 
 ---
 

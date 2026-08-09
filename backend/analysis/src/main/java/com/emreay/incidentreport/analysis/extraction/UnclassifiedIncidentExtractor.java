@@ -1,5 +1,6 @@
 package com.emreay.incidentreport.analysis.extraction;
 
+import com.emreay.incidentreport.analysis.catalog.IncidentCatalog;
 import com.emreay.incidentreport.analysis.domain.ClassificationStatus;
 import com.emreay.incidentreport.analysis.domain.DateSource;
 import com.emreay.incidentreport.analysis.domain.ProvinceScope;
@@ -24,9 +25,6 @@ import java.util.Map;
 @Component
 public class UnclassifiedIncidentExtractor implements IncidentExtractor {
 
-    /** Catalog key for "we could not tell what this is" (ADR-006). */
-    public static final String OTHER = "OTHER";
-
     static final String NOT_RECOGNISED =
             "No known event type matched this text. It was stored as OTHER and can be reprocessed "
                     + "once the catalog recognises it.";
@@ -42,7 +40,7 @@ public class UnclassifiedIncidentExtractor implements IncidentExtractor {
                 ProvinceScope.UNKNOWN,
                 null,
                 null,
-                OTHER,
+                IncidentCatalog.UNCLASSIFIED_EVENT_TYPE,
                 ClassificationStatus.UNCLASSIFIED,
                 Map.of(),
                 List.of());

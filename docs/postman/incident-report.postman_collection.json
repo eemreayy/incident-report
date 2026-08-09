@@ -3,7 +3,7 @@
     "name": "Incident Report — Backend API",
     "_postman_id": "b7c1a0d2-4e56-4c31-9f0a-1a2b3c4d5e6f",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Backend API of the incident reporting system, for exercising it without a frontend.\n\n**Start the system first** — from the repository root:\n\n```\ndocker compose up --build\n```\n\nEvery response saved as an example was captured from a running instance, not written by hand.\n\n## How to use it\n\n1. Send one of the requests under *Incident Reports → Submit*. Its test script stores the new id in the `reportId` collection variable.\n2. *Read one* and the requests under *Error contract* then work with no copy-pasting.\n3. Or press **Run** on the collection: every request carries assertions, so the whole thing doubles as a smoke test of the API.\n\n## Submitting returns a receipt, not a result\n\n`POST /incident-reports` answers with the report's id and when it arrived — nothing about what was extracted from it. That data belongs to the module that produces it and is read separately, through `GET /incidents?rawReportId=...` (T-16).\n\nOne extra request is the price. It buys the freedom to move analysis off the request thread, or onto a broker, without a single client having to change: the query simply answers \"not analysed yet\" for a while, and the live stream says when that changes.\n\nText extraction itself is not implemented yet, so every report is currently recorded as `OTHER` / `UNCLASSIFIED`, dated from its submission, with warnings saying so — the system's real behaviour for text it cannot recognise, not a placeholder. None of that appears in these responses yet, because the endpoint that serves it is still to come.\n\n## Endpoints not in this collection yet\n\nThey are designed but not built, so they would only return 404 here:\n\n- `GET /api/v1/incidents?rawReportId=...` — what was extracted from a report, and the traceability direction from raw text to records (T-16)\n- `GET /api/v1/analytics/time-series`, `/analytics/summary` — chart data (T-17)\n- `GET /api/v1/metadata` — event type catalog and province list (T-08)\n- `GET /api/v1/stream/incidents` — SSE stream (T-18)\n- `POST /api/v1/incident-reports/{id}/reprocess` — re-run analysis (T-19)\n\nSee `docs/TASKS.md` for what each task delivers."
+    "description": "Backend API of the incident reporting system, for exercising it without a frontend.\n\n**Start the system first** — from the repository root:\n\n```\ndocker compose up --build\n```\n\nEvery response saved as an example was captured from a running instance, not written by hand.\n\n## How to use it\n\n1. Send one of the requests under *Incident Reports → Submit*. Its test script stores the new id in the `reportId` collection variable.\n2. *Read one* and the requests under *Error contract* then work with no copy-pasting.\n3. Or press **Run** on the collection: every request carries assertions, so the whole thing doubles as a smoke test of the API.\n\n## Submitting returns a receipt, not a result\n\n`POST /incident-reports` answers with the report's id and when it arrived — nothing about what was extracted from it. That data belongs to the module that produces it and is read separately, through `GET /incidents?rawReportId=...` (T-16).\n\nOne extra request is the price. It buys the freedom to move analysis off the request thread, or onto a broker, without a single client having to change: the query simply answers \"not analysed yet\" for a while, and the live stream says when that changes.\n\nText extraction itself is not implemented yet, so every report is currently recorded as `OTHER` / `UNCLASSIFIED`, dated from its submission, with warnings saying so — the system's real behaviour for text it cannot recognise, not a placeholder. None of that appears in these responses yet, because the endpoint that serves it is still to come.\n\n## Endpoints not in this collection yet\n\nThey are designed but not built, so they would only return 404 here:\n\n- `GET /api/v1/incidents?rawReportId=...` — what was extracted from a report, and the traceability direction from raw text to records (T-16)\n- `GET /api/v1/analytics/time-series`, `/analytics/summary` — chart data (T-17)\n- `GET /api/v1/stream/incidents` — SSE stream (T-18)\n- `POST /api/v1/incident-reports/{id}/reprocess` — re-run analysis (T-19)\n\nSee `docs/TASKS.md` for what each task delivers."
   },
   "variable": [
     {
@@ -66,7 +66,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"status\":\"UP\",\"groups\":[\"liveness\",\"readiness\"],\"components\":{\"db\":{\"status\":\"UP\",\"details\":{\"database\":\"PostgreSQL\",\"validationQuery\":\"isValid()\"}},\"diskSpace\":{\"status\":\"UP\",\"details\":{\"total\":62671097856,\"free\":48238923776,\"threshold\":10485760,\"path\":\"/app/.\",\"exists\":true}},\"livenessState\":{\"status\":\"UP\"},\"mongo\":{\"status\":\"UP\",\"details\":{\"maxWireVersion\":27}},\"ping\":{\"status\":\"UP\"},\"readinessState\":{\"status\":\"UP\"},\"ssl\":{\"status\":\"UP\",\"details\":{\"validChains\":[],\"invalidChains\":[]}}}}"
+              "body": "{\"status\":\"UP\",\"groups\":[\"liveness\",\"readiness\"],\"components\":{\"db\":{\"status\":\"UP\",\"details\":{\"database\":\"PostgreSQL\",\"validationQuery\":\"isValid()\"}},\"diskSpace\":{\"status\":\"UP\",\"details\":{\"total\":62671097856,\"free\":47347949568,\"threshold\":10485760,\"path\":\"/app/.\",\"exists\":true}},\"livenessState\":{\"status\":\"UP\"},\"mongo\":{\"status\":\"UP\",\"details\":{\"maxWireVersion\":27}},\"ping\":{\"status\":\"UP\"},\"readinessState\":{\"status\":\"UP\"},\"ssl\":{\"status\":\"UP\",\"details\":{\"validChains\":[],\"invalidChains\":[]}}}}"
             }
           ],
           "event": [
@@ -81,6 +81,101 @@
                   "    pm.expect(pm.response.json().components.db.status).to.eql(\"UP\"));",
                   "pm.test(\"MongoDB is reachable\", () =>",
                   "    pm.expect(pm.response.json().components.mongo.status).to.eql(\"UP\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "description": "What the system recognises, and where every choice in the interface comes from.\n\nThe frontend keeps no catalog of its own: if it did, adding an event type would mean a configuration change *and* a frontend release, and the two would drift apart in between. Labels travel with the keys for the same reason.",
+      "item": [
+        {
+          "name": "Metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/metadata",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "metadata"
+              ]
+            },
+            "description": "Every event type with its metrics, plus the 81 provinces in plate-code order.\n\nAdding an event type touches `backend/analysis/src/main/resources/incident-catalog.yml` and nothing else - no Java change and no migration. A catalog that fails validation stops the application at startup rather than letting it recognise less than it is configured to."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/metadata",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "metadata"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"eventTypes\":[{\"key\":\"EPIDEMIC\",\"label\":\"Salgın\",\"metrics\":[{\"key\":\"NEW_CASE\",\"label\":\"Yeni vaka\"},{\"key\":\"DEATH\",\"label\":\"Can kaybı\"},{\"key\":\"RECOVERED\",\"label\":\"Taburcu\"},{\"key\":\"TEST\",\"label\":\"Yapılan test\"}]},{\"key\":\"EARTHQUAKE\",\"label\":\"Deprem\",\"metrics\":[{\"key\":\"DAMAGED_BUILDING\",\"label\":\"Hasarlı bina\"},{\"key\":\"DEATH\",\"label\":\"Can kaybı\"},{\"key\":\"RESCUED\",\"label\":\"Kurtarılan\"},{\"key\":\"INJURED\",\"label\":\"Yaralı\"}]},{\"key\":\"TRAFFIC_ACCIDENT\",\"label\":\"Trafik kazası\",\"metrics\":[{\"key\":\"ACCIDENT_COUNT\",\"label\":\"Kaza sayısı\"},{\"key\":\"DEATH\",\"label\":\"Can kaybı\"},{\"key\":\"INJURED\",\"label\":\"Yaralı\"}]},{\"key\":\"FLOOD\",\"label\":\"Sel\",\"metrics\":[{\"key\":\"DEATH\",\"label\":\"Can kaybı\"},{\"key\":\"INJURED\",\"label\":\"Yaralı\"},{\"key\":\"EVACUATED\",\"label\":\"Tahliye edilen\"},{\"key\":\"AFFECTED_BUILDING\",\"label\":\"Etkilenen bina\"}]},{\"key\":\"FIRE\",\"label\":\"Yangın\",\"metrics\":[{\"key\":\"DEATH\",\"label\":\"Can kaybı\"},{\"key\":\"INJURED\",\"label\":\"Yaralı\"},{\"key\":\"EVACUATED\",\"label\":\"Tahliye edilen\"},{\"key\":\"AFFECTED_BUILDING\",\"label\":\"Etkilenen bina\"}]}],\"provinces\":[{\"code\":1,\"name\":\"Adana\"},{\"code\":2,\"name\":\"Adıyaman\"},{\"code\":3,\"name\":\"Afyonkarahisar\"},{\"code\":4,\"name\":\"Ağrı\"},{\"code\":5,\"name\":\"Amasya\"},{\"code\":6,\"name\":\"Ankara\"},{\"code\":7,\"name\":\"Antalya\"},{\"code\":8,\"name\":\"Artvin\"},{\"code\":9,\"name\":\"Aydın\"},{\"code\":10,\"name\":\"Balıkesir\"},{\"code\":11,\"name\":\"Bilecik\"},{\"code\":12,\"name\":\"Bingöl\"},{\"code\":13,\"name\":\"Bitlis\"},{\"code\":14,\"name\":\"Bolu\"},{\"code\":15,\"name\":\"Burdur\"},{\"code\":16,\"name\":\"Bursa\"},{\"code\":17,\"name\":\"Çanakkale\"},{\"code\":18,\"name\":\"Çankırı\"},{\"code\":19,\"name\":\"Çorum\"},{\"code\":20,\"name\":\"Denizli\"},{\"code\":21,\"name\":\"Diyarbakır\"},{\"code\":22,\"name\":\"Edirne\"},{\"code\":23,\"name\":\"Elazığ\"},{\"code\":24,\"name\":\"Erzincan\"},{\"code\":25,\"name\":\"Erzurum\"},{\"code\":26,\"name\":\"Eskişehir\"},{\"code\":27,\"name\":\"Gaziantep\"},{\"code\":28,\"name\":\"Giresun\"},{\"code\":29,\"name\":\"Gümüşhane\"},{\"code\":30,\"name\":\"Hakkari\"},{\"code\":31,\"name\":\"Hatay\"},{\"code\":32,\"name\":\"Isparta\"},{\"code\":33,\"name\":\"Mersin\"},{\"code\":34,\"name\":\"İstanbul\"},{\"code\":35,\"name\":\"İzmir\"},{\"code\":36,\"name\":\"Kars\"},{\"code\":37,\"name\":\"Kastamonu\"},{\"code\":38,\"name\":\"Kayseri\"},{\"code\":39,\"name\":\"Kırklareli\"},{\"code\":40,\"name\":\"Kırşehir\"},{\"code\":41,\"name\":\"Kocaeli\"},{\"code\":42,\"name\":\"Konya\"},{\"code\":43,\"name\":\"Kütahya\"},{\"code\":44,\"name\":\"Malatya\"},{\"code\":45,\"name\":\"Manisa\"},{\"code\":46,\"name\":\"Kahramanmaraş\"},{\"code\":47,\"name\":\"Mardin\"},{\"code\":48,\"name\":\"Muğla\"},{\"code\":49,\"name\":\"Muş\"},{\"code\":50,\"name\":\"Nevşehir\"},{\"code\":51,\"name\":\"Niğde\"},{\"code\":52,\"name\":\"Ordu\"},{\"code\":53,\"name\":\"Rize\"},{\"code\":54,\"name\":\"Sakarya\"},{\"code\":55,\"name\":\"Samsun\"},{\"code\":56,\"name\":\"Siirt\"},{\"code\":57,\"name\":\"Sinop\"},{\"code\":58,\"name\":\"Sivas\"},{\"code\":59,\"name\":\"Tekirdağ\"},{\"code\":60,\"name\":\"Tokat\"},{\"code\":61,\"name\":\"Trabzon\"},{\"code\":62,\"name\":\"Tunceli\"},{\"code\":63,\"name\":\"Şanlıurfa\"},{\"code\":64,\"name\":\"Uşak\"},{\"code\":65,\"name\":\"Van\"},{\"code\":66,\"name\":\"Yozgat\"},{\"code\":67,\"name\":\"Zonguldak\"},{\"code\":68,\"name\":\"Aksaray\"},{\"code\":69,\"name\":\"Bayburt\"},{\"code\":70,\"name\":\"Karaman\"},{\"code\":71,\"name\":\"Kırıkkale\"},{\"code\":72,\"name\":\"Batman\"},{\"code\":73,\"name\":\"Şırnak\"},{\"code\":74,\"name\":\"Bartın\"},{\"code\":75,\"name\":\"Ardahan\"},{\"code\":76,\"name\":\"Iğdır\"},{\"code\":77,\"name\":\"Yalova\"},{\"code\":78,\"name\":\"Karabük\"},{\"code\":79,\"name\":\"Kilis\"},{\"code\":80,\"name\":\"Osmaniye\"},{\"code\":81,\"name\":\"Düzce\"}]}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responds 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"carries every event type with something showable\", () => {",
+                  "    pm.expect(body.eventTypes).to.be.an(\"array\").that.is.not.empty;",
+                  "    body.eventTypes.forEach(eventType => {",
+                  "        pm.expect(eventType.key, \"key\").to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(eventType.label, `label for ${eventType.key}`).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(eventType.metrics, `metrics of ${eventType.key}`).to.be.an(\"array\").that.is.not.empty;",
+                  "        eventType.metrics.forEach(metric =>",
+                  "            pm.expect(metric.label, `label for ${metric.key}`).to.be.a(\"string\").and.not.empty);",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test(\"lists all 81 provinces, ordered by plate code\", () => {",
+                  "    pm.expect(body.provinces).to.have.lengthOf(81);",
+                  "    const codes = body.provinces.map(p => p.code);",
+                  "    pm.expect(codes).to.eql([...codes].sort((a, b) => a - b));",
+                  "});",
+                  "",
+                  "// Trigger keywords drive extraction, not presentation. Publishing them would turn",
+                  "// an internal tuning detail into something a client could start depending on.",
+                  "pm.test(\"does not publish the trigger keywords\", () =>",
+                  "    pm.expect(pm.response.text()).to.not.include(\"keywords\"));",
+                  "",
+                  "// OTHER is the absence of a match, not a choice to offer a user.",
+                  "pm.test(\"does not offer the unclassified fallback\", () =>",
+                  "    pm.expect(body.eventTypes.map(e => e.key)).to.not.include(\"OTHER\"));"
                 ]
               }
             }
@@ -166,11 +261,11 @@
                 },
                 {
                   "key": "Location",
-                  "value": "/api/v1/incident-reports/6a786821fbb52fd08cf46a37"
+                  "value": "/api/v1/incident-reports/6a78ad14f6fe3fa987f9ffc3"
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a786821fbb52fd08cf46a37\",\"submittedAt\":\"2026-08-09T11:44:33.952Z\"}"
+              "body": "{\"id\":\"6a78ad14f6fe3fa987f9ffc3\",\"submittedAt\":\"2026-08-09T16:38:44.776Z\"}"
             }
           ],
           "event": [
@@ -280,11 +375,11 @@
                 },
                 {
                   "key": "Location",
-                  "value": "/api/v1/incident-reports/6a786821fbb52fd08cf46a38"
+                  "value": "/api/v1/incident-reports/6a78ad14f6fe3fa987f9ffc4"
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a786821fbb52fd08cf46a38\",\"submittedAt\":\"2026-08-09T11:44:33.970Z\"}"
+              "body": "{\"id\":\"6a78ad14f6fe3fa987f9ffc4\",\"submittedAt\":\"2026-08-09T16:38:44.862Z\"}"
             }
           ],
           "event": [
@@ -394,11 +489,11 @@
                 },
                 {
                   "key": "Location",
-                  "value": "/api/v1/incident-reports/6a786821fbb52fd08cf46a39"
+                  "value": "/api/v1/incident-reports/6a78ad14f6fe3fa987f9ffc5"
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a786821fbb52fd08cf46a39\",\"submittedAt\":\"2026-08-09T11:44:33.983Z\"}"
+              "body": "{\"id\":\"6a78ad14f6fe3fa987f9ffc5\",\"submittedAt\":\"2026-08-09T16:38:44.871Z\"}"
             }
           ],
           "event": [
@@ -482,7 +577,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a786821fbb52fd08cf46a37\",\"text\":\"20.04.2020 tarihinde Ankara'da sağlık yetkilileri tarafından yapılan açıklamada, salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi. 1 kişi vefat etti. 5 kişi tedavi sonrası taburcu edildi.\",\"submittedAt\":\"2026-08-09T11:44:33.952Z\"}"
+              "body": "{\"id\":\"6a78ad14f6fe3fa987f9ffc3\",\"text\":\"20.04.2020 tarihinde Ankara'da sağlık yetkilileri tarafından yapılan açıklamada, salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi. 1 kişi vefat etti. 5 kişi tedavi sonrası taburcu edildi.\",\"submittedAt\":\"2026-08-09T16:38:44.776Z\"}"
             }
           ],
           "event": [
@@ -582,7 +677,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"content\":[{\"id\":\"6a786821fbb52fd08cf46a39\",\"text\":\"Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi. Bursa'da 1, Kocaeli'nde ise 2 kişi kazalarda hayatını kaybetti. Her iki ilde toplam 10 kişi yaralı olarak hastaneye kaldırıldı.\",\"submittedAt\":\"2026-08-09T11:44:33.983Z\"},{\"id\":\"6a786821fbb52fd08cf46a38\",\"text\":\"3 Mayıs 2020 günü İzmir'de meydana gelen depremde on iki bina hasar gördü. İki kişi hayatını kaybederken, dokuz kişi enkazdan sağ olarak kurtarıldı. Ayrıca 40 kişi hafif yaralı olarak tedavi altına alındı.\",\"submittedAt\":\"2026-08-09T11:44:33.970Z\"}],\"page\":0,\"size\":2,\"totalElements\":4,\"totalPages\":2}"
+              "body": "{\"content\":[{\"id\":\"6a78ad14f6fe3fa987f9ffc5\",\"text\":\"Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi. Bursa'da 1, Kocaeli'nde ise 2 kişi kazalarda hayatını kaybetti. Her iki ilde toplam 10 kişi yaralı olarak hastaneye kaldırıldı.\",\"submittedAt\":\"2026-08-09T16:38:44.871Z\"},{\"id\":\"6a78ad14f6fe3fa987f9ffc4\",\"text\":\"3 Mayıs 2020 günü İzmir'de meydana gelen depremde on iki bina hasar gördü. İki kişi hayatını kaybederken, dokuz kişi enkazdan sağ olarak kurtarıldı. Ayrıca 40 kişi hafif yaralı olarak tedavi altına alındı.\",\"submittedAt\":\"2026-08-09T16:38:44.862Z\"}],\"page\":0,\"size\":2,\"totalElements\":3,\"totalPages\":2}"
             }
           ],
           "event": [
@@ -688,7 +783,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/report.text.blank\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must not be empty.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.blank\",\"timestamp\":\"2026-08-09T11:44:34.033598512Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/report.text.blank\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must not be empty.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.blank\",\"timestamp\":\"2026-08-09T16:38:44.912885210Z\"}"
             }
           ],
           "event": [
@@ -791,7 +886,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/report.text.too-long\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must be at most 10000 characters, got 10001.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.too-long\",\"timestamp\":\"2026-08-09T11:44:34.041305929Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/report.text.too-long\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must be at most 10000 characters, got 10001.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.too-long\",\"timestamp\":\"2026-08-09T16:38:44.919614376Z\"}"
             }
           ],
           "event": [
@@ -880,7 +975,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/resource.not-found\",\"title\":\"Not found\",\"status\":404,\"detail\":\"Incident report 652f1a2b3c4d5e6f70819200 was not found.\",\"instance\":\"/api/v1/incident-reports/652f1a2b3c4d5e6f70819200\",\"code\":\"resource.not-found\",\"timestamp\":\"2026-08-09T11:44:34.045016387Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/resource.not-found\",\"title\":\"Not found\",\"status\":404,\"detail\":\"Incident report 652f1a2b3c4d5e6f70819200 was not found.\",\"instance\":\"/api/v1/incident-reports/652f1a2b3c4d5e6f70819200\",\"code\":\"resource.not-found\",\"timestamp\":\"2026-08-09T16:38:44.922238960Z\"}"
             }
           ],
           "event": [
@@ -983,7 +1078,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/request.bad-request\",\"title\":\"Bad Request\",\"status\":400,\"detail\":\"Failed to read request\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.bad-request\",\"timestamp\":\"2026-08-09T11:44:34.048520970Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/request.bad-request\",\"title\":\"Bad Request\",\"status\":400,\"detail\":\"Failed to read request\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.bad-request\",\"timestamp\":\"2026-08-09T16:38:44.926022543Z\"}"
             }
           ],
           "event": [
@@ -1060,7 +1155,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/request.method-not-allowed\",\"title\":\"Method Not Allowed\",\"status\":405,\"detail\":\"Method 'DELETE' is not supported.\",\"instance\":\"/api/v1/incident-reports/6a786821fbb52fd08cf46a37\",\"code\":\"request.method-not-allowed\",\"timestamp\":\"2026-08-09T11:44:34.051711220Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/request.method-not-allowed\",\"title\":\"Method Not Allowed\",\"status\":405,\"detail\":\"Method 'DELETE' is not supported.\",\"instance\":\"/api/v1/incident-reports/6a78ad14f6fe3fa987f9ffc3\",\"code\":\"request.method-not-allowed\",\"timestamp\":\"2026-08-09T16:38:44.927745960Z\"}"
             }
           ],
           "event": [
@@ -1163,7 +1258,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/request.unsupported-media-type\",\"title\":\"Unsupported Media Type\",\"status\":415,\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.unsupported-media-type\",\"timestamp\":\"2026-08-09T11:44:34.054705345Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/request.unsupported-media-type\",\"title\":\"Unsupported Media Type\",\"status\":415,\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.unsupported-media-type\",\"timestamp\":\"2026-08-09T16:38:44.929364168Z\"}"
             }
           ],
           "event": [

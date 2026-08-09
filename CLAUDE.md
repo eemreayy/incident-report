@@ -39,7 +39,10 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 cd backend
 ./mvnw verify                          # all modules: build + tests + coverage gate
 ./mvnw -pl analysis -am verify         # one module and what it depends on
-./mvnw test -Dtest=ClassName           # single test class
+./mvnw test -Dtest=ClassName -Dsurefire.failIfNoTests=false \
+            -Dsurefire.failIfNoSpecifiedTests=false     # one test class; the two flags are needed
+                                       # because every other module then runs nothing, and the
+                                       # build normally treats that as a module without tests
 ./mvnw -pl app spring-boot:run         # run locally, `local` profile is the default
 java -jar backend/app/target/incident-report.jar
 curl -s localhost:8080/actuator/health

@@ -1,5 +1,6 @@
 package com.emreay.incidentreport.analysis.extraction;
 
+import com.emreay.incidentreport.analysis.catalog.IncidentCatalog;
 import com.emreay.incidentreport.analysis.domain.ClassificationStatus;
 import com.emreay.incidentreport.analysis.domain.DateSource;
 import com.emreay.incidentreport.analysis.domain.ProvinceScope;
@@ -25,7 +26,7 @@ class UnclassifiedIncidentExtractorTest {
         ExtractionResult result = extractor.extract("20.04.2020 Ankara'da 15 vaka", REFERENCE_DATE);
 
         assertThat(result.incidents()).singleElement().satisfies(incident -> {
-            assertThat(incident.eventType()).isEqualTo("OTHER");
+            assertThat(incident.eventType()).isEqualTo(IncidentCatalog.UNCLASSIFIED_EVENT_TYPE);
             assertThat(incident.classification()).isEqualTo(ClassificationStatus.UNCLASSIFIED);
             assertThat(incident.provinceScope()).isEqualTo(ProvinceScope.UNKNOWN);
             assertThat(incident.metrics()).isEmpty();

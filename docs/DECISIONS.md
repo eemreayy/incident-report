@@ -208,6 +208,16 @@ Her üç adımda da `analysis` modülünün dinleyici kodu neredeyse aynı kalı
 
 **Sonuçlar.** Konfigürasyon hatası çalışma zamanında ortaya çıkar; bu yüzden katalog başlangıçta doğrulanmalı ve hatalı katalogda uygulama ayağa kalkmamalıdır. Tip güvenliği enum'a göre zayıftır.
 
+**T-08 uygulaması — iki ek karar.**
+
+*Kullanıcıya görünen etiketler katalogda.* Katalog yalnızca anahtar taşısaydı, `EPIDEMIC → "Salgın"` eşlemesi arayüzde kalırdı ve `FLOOD` eklemek konfigürasyon değişikliği **ve** bir frontend sürümü gerektirirdi — NFR-08'in ve `CLAUDE.md` kural 10'un ("frontend'in sabit kataloğu yok") ikisini birden ihlal ederdi. Bu yüzden etiketler katalogda ve metadata ucundan yayınlanıyor. `CLAUDE.md`'nin "kullanıcıya görünen metinler Türkçe, tek yerde tutulur" carve-out'u tam olarak bu durumu tarif ediyor: etiket içerik, kod değil.
+
+Sınır şöyle çizildi: **kendi kendine büyüyen veri** (olay tipleri, metrikler, iller) metadata ucundan gelir; **yalnızca kod değişince değişen yapısal enum'lar** (`ProvinceScope`, `DateSource`, `ClassificationStatus`) tipli istemci sözleşmesinin parçasıdır. İkincisi değiştiğinde zaten bir frontend değişikliği gerekiyor, dolayısıyla arayüzde durmaları bir maliyet yaratmıyor.
+
+*Tetikleyici anahtar kelimeler yayınlanmıyor.* Çıkarımı besliyorlar, sunumu değil; uçtan döndürmek bir ayar detayını istemcinin dayanabileceği bir sözleşmeye çevirirdi.
+
+**Doğrulama.** Anahtarlar `varchar(48)` kolonlara yazıldığı için uzunluk da başlangıçta kontrol ediliyor — aksi halde hata, aylar sonra bir metni analiz ederken insert sırasında patlardı. Aynı metrik anahtarının olay tipleri arasında farklı etiket taşıması reddediliyor: `DEATH` gösteren bir grafik göstergesi aynı anda iki şey söyleyemez. Bulunan **tüm** problemler tek seferde bildiriliyor; her yeniden başlatmada bir hata göstermek, beş hatalı bir dosyayı beş kez başlatmak demekti.
+
 **İleride.** Katalog veri tabanına taşınıp yönetim arayüzüyle çalışma zamanında düzenlenebilir hale getirilebilir; her katalog sürümü versiyonlanır ve olay kayıtları hangi katalog sürümüyle üretildiklerini taşır. Bu, ADR-012'deki reprocess ile birleşince "kataloğu güncelle, geçmişi yeniden değerlendir" akışını tam olarak mümkün kılar.
 
 ---

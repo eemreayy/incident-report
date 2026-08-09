@@ -4,7 +4,7 @@ Backend API'sini frontend olmadan denemek için hazırlanmış koleksiyon.
 
 | Dosya | İçerik |
 |---|---|
-| `incident-report.postman_collection.json` | 12 istek, 3 klasör, her istekte örnek cevap ve assertion |
+| `incident-report.postman_collection.json` | 13 istek, 4 klasör, her istekte örnek cevap ve assertion |
 
 Koleksiyondaki **her örnek cevap çalışan sistemden yakalanmıştır**, elle yazılmamıştır.
 
@@ -44,6 +44,11 @@ zamanda API'nin duman testi olarak çalışır.
 Uygulamanın ve **her iki veri tabanının** ayrı ayrı sağlık durumu. Bir arıza olduğunda neyin
 bozulduğunu gösterir.
 
+### Catalog
+`GET /api/v1/metadata` — sistemin tanıdığı olay tipleri, metrikleri ve 81 il. Arayüzdeki her
+seçeneğin tek kaynağı burası; frontend'in kendi kataloğu yok. Yeni olay tipi eklemek yalnızca
+`backend/analysis/src/main/resources/incident-catalog.yml` dosyasını değiştirmek demek.
+
 ### Incident Reports
 Ham metin gönderme ve geri okuma. Üç Submit isteği, kaynak dokümandaki **üç örnek metni** taşır:
 
@@ -74,7 +79,7 @@ Spring'in kendisinden gelsin.
 npx newman run docs/postman/incident-report.postman_collection.json
 ```
 
-Beklenen: **12 istek, 49 assertion, 0 hata.**
+Beklenen: **13 istek, 54 assertion, 0 hata.**
 
 ---
 
@@ -108,7 +113,6 @@ Tasarlandı ama yazılmadı; eklenseler 404 dönerlerdi:
 |---|---|---|
 | `GET /api/v1/incidents` | Yapılandırılmış kayıtlar, filtreli ve sayfalı | T-16 |
 | `GET /api/v1/analytics/time-series` · `/summary` | Grafik verisi, kümülatif dahil | T-17 |
-| `GET /api/v1/metadata` | Olay tipi kataloğu ve il listesi | T-08 |
 | `GET /api/v1/stream/incidents` | SSE akışı | T-18 |
 | `POST /api/v1/incident-reports/{id}/reprocess` | Yeniden analiz | T-19 |
 

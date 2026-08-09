@@ -1,0 +1,11 @@
+# Two entries claim the same key. One of them would silently win, and the other would look like a
+# type the catalog simply does not cover.
+event-types:
+  - key: EPIDEMIC
+    label: Salgın
+    keywords: [salgın]
+    metrics: [{key: NEW_CASE, label: Yeni vaka, keywords: [vaka]}]
+  - key: EPIDEMIC
+    label: Salgın (tekrar)
+    keywords: [pandemi]
+    metrics: [{key: NEW_CASE, label: Yeni vaka, keywords: [vaka]}]

@@ -331,13 +331,34 @@ Yeni Flyway migration. Reprocess aynı kaydın üzerine yazar, ikinci satır aç
 
 ## Faz 3 — Analiz Motoru *(projenin asıl zorluğu)*
 
-### ☐ T-08 · Olay tipi kataloğu (YAML) ve metadata ucu
+### ☑ T-08 · Olay tipi kataloğu (YAML) ve metadata ucu
 Olay tipleri, tetikleyici anahtar kelimeler ve metrik tanımları YAML'dan yüklenir; **uygulama
 başlangıcında doğrulanır** ve katalog hatalıysa uygulama ayağa kalkmaz. `GET /api/v1/metadata`
 kataloğu ve il listesini sunar.
 - **Bağımlılık:** T-01
 - **Karşılar:** FR-16, NFR-08 · **İlgili karar:** ADR-007
 - **DoD:** Yeni olay tipi eklemek yalnızca YAML değişikliği; bozuk katalogda uygulama açık hata mesajıyla ayağa kalkmıyor.
+- **Sonuç:** 142 test geçiyor, coverage **%98**. Katalog
+  `backend/analysis/src/main/resources/incident-catalog.yml`'de; 5 olay tipi, 10 farklı metrik.
+  `GET /api/v1/metadata` kataloğu ve 81 ili plaka sırasıyla sunuyor.
+- **DoD fiilen doğrulandı (çalışan sistemde):**
+  - *Yeni tip yalnızca YAML ile:* `AVALANCHE` (Çığ) tanımlı bir katalog dosyası gösterildi,
+    uygulama kod değişmeden onu tanıdı ve metadata ucundan yayınladı.
+  - *Bozuk katalog:* geçersiz bir dosyayla container `exitCode=1` ile durdu ve **dört problemi
+    birden** listeledi (anahtar formatı, etiket yok, kelime yok, metrik yok).
+- **Etiketler katalogda, arayüzde değil.** Aksi halde `FLOOD` eklemek bir frontend sürümü de
+  gerektirirdi. Sınır: kendi kendine büyüyen veri uçtan gelir, yalnızca kod değişince değişen
+  yapısal enum'lar tipli sözleşmede kalır. Gerekçe ADR-007'ye işlendi.
+- **Anahtar kelimeler yayınlanmıyor** — çıkarımı besliyorlar, sunumu değil.
+- **Doğrulama startup'ta ve kapsamlı:** anahtar uzunluğu `varchar(48)` kolon genişliğine karşı
+  kontrol ediliyor (aksi halde hata aylar sonra insert'te patlardı); aynı metrik anahtarının
+  farklı etiket taşıması reddediliyor; tüm problemler tek seferde bildiriliyor.
+- **Postman:** `Catalog` klasörü eklendi (13 istek, 54 assertion).
+- **Yan düzeltme:** T-05'te eklediğim `failIfNoTests`, `CLAUDE.md`'de belgelenen
+  `./mvnw test -Dtest=ClassName` komutunu kırıyordu. Property'ye çevrildi ve komut düzeltildi;
+  tam build'de kapı aynen açık kalıyor.
+- **Test altyapısı:** `Province` mock'lamak üç kez iç içe stubbing tuzağına düşürdü.
+  `ProvinceFixture` gerçek nesne kuruyor; tuzak tamamen kalktı.
 
 ### ☐ T-09 · Türkçe metin normalizasyonu ve cümle bölme
 Locale duyarlı büyük/küçük harf (i/İ/ı/I), Unicode normalizasyonu, noktalama ve apostrof işleme,
