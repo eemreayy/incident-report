@@ -41,22 +41,26 @@ public class IncidentReportController {
     }
 
     /**
-     * Accepts a report, stores it and has it analysed.
+     * Accepts a report and stores it.
      *
-     * <p>Answers <strong>201 Created</strong> rather than 202 Accepted: analysis runs synchronously
-     * inside this call (ADR-003), so by the time the response is written the work is done. 202
-     * would promise a result that arrives later, which is not what happens.
+     * <p>Answers <strong>201 Created</strong> with a receipt — the report's id and when it arrived
+     * — and nothing about what was extracted from it (ADR-021). What the analysis found is read
+     * through {@code GET /incidents?rawReportId=...}, because that data belongs to the module that
+     * produces it.
      *
-     * <p>A report whose analysis failed is still a created report — the text was stored, which is
-     * the guarantee that matters. The failure is reported in {@code warnings}, not as an error
-     * status, because the submission itself succeeded.
+     * <p>201 rather than 202: the resource this endpoint creates is the raw report, and by the time
+     * the response is written it exists. Whether analysis has finished is a separate question with
+     * its own answer, which is precisely why it is not answered here.
+     *
+     * <p>A submission succeeds even when analysis does not. The text was stored, which is the
+     * guarantee that matters; the failure is recorded where the analysis outcome lives.
      */
     @PostMapping
-    public ResponseEntity<IncidentReportResponse> submit(@RequestBody SubmitIncidentReportRequest request) {
+    public ResponseEntity<IncidentReportReceipt> submit(@RequestBody SubmitIncidentReportRequest request) {
         RawIncidentReport stored = ingestionService.submit(request.text());
         return ResponseEntity
                 .created(URI.create("/api/v1/incident-reports/" + stored.id()))
-                .body(IncidentReportResponse.from(stored));
+                .body(IncidentReportReceipt.from(stored));
     }
 
     @GetMapping("/{id}")

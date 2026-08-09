@@ -1,11 +1,13 @@
 package com.emreay.incidentreport.analysis.service;
 
+import com.emreay.incidentreport.analysis.domain.AnalysisResult;
 import com.emreay.incidentreport.analysis.domain.Incident;
 import com.emreay.incidentreport.analysis.domain.Province;
 import com.emreay.incidentreport.analysis.extraction.ExtractedIncident;
 import com.emreay.incidentreport.analysis.extraction.ExtractedKeyword;
 import com.emreay.incidentreport.analysis.extraction.ExtractionResult;
 import com.emreay.incidentreport.analysis.extraction.IncidentExtractor;
+import com.emreay.incidentreport.analysis.repository.AnalysisResultRepository;
 import com.emreay.incidentreport.analysis.repository.IncidentRepository;
 import com.emreay.incidentreport.analysis.repository.ProvinceRepository;
 import org.slf4j.Logger;
@@ -13,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -43,13 +46,19 @@ public class AnalysisService {
     private final IncidentExtractor extractor;
     private final IncidentRepository incidents;
     private final ProvinceRepository provinces;
+    private final AnalysisResultRepository results;
+    private final Clock clock;
 
     public AnalysisService(IncidentExtractor extractor,
                            IncidentRepository incidents,
-                           ProvinceRepository provinces) {
+                           ProvinceRepository provinces,
+                           AnalysisResultRepository results,
+                           Clock clock) {
         this.extractor = extractor;
         this.incidents = incidents;
         this.provinces = provinces;
+        this.results = results;
+        this.clock = clock;
     }
 
     /**
@@ -72,10 +81,39 @@ public class AnalysisService {
                 .toList();
         incidents.saveAll(toStore);
 
+        record(AnalysisResult.analyzed(rawReportId, clock.instant(), toStore.size(), result.warnings()));
+
         log.info("analysed raw report {}: {} records, {} warnings",
                 rawReportId, toStore.size(), result.warnings().size());
 
         return new AnalysisOutcome(toStore.size(), result.warnings());
+    }
+
+    /**
+     * Records that reading a report threw.
+     *
+     * <p>A separate transaction on purpose: the one {@link #analyze} opened has rolled back by the
+     * time this runs, taking any half-written records with it. What must survive is the fact that
+     * the attempt failed — otherwise the report would look untouched and nothing would ever tell
+     * anyone to look at it again (FR-15).
+     *
+     * <p>The raw text is not involved either way. It was stored before analysis began and is not
+     * written to again (ADR-005, ADR-021).
+     */
+    @Transactional
+    public void recordFailure(String rawReportId, String failureReason) {
+        record(AnalysisResult.failed(rawReportId, clock.instant(), failureReason));
+    }
+
+    /**
+     * Writes the outcome, replacing any earlier one for the same report.
+     *
+     * <p>Reprocessing asks the same question again rather than a new one, so a second row would
+     * leave two current answers and force every reader to work out which is real.
+     */
+    private void record(AnalysisResult outcome) {
+        results.findByRawReportId(outcome.getRawReportId())
+                .ifPresentOrElse(existing -> existing.replaceWith(outcome), () -> results.save(outcome));
     }
 
     /**

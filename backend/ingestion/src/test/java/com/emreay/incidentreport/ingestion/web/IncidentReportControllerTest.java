@@ -1,6 +1,5 @@
 package com.emreay.incidentreport.ingestion.web;
 
-import com.emreay.incidentreport.ingestion.domain.ProcessingStatus;
 import com.emreay.incidentreport.ingestion.domain.RawIncidentReport;
 import com.emreay.incidentreport.ingestion.service.IngestionService;
 import org.junit.jupiter.api.Test;
@@ -59,7 +58,7 @@ class IncidentReportControllerTest {
 
     @Test
     void submittingAReportAnswersCreatedAndPointsAtIt() throws Exception {
-        when(ingestionService.submit(TEXT)).thenReturn(received());
+        when(ingestionService.submit(TEXT)).thenReturn(stored());
 
         mvc.perform(post("/api/v1/incident-reports")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -67,17 +66,32 @@ class IncidentReportControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/incident-reports/" + ID))
                 .andExpect(jsonPath("$.id").value(ID))
-                .andExpect(jsonPath("$.text").value(TEXT))
-                .andExpect(jsonPath("$.status").value("RECEIVED"))
-                .andExpect(jsonPath("$.submittedAt").exists())
-                .andExpect(jsonPath("$.warnings").isEmpty());
+                .andExpect(jsonPath("$.submittedAt").exists());
+    }
+
+    /**
+     * A receipt, not a result (ADR-021). What the analysis found is read separately, so none of its
+     * vocabulary may appear here — and neither may the text, which the caller already has.
+     */
+    @Test
+    void theReceiptSaysNothingAboutTheAnalysis() throws Exception {
+        when(ingestionService.submit(TEXT)).thenReturn(stored());
+
+        mvc.perform(post("/api/v1/incident-reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(TEXT)))
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.warnings").doesNotExist())
+                .andExpect(jsonPath("$.analyzedAt").doesNotExist())
+                .andExpect(jsonPath("$.failureReason").doesNotExist())
+                .andExpect(jsonPath("$.text").doesNotExist());
     }
 
     /** The text must reach the service exactly as it arrived — no trimming on the way in. */
     @Test
     void passesTheTextThroughUntouched() throws Exception {
         String padded = "  Ankara'da 15 vaka.  ";
-        when(ingestionService.submit(padded)).thenReturn(received());
+        when(ingestionService.submit(padded)).thenReturn(stored());
 
         mvc.perform(post("/api/v1/incident-reports")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -86,38 +100,9 @@ class IncidentReportControllerTest {
         verify(ingestionService).submit(padded);
     }
 
-    /**
-     * A failed analysis is still a successful submission — the text was stored, which is the
-     * guarantee that matters. The caller learns about it through warnings, not through an error.
-     */
-    @Test
-    void aStoredReportWhoseAnalysisFailedIsStillCreated() throws Exception {
-        when(ingestionService.submit(TEXT)).thenReturn(failedReport());
-
-        mvc.perform(post("/api/v1/incident-reports")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(TEXT)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("FAILED"))
-                .andExpect(jsonPath("$.warnings.length()").value(1));
-    }
-
-    /** The stored failure reason is an exception type and message; it belongs in the log, not here. */
-    @Test
-    void neverLeaksTheInternalFailureReason() throws Exception {
-        when(ingestionService.submit(TEXT)).thenReturn(failedReport());
-
-        String response = mvc.perform(post("/api/v1/incident-reports")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body(TEXT)))
-                .andReturn().getResponse().getContentAsString();
-
-        assertThat(response).doesNotContain("IllegalStateException", "extractor exploded");
-    }
-
     @Test
     void readsASingleReport() throws Exception {
-        when(ingestionService.findById(ID)).thenReturn(Optional.of(received()));
+        when(ingestionService.findById(ID)).thenReturn(Optional.of(stored()));
 
         mvc.perform(get("/api/v1/incident-reports/{id}", ID))
                 .andExpect(status().isOk())
@@ -129,7 +114,7 @@ class IncidentReportControllerTest {
     @Test
     void listsReportsNewestFirstByDefault() throws Exception {
         when(ingestionService.findAll(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(received()), PageRequest.of(0, 20), 1));
+                .thenReturn(new PageImpl<>(List.of(stored()), PageRequest.of(0, 20), 1));
 
         mvc.perform(get("/api/v1/incident-reports"))
                 .andExpect(status().isOk())
@@ -167,11 +152,7 @@ class IncidentReportControllerTest {
         return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
-    private static RawIncidentReport received() {
-        return new RawIncidentReport(ID, TEXT, SUBMITTED_AT, ProcessingStatus.RECEIVED, null, null, List.of());
-    }
-
-    private static RawIncidentReport failedReport() {
-        return received().failed(SUBMITTED_AT, "java.lang.IllegalStateException: extractor exploded");
+    private static RawIncidentReport stored() {
+        return new RawIncidentReport(ID, TEXT, SUBMITTED_AT);
     }
 }

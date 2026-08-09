@@ -3,7 +3,7 @@
     "name": "Incident Report — Backend API",
     "_postman_id": "b7c1a0d2-4e56-4c31-9f0a-1a2b3c4d5e6f",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Backend API of the incident reporting system, for exercising it without a frontend.\n\n**Start the system first** — from the repository root:\n\n```\ndocker compose up --build\n```\n\nEvery response saved as an example was captured from a running instance, not written by hand.\n\n## How to use it\n\n1. Send one of the requests under *Incident Reports → Submit*. Its test script stores the new id in the `reportId` collection variable.\n2. *Read one* and the requests under *Error contract* then work with no copy-pasting.\n3. Or press **Run** on the collection: every request carries assertions, so the whole thing doubles as a smoke test of the API.\n\n## What analysis returns today\n\nText extraction is not implemented yet. Every report is therefore stored as `OTHER` / `UNCLASSIFIED`, dated from its submission, and answered with warnings that say so — which is the system's real behaviour for text it cannot recognise, not a placeholder. The examples show exactly that.\n\n## Endpoints not in this collection yet\n\nThey are designed but not built, so they would only return 404 here:\n\n- `GET /api/v1/incidents` — structured records, filtered and paged (T-16)\n- `GET /api/v1/analytics/time-series`, `/analytics/summary` — chart data (T-17)\n- `GET /api/v1/metadata` — event type catalog and province list (T-08)\n- `GET /api/v1/stream/incidents` — SSE stream (T-18)\n- `POST /api/v1/incident-reports/{id}/reprocess` — re-run analysis (T-19)\n\nSee `docs/TASKS.md` for what each task delivers."
+    "description": "Backend API of the incident reporting system, for exercising it without a frontend.\n\n**Start the system first** — from the repository root:\n\n```\ndocker compose up --build\n```\n\nEvery response saved as an example was captured from a running instance, not written by hand.\n\n## How to use it\n\n1. Send one of the requests under *Incident Reports → Submit*. Its test script stores the new id in the `reportId` collection variable.\n2. *Read one* and the requests under *Error contract* then work with no copy-pasting.\n3. Or press **Run** on the collection: every request carries assertions, so the whole thing doubles as a smoke test of the API.\n\n## Submitting returns a receipt, not a result\n\n`POST /incident-reports` answers with the report's id and when it arrived — nothing about what was extracted from it. That data belongs to the module that produces it and is read separately, through `GET /incidents?rawReportId=...` (T-16).\n\nOne extra request is the price. It buys the freedom to move analysis off the request thread, or onto a broker, without a single client having to change: the query simply answers \"not analysed yet\" for a while, and the live stream says when that changes.\n\nText extraction itself is not implemented yet, so every report is currently recorded as `OTHER` / `UNCLASSIFIED`, dated from its submission, with warnings saying so — the system's real behaviour for text it cannot recognise, not a placeholder. None of that appears in these responses yet, because the endpoint that serves it is still to come.\n\n## Endpoints not in this collection yet\n\nThey are designed but not built, so they would only return 404 here:\n\n- `GET /api/v1/incidents?rawReportId=...` — what was extracted from a report, and the traceability direction from raw text to records (T-16)\n- `GET /api/v1/analytics/time-series`, `/analytics/summary` — chart data (T-17)\n- `GET /api/v1/metadata` — event type catalog and province list (T-08)\n- `GET /api/v1/stream/incidents` — SSE stream (T-18)\n- `POST /api/v1/incident-reports/{id}/reprocess` — re-run analysis (T-19)\n\nSee `docs/TASKS.md` for what each task delivers."
   },
   "variable": [
     {
@@ -66,7 +66,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"status\":\"UP\",\"groups\":[\"liveness\",\"readiness\"],\"components\":{\"db\":{\"status\":\"UP\",\"details\":{\"database\":\"PostgreSQL\",\"validationQuery\":\"isValid()\"}},\"diskSpace\":{\"status\":\"UP\",\"details\":{\"total\":62671097856,\"free\":48369324032,\"threshold\":10485760,\"path\":\"/app/.\",\"exists\":true}},\"livenessState\":{\"status\":\"UP\"},\"mongo\":{\"status\":\"UP\",\"details\":{\"maxWireVersion\":27}},\"ping\":{\"status\":\"UP\"},\"readinessState\":{\"status\":\"UP\"},\"ssl\":{\"status\":\"UP\",\"details\":{\"validChains\":[],\"invalidChains\":[]}}}}"
+              "body": "{\"status\":\"UP\",\"groups\":[\"liveness\",\"readiness\"],\"components\":{\"db\":{\"status\":\"UP\",\"details\":{\"database\":\"PostgreSQL\",\"validationQuery\":\"isValid()\"}},\"diskSpace\":{\"status\":\"UP\",\"details\":{\"total\":62671097856,\"free\":48238923776,\"threshold\":10485760,\"path\":\"/app/.\",\"exists\":true}},\"livenessState\":{\"status\":\"UP\"},\"mongo\":{\"status\":\"UP\",\"details\":{\"maxWireVersion\":27}},\"ping\":{\"status\":\"UP\"},\"readinessState\":{\"status\":\"UP\"},\"ssl\":{\"status\":\"UP\",\"details\":{\"validChains\":[],\"invalidChains\":[]}}}}"
             }
           ],
           "event": [
@@ -166,11 +166,11 @@
                 },
                 {
                   "key": "Location",
-                  "value": "/api/v1/incident-reports/6a782afdf10e484a6d0fab47"
+                  "value": "/api/v1/incident-reports/6a786821fbb52fd08cf46a37"
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a782afdf10e484a6d0fab47\",\"text\":\"20.04.2020 tarihinde Ankara'da sağlık yetkilileri tarafından yapılan açıklamada, salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi. 1 kişi vefat etti. 5 kişi tedavi sonrası taburcu edildi.\",\"submittedAt\":\"2026-08-09T07:23:41.397Z\",\"status\":\"ANALYZED\",\"warnings\":[\"No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.\",\"No date was found in the text; the submission date was used.\"]}"
+              "body": "{\"id\":\"6a786821fbb52fd08cf46a37\",\"submittedAt\":\"2026-08-09T11:44:33.952Z\"}"
             }
           ],
           "event": [
@@ -186,14 +186,17 @@
                   "pm.test(\"Location points at the created report\", () =>",
                   "    pm.expect(pm.response.headers.get(\"Location\")).to.eql(`/api/v1/incident-reports/${body.id}`));",
                   "",
-                  "pm.test(\"the text comes back exactly as it was sent\", () =>",
-                  "    pm.expect(body.text).to.eql(JSON.parse(pm.request.body.raw).text));",
+                  "pm.test(\"the receipt identifies the stored report\", () => {",
+                  "    pm.expect(body.id, \"id\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(body.submittedAt, \"submittedAt\").to.be.a(\"string\");",
+                  "});",
                   "",
-                  "pm.test(\"analysis already ran - the call is synchronous\", () =>",
-                  "    pm.expect(body.status).to.be.oneOf([\"ANALYZED\", \"FAILED\"]));",
-                  "",
-                  "pm.test(\"no internal failure detail is exposed\", () =>",
-                  "    pm.expect(body).to.not.have.property(\"failureReason\"));",
+                  "// A receipt, not a result. What the analysis found is read separately, because that data",
+                  "// belongs to the module that produces it - so none of its vocabulary may appear here.",
+                  "pm.test(\"says nothing about the analysis\", () => {",
+                  "    [\"status\", \"warnings\", \"analyzedAt\", \"failureReason\", \"incidents\"].forEach(field =>",
+                  "        pm.expect(body, `receipt must not carry \"${field}\"`).to.not.have.property(field));",
+                  "});",
                   "",
                   "// Remembered so the read and delete requests below need no copy-pasting.",
                   "pm.collectionVariables.set(\"reportId\", body.id);",
@@ -277,11 +280,11 @@
                 },
                 {
                   "key": "Location",
-                  "value": "/api/v1/incident-reports/6a782afdf10e484a6d0fab48"
+                  "value": "/api/v1/incident-reports/6a786821fbb52fd08cf46a38"
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a782afdf10e484a6d0fab48\",\"text\":\"3 Mayıs 2020 günü İzmir'de meydana gelen depremde on iki bina hasar gördü. İki kişi hayatını kaybederken, dokuz kişi enkazdan sağ olarak kurtarıldı. Ayrıca 40 kişi hafif yaralı olarak tedavi altına alındı.\",\"submittedAt\":\"2026-08-09T07:23:41.606Z\",\"status\":\"ANALYZED\",\"warnings\":[\"No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.\",\"No date was found in the text; the submission date was used.\"]}"
+              "body": "{\"id\":\"6a786821fbb52fd08cf46a38\",\"submittedAt\":\"2026-08-09T11:44:33.970Z\"}"
             }
           ],
           "event": [
@@ -297,14 +300,17 @@
                   "pm.test(\"Location points at the created report\", () =>",
                   "    pm.expect(pm.response.headers.get(\"Location\")).to.eql(`/api/v1/incident-reports/${body.id}`));",
                   "",
-                  "pm.test(\"the text comes back exactly as it was sent\", () =>",
-                  "    pm.expect(body.text).to.eql(JSON.parse(pm.request.body.raw).text));",
+                  "pm.test(\"the receipt identifies the stored report\", () => {",
+                  "    pm.expect(body.id, \"id\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(body.submittedAt, \"submittedAt\").to.be.a(\"string\");",
+                  "});",
                   "",
-                  "pm.test(\"analysis already ran - the call is synchronous\", () =>",
-                  "    pm.expect(body.status).to.be.oneOf([\"ANALYZED\", \"FAILED\"]));",
-                  "",
-                  "pm.test(\"no internal failure detail is exposed\", () =>",
-                  "    pm.expect(body).to.not.have.property(\"failureReason\"));",
+                  "// A receipt, not a result. What the analysis found is read separately, because that data",
+                  "// belongs to the module that produces it - so none of its vocabulary may appear here.",
+                  "pm.test(\"says nothing about the analysis\", () => {",
+                  "    [\"status\", \"warnings\", \"analyzedAt\", \"failureReason\", \"incidents\"].forEach(field =>",
+                  "        pm.expect(body, `receipt must not carry \"${field}\"`).to.not.have.property(field));",
+                  "});",
                   "",
                   "// Remembered so the read and delete requests below need no copy-pasting.",
                   "pm.collectionVariables.set(\"reportId\", body.id);",
@@ -388,11 +394,11 @@
                 },
                 {
                   "key": "Location",
-                  "value": "/api/v1/incident-reports/6a782afdf10e484a6d0fab49"
+                  "value": "/api/v1/incident-reports/6a786821fbb52fd08cf46a39"
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a782afdf10e484a6d0fab49\",\"text\":\"Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi. Bursa'da 1, Kocaeli'nde ise 2 kişi kazalarda hayatını kaybetti. Her iki ilde toplam 10 kişi yaralı olarak hastaneye kaldırıldı.\",\"submittedAt\":\"2026-08-09T07:23:41.619Z\",\"status\":\"ANALYZED\",\"warnings\":[\"No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.\",\"No date was found in the text; the submission date was used.\"]}"
+              "body": "{\"id\":\"6a786821fbb52fd08cf46a39\",\"submittedAt\":\"2026-08-09T11:44:33.983Z\"}"
             }
           ],
           "event": [
@@ -408,14 +414,17 @@
                   "pm.test(\"Location points at the created report\", () =>",
                   "    pm.expect(pm.response.headers.get(\"Location\")).to.eql(`/api/v1/incident-reports/${body.id}`));",
                   "",
-                  "pm.test(\"the text comes back exactly as it was sent\", () =>",
-                  "    pm.expect(body.text).to.eql(JSON.parse(pm.request.body.raw).text));",
+                  "pm.test(\"the receipt identifies the stored report\", () => {",
+                  "    pm.expect(body.id, \"id\").to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(body.submittedAt, \"submittedAt\").to.be.a(\"string\");",
+                  "});",
                   "",
-                  "pm.test(\"analysis already ran - the call is synchronous\", () =>",
-                  "    pm.expect(body.status).to.be.oneOf([\"ANALYZED\", \"FAILED\"]));",
-                  "",
-                  "pm.test(\"no internal failure detail is exposed\", () =>",
-                  "    pm.expect(body).to.not.have.property(\"failureReason\"));",
+                  "// A receipt, not a result. What the analysis found is read separately, because that data",
+                  "// belongs to the module that produces it - so none of its vocabulary may appear here.",
+                  "pm.test(\"says nothing about the analysis\", () => {",
+                  "    [\"status\", \"warnings\", \"analyzedAt\", \"failureReason\", \"incidents\"].forEach(field =>",
+                  "        pm.expect(body, `receipt must not carry \"${field}\"`).to.not.have.property(field));",
+                  "});",
                   "",
                   "// Remembered so the read and delete requests below need no copy-pasting.",
                   "pm.collectionVariables.set(\"reportId\", body.id);",
@@ -442,7 +451,7 @@
                 "{{reportId}}"
               ]
             },
-            "description": "Uses the `reportId` remembered by whichever Submit ran last.\n\nThe id is also what ties the structured records in PostgreSQL back to this text, in both directions."
+            "description": "Uses the `reportId` remembered by whichever Submit ran last.\n\nAnswers with the raw report and nothing else: the text, and when it arrived. How that text was read is a separate question with a separate answer — `GET /incidents?rawReportId=...` once that endpoint exists (T-16), which is also how the raw report to derived records direction of the traceability requirement is served."
           },
           "response": [
             {
@@ -473,7 +482,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"id\":\"6a782afdf10e484a6d0fab47\",\"text\":\"20.04.2020 tarihinde Ankara'da sağlık yetkilileri tarafından yapılan açıklamada, salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi. 1 kişi vefat etti. 5 kişi tedavi sonrası taburcu edildi.\",\"submittedAt\":\"2026-08-09T07:23:41.397Z\",\"status\":\"ANALYZED\",\"warnings\":[\"No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.\",\"No date was found in the text; the submission date was used.\"]}"
+              "body": "{\"id\":\"6a786821fbb52fd08cf46a37\",\"text\":\"20.04.2020 tarihinde Ankara'da sağlık yetkilileri tarafından yapılan açıklamada, salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi. 1 kişi vefat etti. 5 kişi tedavi sonrası taburcu edildi.\",\"submittedAt\":\"2026-08-09T11:44:33.952Z\"}"
             }
           ],
           "event": [
@@ -486,7 +495,12 @@
                   "pm.test(\"is the report we asked for\", () =>",
                   "    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"reportId\")));",
                   "pm.test(\"Turkish characters survive the round trip\", () =>",
-                  "    pm.expect(pm.response.json().text).to.not.include(\"?\"));"
+                  "    pm.expect(pm.response.json().text).to.not.include(\"?\"));",
+                  "pm.test(\"carries no analysis vocabulary\", () => {",
+                  "    const body = pm.response.json();",
+                  "    [\"status\", \"warnings\", \"analyzedAt\", \"failureReason\"].forEach(field =>",
+                  "        pm.expect(body).to.not.have.property(field));",
+                  "});"
                 ]
               }
             }
@@ -568,7 +582,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"content\":[{\"id\":\"6a782afdf10e484a6d0fab49\",\"text\":\"Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi. Bursa'da 1, Kocaeli'nde ise 2 kişi kazalarda hayatını kaybetti. Her iki ilde toplam 10 kişi yaralı olarak hastaneye kaldırıldı.\",\"submittedAt\":\"2026-08-09T07:23:41.619Z\",\"status\":\"ANALYZED\",\"warnings\":[\"No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.\",\"No date was found in the text; the submission date was used.\"]},{\"id\":\"6a782afdf10e484a6d0fab48\",\"text\":\"3 Mayıs 2020 günü İzmir'de meydana gelen depremde on iki bina hasar gördü. İki kişi hayatını kaybederken, dokuz kişi enkazdan sağ olarak kurtarıldı. Ayrıca 40 kişi hafif yaralı olarak tedavi altına alındı.\",\"submittedAt\":\"2026-08-09T07:23:41.606Z\",\"status\":\"ANALYZED\",\"warnings\":[\"No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.\",\"No date was found in the text; the submission date was used.\"]}],\"page\":0,\"size\":2,\"totalElements\":3,\"totalPages\":2}"
+              "body": "{\"content\":[{\"id\":\"6a786821fbb52fd08cf46a39\",\"text\":\"Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi. Bursa'da 1, Kocaeli'nde ise 2 kişi kazalarda hayatını kaybetti. Her iki ilde toplam 10 kişi yaralı olarak hastaneye kaldırıldı.\",\"submittedAt\":\"2026-08-09T11:44:33.983Z\"},{\"id\":\"6a786821fbb52fd08cf46a38\",\"text\":\"3 Mayıs 2020 günü İzmir'de meydana gelen depremde on iki bina hasar gördü. İki kişi hayatını kaybederken, dokuz kişi enkazdan sağ olarak kurtarıldı. Ayrıca 40 kişi hafif yaralı olarak tedavi altına alındı.\",\"submittedAt\":\"2026-08-09T11:44:33.970Z\"}],\"page\":0,\"size\":2,\"totalElements\":4,\"totalPages\":2}"
             }
           ],
           "event": [
@@ -674,7 +688,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/report.text.blank\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must not be empty.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.blank\",\"timestamp\":\"2026-08-09T07:23:41.665788585Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/report.text.blank\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must not be empty.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.blank\",\"timestamp\":\"2026-08-09T11:44:34.033598512Z\"}"
             }
           ],
           "event": [
@@ -777,7 +791,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/report.text.too-long\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must be at most 10000 characters, got 10001.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.too-long\",\"timestamp\":\"2026-08-09T07:23:41.671052668Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/report.text.too-long\",\"title\":\"Invalid request\",\"status\":400,\"detail\":\"Incident report text must be at most 10000 characters, got 10001.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"report.text.too-long\",\"timestamp\":\"2026-08-09T11:44:34.041305929Z\"}"
             }
           ],
           "event": [
@@ -866,7 +880,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/resource.not-found\",\"title\":\"Not found\",\"status\":404,\"detail\":\"Incident report 652f1a2b3c4d5e6f70819200 was not found.\",\"instance\":\"/api/v1/incident-reports/652f1a2b3c4d5e6f70819200\",\"code\":\"resource.not-found\",\"timestamp\":\"2026-08-09T07:23:41.675391751Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/resource.not-found\",\"title\":\"Not found\",\"status\":404,\"detail\":\"Incident report 652f1a2b3c4d5e6f70819200 was not found.\",\"instance\":\"/api/v1/incident-reports/652f1a2b3c4d5e6f70819200\",\"code\":\"resource.not-found\",\"timestamp\":\"2026-08-09T11:44:34.045016387Z\"}"
             }
           ],
           "event": [
@@ -969,7 +983,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/request.bad-request\",\"title\":\"Bad Request\",\"status\":400,\"detail\":\"Failed to read request\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.bad-request\",\"timestamp\":\"2026-08-09T07:23:41.679686501Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/request.bad-request\",\"title\":\"Bad Request\",\"status\":400,\"detail\":\"Failed to read request\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.bad-request\",\"timestamp\":\"2026-08-09T11:44:34.048520970Z\"}"
             }
           ],
           "event": [
@@ -1046,7 +1060,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/request.method-not-allowed\",\"title\":\"Method Not Allowed\",\"status\":405,\"detail\":\"Method 'DELETE' is not supported.\",\"instance\":\"/api/v1/incident-reports/6a782afdf10e484a6d0fab47\",\"code\":\"request.method-not-allowed\",\"timestamp\":\"2026-08-09T07:23:41.682299251Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/request.method-not-allowed\",\"title\":\"Method Not Allowed\",\"status\":405,\"detail\":\"Method 'DELETE' is not supported.\",\"instance\":\"/api/v1/incident-reports/6a786821fbb52fd08cf46a37\",\"code\":\"request.method-not-allowed\",\"timestamp\":\"2026-08-09T11:44:34.051711220Z\"}"
             }
           ],
           "event": [
@@ -1149,7 +1163,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"type\":\"https://incident-report/problems/request.unsupported-media-type\",\"title\":\"Unsupported Media Type\",\"status\":415,\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.unsupported-media-type\",\"timestamp\":\"2026-08-09T07:23:41.684731418Z\"}"
+              "body": "{\"type\":\"https://incident-report/problems/request.unsupported-media-type\",\"title\":\"Unsupported Media Type\",\"status\":415,\"detail\":\"Content-Type 'text/plain;charset=UTF-8' is not supported.\",\"instance\":\"/api/v1/incident-reports\",\"code\":\"request.unsupported-media-type\",\"timestamp\":\"2026-08-09T11:44:34.054705345Z\"}"
             }
           ],
           "event": [

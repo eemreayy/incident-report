@@ -11,14 +11,19 @@ import com.emreay.incidentreport.analysis.extraction.ExtractedIncident;
 import com.emreay.incidentreport.analysis.extraction.ExtractedKeyword;
 import com.emreay.incidentreport.analysis.extraction.ExtractionResult;
 import com.emreay.incidentreport.analysis.extraction.IncidentExtractor;
+import com.emreay.incidentreport.analysis.domain.AnalysisResult;
+import com.emreay.incidentreport.analysis.domain.AnalysisStatus;
+import com.emreay.incidentreport.analysis.repository.AnalysisResultRepository;
 import com.emreay.incidentreport.analysis.repository.IncidentRepository;
 import com.emreay.incidentreport.analysis.repository.ProvinceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,9 +48,12 @@ class AnalysisServiceTest {
     private static final Instant SUBMITTED_AT = Instant.parse("2020-04-20T21:30:00Z");
     private static final LocalDate REFERENCE_DATE = LocalDate.of(2020, 4, 20);
 
+    private static final Instant ANALYSED_AT = Instant.parse("2026-08-09T10:00:00Z");
+
     private IncidentExtractor extractor;
     private IncidentRepository incidents;
     private ProvinceRepository provinces;
+    private AnalysisResultRepository results;
     private AnalysisService service;
 
     @BeforeEach
@@ -53,7 +61,10 @@ class AnalysisServiceTest {
         extractor = mock(IncidentExtractor.class);
         incidents = mock(IncidentRepository.class);
         provinces = mock(ProvinceRepository.class);
-        service = new AnalysisService(extractor, incidents, provinces);
+        results = mock(AnalysisResultRepository.class);
+        when(results.findByRawReportId(any())).thenReturn(Optional.empty());
+        service = new AnalysisService(extractor, incidents, provinces, results,
+                Clock.fixed(ANALYSED_AT, ZoneOffset.UTC));
     }
 
     /**
@@ -203,6 +214,57 @@ class AnalysisServiceTest {
         assertThatThrownBy(() -> service.analyze(REPORT_ID, "metin", SUBMITTED_AT))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must name a province");
+    }
+
+    /**
+     * The outcome is this module's answer about its own work, so it is written here rather than
+     * sent back to the module that stored the text (ADR-021).
+     */
+    @Test
+    void writesDownHowTheRunWent() {
+        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+                List.of(unclassified()), List.of("nothing matched", "date was assumed")));
+
+        service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
+
+        ArgumentCaptor<AnalysisResult> recorded = ArgumentCaptor.forClass(AnalysisResult.class);
+        verify(results).save(recorded.capture());
+        assertThat(recorded.getValue().getRawReportId()).isEqualTo(REPORT_ID);
+        assertThat(recorded.getValue().getStatus()).isEqualTo(AnalysisStatus.ANALYZED);
+        assertThat(recorded.getValue().getAnalyzedAt()).isEqualTo(ANALYSED_AT);
+        assertThat(recorded.getValue().getIncidentCount()).isEqualTo(1);
+        assertThat(recorded.getValue().getWarnings())
+                .containsExactly("nothing matched", "date was assumed");
+    }
+
+    @Test
+    void recordsAFailureAsThisModulesOwnAnswer() {
+        service.recordFailure(REPORT_ID, "java.lang.IllegalStateException: boom");
+
+        ArgumentCaptor<AnalysisResult> recorded = ArgumentCaptor.forClass(AnalysisResult.class);
+        verify(results).save(recorded.capture());
+        assertThat(recorded.getValue().getStatus()).isEqualTo(AnalysisStatus.FAILED);
+        assertThat(recorded.getValue().getFailureReason()).contains("IllegalStateException");
+        assertThat(recorded.getValue().getAnalyzedAt()).isEqualTo(ANALYSED_AT);
+    }
+
+    /**
+     * Reprocessing answers the same question again. Inserting a second row would leave two current
+     * answers for one report and force every reader to work out which is real.
+     */
+    @Test
+    void reprocessingOverwritesTheExistingAnswerInsteadOfAddingOne() {
+        AnalysisResult existing = AnalysisResult.failed(REPORT_ID, SUBMITTED_AT, "earlier failure");
+        when(results.findByRawReportId(REPORT_ID)).thenReturn(Optional.of(existing));
+        when(extractor.extract(anyString(), any()))
+                .thenReturn(new ExtractionResult(List.of(unclassified()), List.of()));
+
+        service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
+
+        verify(results, never()).save(any());
+        assertThat(existing.getStatus()).isEqualTo(AnalysisStatus.ANALYZED);
+        assertThat(existing.getFailureReason()).isNull();
+        assertThat(existing.getIncidentCount()).isEqualTo(1);
     }
 
     @SuppressWarnings("unchecked")

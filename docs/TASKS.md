@@ -197,8 +197,14 @@ Cevap modelinde `warnings[]` alanı.
 - **Karşılar:** FR-01, FR-14
 - **DoD:** Geçersiz girdi açıklayıcı problem+json döner; stack trace sızmaz.
 - **Sonuç:** Üç uç çalışıyor; 69 test geçiyor. `POST` **201 Created** + `Location` başlığı
-  döndürüyor — 202 değil, çünkü analiz aynı çağrının içinde senkron tamamlanıyor (ADR-003);
-  202 sonradan gelecek bir sonuç vaat ederdi.
+  döndürüyor.
+- **201'in dayanağı T-22'de değişti — sonuç aynı kaldı.** İlk gerekçe "analiz aynı çağrının
+  içinde senkron tamamlanıyor (ADR-003), 202 sonradan gelecek bir sonuç vaat ederdi" idi.
+  [ADR-021](DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)
+  senkronluğu istemci sözleşmesinden çıkardığı için bu dayanak artık kullanılamaz. **Yeni
+  dayanak:** bu ucun yarattığı kaynak ham bildirimdir ve cevap yazıldığında o kaynak
+  **vardır** — 201 tam olarak bunu söyler. Analizin bitip bitmediği ayrı bir soru, ayrı bir
+  cevabı var; bu yüzden burada cevaplanmıyor. Gerekçe değişti, kod değişmedi.
 - **Bean validation kullanılmadı, bilinçli.** Doğrulama kuralları servis katmanında tek yerde:
   reprocess yolunun arkasında HTTP isteği yok ve aynı kurallara uymak zorunda. Aynı kuralı
   `@NotBlank` ile ikinci kez yazmak, ikisinden birinin unutulacağı iki kaynak yaratırdı.
@@ -267,7 +273,7 @@ iki yönlü bağlar. Analiz hatası ham metnin kaydını geri almaz — ham kay�
 
 ## Faz 2B — Sahiplik Düzeltmesi *(PRD v2.0 ile geldi)*
 
-### ☐ T-22 · Analiz sonucunun sahipliği
+### ☑ T-22 · Analiz sonucunun sahipliği
 [ADR-021](DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)'in
 uygulanması. Analiz sonucu (durum, uyarılar, analiz zamanı) onu üreten modüle taşınır; ham döküman
 write-once olur; gönderim cevabı makbuza indirgenir.
@@ -296,6 +302,30 @@ Yeni Flyway migration. Reprocess aynı kaydın üzerine yazar, ikinci satır aç
   bağımlılık, ancak taşıma katmanı değiştiğinde faturasını keserdi. Bugün ödemek ucuz.
 - **Not — sıralama:** T-16 ve T-18 bu task'a bağlı. Frontend fazı da (T-24'ten itibaren) bu
   sözleşmeyi varsayıyor; erken yapılması paralel çalışmayı açıyor.
+- **Sonuç:** 105 test geçiyor. Uçtan uca doğrulandı:
+  - `POST` cevabı artık yalnızca `{id, submittedAt}`.
+  - Mongo dökümanı yalnızca `_id`, `rawText`, `submittedAt` taşıyor — `status`, `warnings`,
+    `analyzedAt`, `failureReason` gitti; testle sabitlendi (döküman anahtarları doğrudan
+    kontrol ediliyor).
+  - Analiz sonucu `analysis_result` + `analysis_warning` tablolarında, `V3` migration'ıyla.
+  - `shared` içinde tek event tipi kaldı: `RawReportSubmittedEvent`.
+- **Kural 4 taşındı, zayıflamadı.** "Analiz patlarsa ham metin hayatta kalır" garantisi artık
+  `ingestion`'da değil, `RawReportSubmittedEventListener`'da tutuluyor — istisna orada yakalanıp
+  `analysis` tarafına yazılıyor ve gönderene yansımıyor. Testleri de oraya taşındı; ayrıca
+  "başarısızlığı yazmak da başarısız olursa" yolu eklendi: Postgres çökmüşse bu, gönderimlerin
+  reddedilmesine dönüşmemeli.
+- **`AnalysisResult` rapor başına tek satır.** `raw_report_id` unique; reprocess satırın üzerine
+  yazıyor, ikinci satır açmıyor. "Bu metin hakkında sistem şu an ne biliyor" sorusunun tek bir
+  güncel cevabı var. CHECK constraint'i de `FAILED` kaydın nedenini taşımasını zorunlu kılıyor.
+- **`failureReason` sunucu tarafında kalıyor.** Entity'de var, hiçbir DTO'ya girmiyor — T-06'daki
+  "istisna tipi ve mesajı cevaba sızmaz" kuralının aynısı.
+- **Postman koleksiyonu yeniden üretildi.** Örnekler yine çalışan sistemden yakalandı; Submit
+  testleri artık makbuzun analiz sözlüğünden **hiçbir alan taşımadığını** doğruluyor
+  (12 istek, 49 assertion).
+- **Bir test kırılganlığı düzeltildi:** `IncidentReportApplicationTests` migration **sayısını**
+  kontrol ediyordu (`2` bekliyordu) ve `V3` eklenince kırıldı. Sayı yerine "hiçbir migration
+  başarısız değil" kontrolüne çevrildi — sayı kontrolü, her migration'da testi düzeltmeyi
+  öğretirdi.
 
 ---
 

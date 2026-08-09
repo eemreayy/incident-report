@@ -57,15 +57,23 @@ class IncidentReportApplicationTests {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
 
-            try (ResultSet migrations = statement.executeQuery(
-                    "select count(*) from flyway_schema_history where success")) {
-                assertThat(migrations.next()).isTrue();
-                assertThat(migrations.getInt(1)).isEqualTo(2);
+            // Counting migrations would mean editing this test every time one is added, which
+            // teaches people to edit the test rather than read the failure. What matters is that
+            // none of them failed.
+            try (ResultSet failed = statement.executeQuery(
+                    "select count(*) from flyway_schema_history where not success")) {
+                assertThat(failed.next()).isTrue();
+                assertThat(failed.getInt(1)).as("no migration failed").isZero();
             }
 
             try (ResultSet provinces = statement.executeQuery("select count(*) from province")) {
                 assertThat(provinces.next()).isTrue();
                 assertThat(provinces.getInt(1)).isEqualTo(81);
+            }
+
+            // The analysis outcome lives here now, not on the raw document (ADR-021).
+            try (ResultSet outcomes = statement.executeQuery("select count(*) from analysis_result")) {
+                assertThat(outcomes.next()).isTrue();
             }
         }
     }

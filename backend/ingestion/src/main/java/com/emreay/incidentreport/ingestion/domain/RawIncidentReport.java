@@ -4,25 +4,33 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
-import java.util.List;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
  * A raw incident report exactly as the user submitted it.
  *
- * <p>This is the audit log the source document asks for: {@code rawText} is stored byte for byte,
- * before any normalisation, and never changes afterwards (FR-02, ADR-005). Being a record is not a
- * stylistic choice — it makes that immutability structural. A state change produces a new instance
- * rather than mutating this one, so there is no setter anyone could reach for.
+ * <p>This is the audit log the source document asks for, and it is <strong>write-once</strong>:
+ * inserted, then never written to again — not even to record how analysis went (ADR-005, ADR-021).
+ * The record has three fields because those are the only three this module owns.
+ *
+ * <p>How the analysis went — its status, warnings and timing — belongs to the module that produces
+ * it and is stored there. An earlier version kept those fields here, and the cost was not visible
+ * in the dependency graph: this module's document schema carried the other module's vocabulary, and
+ * a write was not considered finished until the other module had answered. That kind of coupling
+ * only presents its bill when the transport changes.
+ *
+ * <p>Being a record is what makes the guarantee structural rather than a promise: there is no
+ * setter, and no method that returns a modified copy, so "updating" a stored report is not
+ * expressible.
  *
  * <p>{@code submittedAt} carries more weight than it appears to: it is the reference date for
  * relative expressions such as "son 24 saatte" and for reports with no date at all (ADR-014).
- * Because it is fixed, reprocessing a report years later still resolves the same calendar day.
+ * Because it never changes, reprocessing a report years later still resolves the same calendar day.
  *
- * <p>The link to the structured records derived from this report is <em>not</em> stored here. It
+ * <p>The link to the structured records derived from this report is not stored here either. It
  * lives on the PostgreSQL side as {@code incident.raw_report_id}, and the reverse direction is a
- * query on that column. Keeping a list of foreign ids here would mean this module knows about the
- * other module's identifiers and has to be updated whenever they change (FR-08, ADR-002).
+ * query on that column (FR-08).
  */
 @Document(collection = "raw_incident_reports")
 public record RawIncidentReport(
@@ -33,45 +41,22 @@ public record RawIncidentReport(
         String rawText,
 
         /** When the text was accepted. Also the reference date for date resolution (ADR-014). */
-        Instant submittedAt,
-
-        ProcessingStatus status,
-
-        /** When analysis last finished or failed; {@code null} while still {@link ProcessingStatus#RECEIVED}. */
-        Instant analyzedAt,
-
-        /** Why analysis failed, if it did. {@code null} otherwise. */
-        String failureReason,
-
-        /**
-         * Messages telling the user the result is partial — an unrecognised event type, a date that
-         * had to be defaulted (FR-09). Never empty-null: an analysed report with nothing to warn
-         * about carries an empty list.
-         */
-        List<String> warnings) {
+        Instant submittedAt) {
 
     public RawIncidentReport {
         Objects.requireNonNull(rawText, "rawText");
         Objects.requireNonNull(submittedAt, "submittedAt");
-        Objects.requireNonNull(status, "status");
-        warnings = warnings == null ? List.of() : List.copyOf(warnings);
     }
 
-    /** A freshly submitted report, not yet analysed. The id is assigned by MongoDB on insert. */
-    public static RawIncidentReport received(String rawText, Instant submittedAt) {
-        return new RawIncidentReport(null, rawText, submittedAt, ProcessingStatus.RECEIVED, null, null, List.of());
-    }
-
-    /** The same report, marked analysed. The text and submission time are carried over untouched. */
-    public RawIncidentReport analyzed(Instant analyzedAt, List<String> warnings) {
-        return new RawIncidentReport(id, rawText, submittedAt, ProcessingStatus.ANALYZED,
-                Objects.requireNonNull(analyzedAt, "analyzedAt"), null, warnings);
-    }
-
-    /** The same report, marked failed. The text survives the failure — that is the whole point. */
-    public RawIncidentReport failed(Instant analyzedAt, String failureReason) {
-        return new RawIncidentReport(id, rawText, submittedAt, ProcessingStatus.FAILED,
-                Objects.requireNonNull(analyzedAt, "analyzedAt"),
-                Objects.requireNonNull(failureReason, "failureReason"), List.of());
+    /**
+     * A freshly submitted report. The id is assigned by MongoDB on insert.
+     *
+     * <p>Truncated to milliseconds so the value that comes back from MongoDB is the value that went
+     * in — the driver stores millisecond precision, and a submission time that changes on a round
+     * trip would be a poor reference date.
+     */
+    public static RawIncidentReport of(String rawText, Instant submittedAt) {
+        return new RawIncidentReport(null, rawText,
+                Objects.requireNonNull(submittedAt, "submittedAt").truncatedTo(ChronoUnit.MILLIS));
     }
 }

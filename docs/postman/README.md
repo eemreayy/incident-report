@@ -74,26 +74,29 @@ Spring'in kendisinden gelsin.
 npx newman run docs/postman/incident-report.postman_collection.json
 ```
 
-Beklenen: **12 istek, 51 assertion, 0 hata.**
+Beklenen: **12 istek, 49 assertion, 0 hata.**
 
 ---
 
-## Analiz bugün ne döndürüyor
+## Gönderim makbuz döner, sonuç değil
 
-Metin çıkarımı henüz yazılmadı (T-08…T-14). Bu yüzden her bildirim `OTHER` / `UNCLASSIFIED`
-olarak saklanıyor, gönderim tarihinden tarihleniyor ve bunu söyleyen uyarılarla dönüyor:
+`POST /incident-reports` yalnızca kaydın kimliğini ve geliş zamanını döner:
 
 ```json
-"status": "ANALYZED",
-"warnings": [
-  "No known event type matched this text. It was stored as OTHER and can be reprocessed once the catalog recognises it.",
-  "No date was found in the text; the submission date was used."
-]
+{ "id": "6a786821fbb52fd08cf46a37", "submittedAt": "2026-08-09T11:44:33.512Z" }
 ```
 
-Bu bir yer tutucu değil — sistemin **tanımadığı metin için gerçek davranışı** (ADR-006). Katalog
-bugün boş olduğu için her metin bu yoldan geçiyor. Çıkarım geldiğinde tanınan metinler için cevap
-değişecek, tanınmayanlar için bu davranış yerinde kalacak.
+Analizin ne bulduğu burada **yok**. O veri onu üreten modüle ait ve ayrı okunuyor:
+`GET /incidents?rawReportId=...` (T-16). Gerekçe [ADR-021](../DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı)'de.
+
+Bedeli bir ek istek. Karşılığında analiz ileride istek thread'inden çıkarılsa ya da bir broker'a
+taşınsa **hiçbir istemci sözleşmesi değişmiyor**: sorgu bir süre "henüz analiz edilmedi" der, canlı
+akış da ne zaman değiştiğini söyler.
+
+Metin çıkarımının kendisi henüz yazılmadı (T-08…T-14); her bildirim şu an `OTHER` / `UNCLASSIFIED`
+olarak kaydediliyor ve nedenini söyleyen uyarılar üretiliyor. Bu bir yer tutucu değil, sistemin
+**tanımadığı metin için gerçek davranışı** (ADR-006). Ancak bunların hiçbiri bu cevaplarda
+görünmüyor — onları sunacak uç henüz yok.
 
 ---
 

@@ -12,15 +12,18 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
-import java.util.List;
 import java.util.Optional;
 
 /**
  * Accepts raw incident reports, stores them unchanged, and announces them.
  *
- * <p>Deliberately offers no update and no delete. The text is an audit log: a record that can be
- * edited cannot explain anything derived from it, and a record that can be deleted breaks the
- * traceability the source document asks for (FR-02, ADR-005).
+ * <p>Deliberately offers no update and no delete — and does not update a report itself either. The
+ * text is an audit log: a record that can be edited cannot explain anything derived from it, and
+ * one that keeps being written to is not really write-once (FR-02, ADR-005, ADR-021).
+ *
+ * <p>What this service does <em>not</em> know is just as deliberate. It does not know whether
+ * analysis succeeded, what it warned about, or how long it took. That belongs to the module that
+ * produces it. Nothing here waits for an answer, and nothing here has a field to put one in.
  *
  * <p>Validation lives here rather than only in the web layer, so the rules hold for every caller —
  * including the reprocessing path, which has no HTTP request behind it.
@@ -49,47 +52,26 @@ public class IngestionService {
      * Stores the text and announces it for analysis.
      *
      * <p>The order matters and is the whole point: the text is persisted <em>before</em> anyone
-     * looks at it. Analysis runs synchronously inside this call (ADR-003), so a listener blowing up
-     * would otherwise take the submission down with it. Instead the failure is caught, the report
-     * is marked {@code FAILED}, and the text survives to be reprocessed once the cause is fixed
-     * (FR-15). Losing an incident because the parser could not cope with it would be the worst
-     * possible outcome.
+     * looks at it. Analysis listens synchronously today (ADR-003), but that is an implementation
+     * detail of the transport, not part of what this method promises — it returns once the text is
+     * safely stored and the announcement has gone out.
      *
-     * @return the stored report, marked {@code FAILED} if analysis threw
+     * <p>A listener that fails must not take the submission down with it. Recovering from that is
+     * the listener's job, not this method's: the failure is recorded where the analysis outcome
+     * lives, and this report stays exactly as it was written. Losing an incident because the parser
+     * could not cope with it is the one outcome the design refuses.
+     *
+     * @return the stored report — its identity and submission time, nothing about how it was read
      * @throws DomainValidationException if the text is blank or longer than the configured limit
      */
     public RawIncidentReport submit(String rawText) {
         validate(rawText);
 
-        RawIncidentReport stored = repository.save(RawIncidentReport.received(rawText, clock.instant()));
+        RawIncidentReport stored = repository.save(RawIncidentReport.of(rawText, clock.instant()));
         log.debug("stored raw report {} ({} chars)", stored.id(), stored.rawText().length());
 
-        try {
-            events.publishEvent(new RawReportSubmittedEvent(stored.id(), stored.rawText(), stored.submittedAt()));
-        } catch (RuntimeException failure) {
-            log.error("analysis failed for raw report {}; the text is kept for reprocessing",
-                    stored.id(), failure);
-            return repository.save(stored.failed(clock.instant(), describe(failure)));
-        }
-
-        // Analysis ran inside the publish call above and reported back through another event, which
-        // updated this report's status and warnings. The copy captured before publishing is now
-        // stale, so it is read again rather than returned as it was - otherwise every caller would
-        // be told its report is still RECEIVED and carries no warnings.
-        return repository.findById(stored.id()).orElse(stored);
-    }
-
-    /**
-     * Records how analysis went. Called by a listener when the analysis side reports back; there is
-     * no endpoint for it, because this is derived state rather than something a user sets.
-     *
-     * <p>The text and the submission time are carried over untouched — only the outcome changes
-     * (ADR-005).
-     */
-    public void markAnalyzed(String rawReportId, List<String> warnings) {
-        repository.findById(rawReportId).ifPresentOrElse(
-                report -> repository.save(report.analyzed(clock.instant(), warnings)),
-                () -> log.warn("analysis reported on raw report {}, which no longer exists", rawReportId));
+        events.publishEvent(new RawReportSubmittedEvent(stored.id(), stored.rawText(), stored.submittedAt()));
+        return stored;
     }
 
     public Optional<RawIncidentReport> findById(String id) {
@@ -110,15 +92,5 @@ public class IngestionService {
                     "Incident report text must be at most " + properties.maxTextLength()
                             + " characters, got " + rawText.length() + ".");
         }
-    }
-
-    /**
-     * Summarises a failure for storage. Type and message only — a stack trace belongs in the log,
-     * not in a field that may end up in a response.
-     */
-    private static String describe(RuntimeException failure) {
-        String message = failure.getMessage();
-        return message == null ? failure.getClass().getName()
-                : failure.getClass().getName() + ": " + message;
     }
 }
