@@ -18,6 +18,21 @@ export function createQueryClient(): QueryClient {
         refetchOnWindowFocus: false,
         staleTime: 30_000,
         retry: 1,
+
+        // Under the default 'online' mode, a query whose retries fail while the
+        // library believes the browser is offline is *paused*: its status stays
+        // 'pending' and never becomes 'error', which on screen is a spinner that
+        // never stops - what FR-28 forbids. 'always' suits this application
+        // because the API is on the page's own origin (ADR-025): if the page
+        // loaded, there is no separate offline state worth modelling, and a
+        // stated failure with a retry button beats an endless spinner.
+        //
+        // Worth knowing, because it looks like the same bug: retries are also
+        // paused while the document is hidden - `canContinue()` in the retryer
+        // ANDs focusManager.isFocused(), whatever the networkMode. A background
+        // tab therefore holds its spinner until it is looked at again. That is
+        // the library working as designed, not this setting failing.
+        networkMode: 'always',
       },
     },
   });

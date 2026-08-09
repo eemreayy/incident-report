@@ -4,13 +4,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { strings } from './i18n/strings';
 
-/** Retries off: a test should assert the failure path, not wait for it. */
-function testQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const CATALOG = {
+  eventTypes: [{ key: 'EPIDEMIC', label: 'Salgın', metrics: [{ key: 'NEW_CASE', label: 'Vaka' }] }],
+  provinces: [{ code: 6, name: 'Ankara' }],
+};
+
+/**
+ * The shell makes two independent calls - the health probe and the catalog - so
+ * the stub answers by URL. A single blanket response would hand the catalog a
+ * health payload and pass for the wrong reason.
+ */
+function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (!healthy) {
+      return Promise.reject(new TypeError('Failed to fetch'));
+    }
+    const body = url.includes('/actuator/health') ? { status: 'UP' } : CATALOG;
+    return Promise.resolve({ ok: true, status: 200, json: async () => body } as Response);
+  });
 }
 
+/** Retries off: a test should assert the failure path, not wait for it. */
 function renderApp() {
-  return render(<App queryClient={testQueryClient()} />);
+  return render(
+    <App queryClient={new QueryClient({ defaultOptions: { queries: { retry: false } } })} />,
+  );
 }
 
 afterEach(() => {
@@ -19,10 +38,7 @@ afterEach(() => {
 
 describe('App', () => {
   it('renders the shell at the root route', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: 'UP' }),
-    } as Response);
+    stubBackend();
 
     renderApp();
 
@@ -30,8 +46,17 @@ describe('App', () => {
     expect(await screen.findByText(new RegExp(strings.backendStatus.up))).toBeInTheDocument();
   });
 
+  it('fills the interface from the catalog the server publishes', async () => {
+    stubBackend();
+
+    renderApp();
+
+    // NFR-14 end to end: the label comes from the response, not from the source.
+    expect(await screen.findByText('Salgın')).toBeInTheDocument();
+  });
+
   it('says the backend is unreachable instead of failing to render', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'));
+    stubBackend({ healthy: false });
 
     renderApp();
 
@@ -39,10 +64,11 @@ describe('App', () => {
     // heading is still there next to the failure notice.
     expect(await screen.findByText(new RegExp(strings.backendStatus.down))).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
   });
 
   it('carries the status in text, not only in colour', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'));
+    stubBackend({ healthy: false });
 
     renderApp();
 

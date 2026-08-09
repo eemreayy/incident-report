@@ -1,4 +1,5 @@
 import { BackendStatus } from './BackendStatus';
+import { CatalogPanel } from './CatalogPanel';
 import { strings } from '../i18n/strings';
 
 /**
@@ -16,9 +17,10 @@ export function AppShell() {
         <BackendStatus />
       </header>
       <main>
-        <section className="placeholder">
+        <CatalogPanel />
+        <section className="panel">
           <h2>{strings.placeholder.heading}</h2>
-          <p>{strings.placeholder.body}</p>
+          <p className="muted">{strings.placeholder.body}</p>
         </section>
       </main>
     </div>

@@ -1,11 +1,12 @@
 /**
  * A single probe against the backend's health endpoint.
  *
- * This is not the API client - that arrives with T-24, together with the typed
- * contract and RFC 7807 parsing. What this exists for is to prove the decision
- * this task made: the browser reaches the API on its own origin (ADR-025), so
- * the URL below is relative and there is no configurable base address anywhere.
- * If the reverse proxy is wrong, this probe is what says so.
+ * It sits beside the API client but does not go through it: /actuator is not
+ * under /api/v1 and does not answer with problem+json, so running it through a
+ * helper built for that contract would only blur what each one guarantees.
+ *
+ * The URL is relative, like every other call - the browser reaches the backend on
+ * its own origin (ADR-025). If the reverse proxy is wrong, this is what says so.
  */
 export type BackendHealth = 'UP' | 'DOWN';
 

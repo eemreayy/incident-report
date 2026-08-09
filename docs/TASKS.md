@@ -616,6 +616,11 @@ olarak yazılır (ADR-022 bunları bilinçli olarak açık bırakmıştı).
 - **Doğrulanamayan tek şey — dürüstlük kaydı.** `nginx.conf`'taki SSE bloğu (`proxy_buffering off`,
   `proxy_read_timeout 1h`) **çalışırken test edilmedi**, çünkü `/api/v1/stream/incidents` ucu henüz
   yok (T-18). Yapılandırma yerinde ve gerekçesi yorumda; fiilen doğrulanması T-29'a ait.
+- **Sonradan bulunan kusur → T-24'te düzeltildi.** Buradaki `nginx.conf`, upstream'i literal isimle
+  yazıyordu; nginx bunu **başlangıçta** çözer ve bulamazsa hiç açılmaz. Yani backend düştüğünde
+  arayüz de komple ölüyordu — bu task'ın "backend kapalıyken beyaz ekrana düşmez" iddiasının
+  altını oyan bir durum. O gün fark edilmedi çünkü doğrulama hep backend ayaktayken yapıldı.
+  Ayrıntı ve çözüm T-24'te.
 - **Not:** Recharts iskelette kullanılmıyor; ilk kullanıcısı T-28. Şimdi kurulmasının sebebi
   ADR-026'da: React 19 ile çözülüp derlendiğini bugün öğrenmek.
 

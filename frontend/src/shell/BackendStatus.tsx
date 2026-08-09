@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { probeBackendHealth } from '../health/health';
+import { useBackendHealth } from '../api/queries';
 import { strings } from '../i18n/strings';
 
 /**
@@ -9,10 +8,7 @@ import { strings } from '../i18n/strings';
  * can only get from a green dot is a status some readers cannot get at all.
  */
 export function BackendStatus() {
-  const { data, isPending, isError } = useQuery({
-    queryKey: ['backend-health'],
-    queryFn: probeBackendHealth,
-  });
+  const { data, isPending, isError } = useBackendHealth();
 
   const state = isPending ? 'checking' : isError || data === 'DOWN' ? 'down' : 'up';
 

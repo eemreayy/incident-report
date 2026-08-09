@@ -66,7 +66,7 @@ body {
   color: var(--color-down);
 }
 
-.placeholder {
+.panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -74,7 +74,22 @@ body {
   margin-top: calc(var(--space) * 1.5);
 }
 
-.placeholder h2 {
+.panel h2 {
   margin-top: 0;
   font-size: 1.125rem;
+}
+
+.muted {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.error {
+  color: var(--color-down);
+}
+
+.catalog-list {
+  margin: 0 0 var(--space);
+  padding-left: 1.25rem;
+  line-height: 1.7;
 }
