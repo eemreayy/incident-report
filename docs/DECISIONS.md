@@ -709,7 +709,7 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - *ECharts / Chart.js:* Görsel olarak daha zengin, canvas çizdikleri için test edilebilirlikleri düşük; ECharts ayrıca büyük bir bundle ve imperatif yapılandırma getiriyor.
 - *Tailwind:* Geliştirmeyi hızlandırırdı; bu boyutta düz CSS'in üstüne çıkacak bir kazanç yok.
 
-**Sonuçlar.** Beş üretim bağımlılığı: React, React DOM, React Router, TanStack Query, Recharts. Recharts iskelette **kullanılmıyor** — ilk kullanıcısı T-28. Şimdi kurulmasının sebebi kararın kaydedilmesi ve React 19 ile birlikte çözülüp derlendiğinin doğrulanması; bu tür bir uyumsuzluğu T-28'de değil bugün öğrenmek gerekiyordu (doğrulandı: `npm run build` temiz geçiyor, üretim bundle'ı 264 kB / gzip 84 kB). TanStack Query'nin önbellek anahtarları filtre durumuyla birebir eşleşmek zorunda; bu, T-26'da filtre durumu tasarlanırken dikkat edilecek nokta.
+**Sonuçlar.** TanStack Query'nin iki varsayılanı T-24'te davranışsal sonuç doğurdu ve not edilmeye değer. `networkMode` varsayılanı `online`: kütüphane çevrimdışı olunduğunu düşündüğünde başarısız bir sorguyu **duraklatıyor**, durumu `pending`'de kalıyor ve ekranda hiç bitmeyen bir "yükleniyor" çıkıyor — FR-28'in yasakladığı şey. API aynı kökende olduğu için (ADR-025) modellenecek ayrı bir çevrimdışı durum yok; `always` seçildi ve davranış testle sabitlendi. İkincisi bir ayar değil, bilinmesi gereken bir tasarım: yeniden denemeler belge **gizliyken** de duraklıyor (`canContinue()` odak durumunu VE ile bağlıyor), yani arka plandaki sekme kendisine bakılana kadar spinner'ını korur. Beş üretim bağımlılığı: React, React DOM, React Router, TanStack Query, Recharts. Recharts iskelette **kullanılmıyor** — ilk kullanıcısı T-28. Şimdi kurulmasının sebebi kararın kaydedilmesi ve React 19 ile birlikte çözülüp derlendiğinin doğrulanması; bu tür bir uyumsuzluğu T-28'de değil bugün öğrenmek gerekiyordu (doğrulandı: `npm run build` temiz geçiyor, üretim bundle'ı 264 kB / gzip 84 kB). TanStack Query'nin önbellek anahtarları filtre durumuyla birebir eşleşmek zorunda; bu, T-26'da filtre durumu tasarlanırken dikkat edilecek nokta.
 
 **İleride.** Grafik ihtiyacı Recharts'ın sınırını zorlarsa (çok büyük veri, özel etkileşim) geçiş yalnızca grafik bileşenlerini etkiler — veri sunucudan hazır geldiği için (NFR-13) dönüştürme mantığı taşınmaz. TanStack Query'nin `invalidateQueries` yüzeyi, SSE sinyalinin bağlanacağı tek nokta olduğu için ileride taşımaya (WebSocket, polling) geçilse bile değişen yer tek kalır.
 
@@ -736,3 +736,28 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `analysis.text` paketi çıkarımın tek girişi oldu; T-10…T-14 ham `String` değil `NormalizedText` görecek ve küçültme/kesme işareti sorunlarını tekrar çözmeyecek. Kısaltma listesi bakım gerektiren bir veri; eksik bir kısaltma cümlenin fazladan bölünmesine yol açar. Kaynak dokümandaki üç örnek metnin üçü de tam üç cümleye bölünüyor ve her cümle ham metindeki karşılığına birebir geri dönüyor — teste sabitlendi. Ölçüm sırasında `String.isBlank()`'in **kırılmaz boşluğu (U+00A0) boşluk saymadığı** ortaya çıktı; webden yapıştırılan metinde sık görülen bu karakter kelimeyi sessizce birleşik bırakıyordu, bu yüzden boşluk kontrolü `SPACE_SEPARATOR` kategorisini de kapsıyor.
 
 **İleride.** Kısaltma listesi büyürse kataloğun yanında YAML'a taşınabilir — ADR-007'nin olay tipleri için kurduğu düzenin aynısı. Çıkarım kalitesi bölme hatalarına takılmaya başlarsa ICU4J yeniden değerlendirilebilir; `SentenceSplitter` tek bir arayüz arkasında olduğu için değişim tek sınıfta kalır. `NormalizedText` şu an karakter bazında offset taşıyor; arayüz vurgulamayı UTF-16 yerine kod noktası bazında isterse (TC-18) dönüşüm bu sınıfa eklenir, çağıranlara yayılmaz.
+
+---
+
+## ADR-028 — Sayı Ayrıştırma: Bileşik Sözcükler, Tarihlerin Dışlanması ve Okunamayan Figürler
+
+**Karar.** Sayılar tek bir bileşende ayrıştırılır (`NumberExtractor`); rakam, Türkçe sözcük ve ikisinin karışımı (`15 bin`) aynı değeri üretir. Bileşik sözcükler **azalan büyüklük** kuralıyla birleşir. Tarih biçimindeki rakam grupları sayı sayılmaz. Değer `long` taşınır, metriğin `int` kolonu ayrıştırma sırasında dayatılmaz. TC-4 böylece karara bağlanır.
+
+**Bağlam.** FR-05 sayıların rakamla **veya** Türkçe sözcükle gelebileceğini istiyor; kaynak dokümandaki ikinci örnek `on iki bina` derken birincisi `15 vaka` diyor. Haber metni ayrıca ikisini karıştırıyor (`2 bin 500 kişi`). Çıkan sayı daha sonra bir metriğe bağlanacak (TC-3), dolayısıyla değeri kadar **metindeki konumu** da gerekiyor.
+
+**Gerekçe.**
+- **Azalan büyüklük kuralı, toplamanın kendisinden önemli.** `on iki` = 12 çünkü 2, 10'dan küçük. Aynı kural `bir iki kişi` ifadesinin 3 diye okunmasını engelliyor — bu bir sayı değil, "birkaç" anlamında bir kalıp. Kural olmasaydı yan yana her sayı sözcüğü toplanır ve metinde olmayan bir figür üretilirdi.
+- **Tarih üç sayı değildir.** `20.04.2020` ayrıştırılsaydı 20, 4 ve 2020 diye üç makul görünen değer, üstelik bir anahtar kelimenin hemen yanında ortaya çıkardı. Rakamla yazılmış tarih biçimleri bu yüzden atlanıyor. **Sınır açıkça kabul ediliyor:** `3 Mayıs 2020` gibi sözcüklü tarihler burada tanınamaz (takvim bilgisi gerekir), 3 ve 2020 üretilir; bunları elemek çözülmüş tarih aralığını elinde tutanın işi (T-11/T-14). Sınırı gizlemek yerine teste yazdık.
+- **Okunamayan bir figür, çarpanını da götürür.** `2,5 milyar lira` içinde ondalık figür sayılmıyor (kişi/bina sayısı ondalık olmaz). Sadece `2,5`'i atmak `milyar`'ı tek başına bırakır ve **bir milyar** okunur — yani okumayı reddetmek, başka bir sayı uydurmaya dönüşür. Reddedilen figür, kendisini takip eden çarpanı da kapsıyor.
+- **`long`, metriğin `int`'i değil.** Metnin ne kadar büyük bir sayı söylediğine kolon karar veremez. `iki milyar` dilin ifade edebildiği bir sayı; sessizce `int`'e sarmak *makul olmayan* bir figürü *makul görünen yanlış* bir figüre çevirirdi. `NumberToken.fitsMetricValue()` kararı çağırana bırakıyor.
+
+**Alternatifler.**
+- *Yalnızca rakam desteklemek:* FR-05 doğrudan karşılanmazdı; kaynak dokümandaki ikinci örnek çıkarılamazdı.
+- *Sözcükleri düz bir sözlükle (`on iki` → 12) eşlemek:* Bileşimler sonsuz; `iki bin üç yüz kırk beş` sözlüğe yazılamaz.
+- *Yan yana tüm sayı sözcüklerini toplamak:* `bir iki kişi` = 3 üretirdi.
+- *Tarihleri de sayı olarak yayınlayıp sonra elemek:* Eleme bilgisi T-14'e taşınırdı; `20.04.2020` için hiçbir belirsizlik yokken üç yanlış aday üretmenin gerekçesi yok.
+- *Ondalıkları tabana yuvarlamak:* `2,5` → 2 metinde olmayan bir kesinlik uydurur.
+
+**Sonuçlar.** `NumberExtractor` `NormalizedText` üzerinde çalışıyor ve offset'leri onun üzerinden ham metne kadar izlenebilir (ADR-027). T-14 iki şeye dikkat etmek zorunda: (1) sözcüklü tarihlerden sızan sayılar (`3`, `2020`), (2) sayı olan ama metrik olmayan ifadeler — kaynak dokümandaki üçüncü örnekte `her iki ilde` ifadesi `2` üretiyor ve bu bir metrik değil. İkisi de teste yazıldı. `bin`/`milyon` gibi çarpanların tek başına sayı sayılması bilinçli (`bin kişi` = 1000).
+
+**İleride.** Sayı sözcüklerinin ekli hâlleri (`ikisi`, `üçü`) şu an tanınmıyor; ihtiyaç doğarsa ek toleransı ADR-027'nin normalizasyon katmanına eklenir, ayrıştırıcıya değil. Sıra sayıları (`3. kişi`) ayrı bir tür olarak işaretlenebilir. Ondalık figürler bir gün metrik olursa (parasal hasar gibi) `NumberToken` bir ölçek/birim alanı kazanır; bugün kataloğda böyle bir metrik yok.

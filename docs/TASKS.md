@@ -393,12 +393,29 @@ cümle segmentasyonu (kısaltmalar ve `20.04.2020` gibi noktalı tarihler cümle
   kelimesinin yanında tutar; yanlış bölünen cümle ikisini ayırır ve sayı kaybolur ya da yanlış
   metriğe yazılır. Birinci hata isabeti, ikincisi doğruluğu düşürür.
 
-### ☐ T-10 · Sayı ayrıştırma (rakam + Türkçe sözcük)
+### ☑ T-10 · Sayı ayrıştırma (rakam + Türkçe sözcük)
 Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (`on iki`=12, `kırk beş`=45,
 `yüz yirmi`=120). Sayının metindeki konumu (offset) korunur — metrik eşleştirmesi buna dayanacak.
 - **Bağımlılık:** T-09
-- **Çözer:** TC-4 · **Karşılar:** FR-05
+- **Çözer:** TC-4 · **Karşılar:** FR-05 · **İlgili karar:** ADR-028
 - **DoD:** `"on iki bina"` ile `"12 bina"` aynı değeri üretiyor; sınır ve olumsuz vakalar test edilmiş.
+- **Sonuç:** 252 test geçiyor, `analysis` coverage **%98**, `analysis.text` paketi **%99**.
+  `NumberExtractor` + `NumberToken` + `NumberNotation`; 62 tablo bazlı test.
+- **DoD fiilen doğrulandı:** `"on iki bina hasar gördü"` ile `"12 bina hasar gördü"` aynı değeri
+  (12) üretiyor. Rakam, sözcük ve karışık yazım (`15 bin`, `2 bin 500`) destekleniyor;
+  `iki bin üç yüz kırk beş` = 2345, `iki yüz bin` = 200000.
+- **Bileşimde kural toplama değil, azalan büyüklük.** `on iki` = 12 çünkü 2 < 10. Aynı kural
+  `bir iki kişi` ifadesini 3 diye okumayı engelliyor — bu bir sayı değil, "birkaç" kalıbı.
+  Kural olmasa yan yana her sayı sözcüğü toplanır ve metinde olmayan figür üretilirdi.
+- **Tarih üç sayı değil.** `20.04.2020` ayrıştırılsaydı 20, 4 ve 2020 diye üç makul görünen değer,
+  üstelik anahtar kelimenin hemen yanında çıkardı. Rakamlı tarih biçimleri atlanıyor.
+  **Sınır açıkça kabul edildi:** `3 Mayıs 2020` burada tanınamaz (takvim gerekir), `3` ve `2020`
+  üretilir; elemek T-11/T-14'ün işi. Gizlemek yerine teste yazıldı.
+- **Test bir hata yakaladı:** `"2,5 milyar lira"` — ondalık figürü reddediyordum ama `milyar` tek
+  başına kalıp **1 milyar** üretiyordu. Yani okumayı reddetmek başka bir sayı uydurmaya dönüşüyordu.
+  Reddedilen figür artık kendisini takip eden çarpanı da kapsıyor.
+- **T-14 için iki tuzak teste yazıldı:** sözcüklü tarihten sızan sayılar (`3`, `2020`) ve sayı olup
+  metrik olmayan ifadeler — üçüncü örnekteki `her iki ilde` ifadesi `2` üretiyor.
 
 ### ☐ T-11 · Tarih çözümleme (EXPLICIT / RELATIVE / DEFAULTED)
 Çoklu format (`20.04.2020`, `3 Mayıs 2020`, `2020-04-20`); göreli ifadeler (`Son 24 saatte`, `dün`,
@@ -602,14 +619,54 @@ olarak yazılır (ADR-022 bunları bilinçli olarak açık bırakmıştı).
 - **Not:** Recharts iskelette kullanılmıyor; ilk kullanıcısı T-28. Şimdi kurulmasının sebebi
   ADR-026'da: React 19 ile çözülüp derlendiğini bugün öğrenmek.
 
-### ☐ T-24 · API istemcisi ve tipli sözleşme
+### ☑ T-24 · API istemcisi ve tipli sözleşme
 Tek bir API katmanı: uç çağrıları, RFC 7807 (`application/problem+json`) hatalarının tipli
 çözümlenmesi, sayfalama zarfı. Katalog metadata ucunun (FR-16) yüklenmesi ve tüm seçim kutularının
 tek kaynağı hâline gelmesi.
 - **Bağımlılık:** T-23, T-08 *(metadata ucu)*, T-22 *(cevap şekilleri)*
-- **Karşılar:** FR-27, NFR-13, NFR-14
+- **Karşılar:** FR-27, FR-28, NFR-13, NFR-14
 - **DoD:** Hiçbir olay tipi/metrik/il listesi arayüzde sabit yazılı değil; sunucu hatası tek yerde
   çözümlenip kullanıcıya okunur mesaja dönüşüyor; ham JSON veya teknik ayrıntı ekrana basılmıyor.
+- **Sonuç:** 35 test geçiyor, coverage %100 (71 satır — T-23'te 12'ydi; kapının dişi artık mantık
+  katmanında). Katman: `api/client.ts` (tek kapı, göreli URL), `api/problem.ts` (RFC 7807),
+  `api/types.ts`, `api/endpoints.ts`, `api/queries.ts` (sorgu anahtarları + hook'lar),
+  `i18n/errorMessages.ts`.
+- **Tipler çalışan sistemden yakalandı**, dokümandan yazılmadı — Postman koleksiyonunun kuralıyla
+  aynı. Yakalanan sözleşme: metadata `{eventTypes[{key,label,metrics[{key,label}]}], provinces[{code,name}]}`;
+  makbuz `{id, submittedAt}` + 201/Location; sayfalama zarfı `{content,page,size,totalElements,totalPages}`;
+  problem `{type,title,status,detail,instance,code,timestamp}`.
+- **Henüz olmayan uçlar için istemci yazılmadı.** `/incidents`, `/analytics/*` ve reprocess bugün
+  404 dönüyor; onlara tip yazmak tahmin olurdu ve derlemeden geçtiği için yanıltırdı. T-16/T-17/T-19
+  geldiğinde eklenecek.
+- **Hata mesajları `code`'dan üretiliyor, `detail`'den değil.** Sunucunun `detail` alanı İngilizce
+  ("Incident report text must not be empty."); Türkçe arayüzde ham gösterilemez. FR-18 "title/detail
+  gösterilir" diyor — bilinçli sapma: `code` sözleşmenin makine tarafından okunan yarısı ve
+  çevrilebilir olan da o. Bilinmeyen kod, İngilizce metne düşmek yerine genel bir cümleye düşüyor;
+  testle sabitlendi.
+- **Üç şey gerçek sistemde doğrulandı:**
+  - Katalog paneli beş olay tipini metrik sayılarıyla ve 81 ili **sunucu cevabından** çiziyor;
+    kaynakta hiçbir liste yok.
+  - Backend tamamen durdurulduğunda arayüz beyaz ekrana düşmüyor: *"Sunucuya şu anda ulaşılamıyor"*
+    ve **Tekrar dene** düğmesi görünüyor (FR-28).
+  - İstekler göreli; `sameOrigin: true`.
+- **Üç tuzak yakalandı:**
+  - **nginx backend yokken hiç açılmıyordu.** `proxy_pass http://app:8080` upstream'i başlangıçta
+    çözüyor; bulamayınca `[emerg] host not found in upstream`. Yani T-23'ün bıraktığı halde
+    **backend düşerse arayüz de komple ölüyordu** — FR-28'in tam tersi. Çözüm: `resolver 127.0.0.11`
+    + `proxy_pass $backend` ile çözümlemeyi istek anına ertelemek. Artık backend hiç yokken bile
+    frontend `healthy`, SPA 200, API 502.
+  - **502 "beklenmeyen cevap" diyordu.** Backend düştüğünde nginx HTML gövdeli 502 döner; kullanıcı
+    için anlamı "sunucu kapalı". 502/503/504 artık `gateway.unavailable` koduna ve kendi cümlesine
+    eşleniyor. Bunu ancak gerçek sisteme karşı test edince gördüm.
+  - **Sonsuz "yükleniyor".** TanStack Query varsayılan `networkMode: 'online'` ile, çevrimdışı
+    sanıldığında yeniden denemeyi duraklatıyor ve `status` `pending`'de kalıyor — ekranda hiç bitmeyen
+    bir spinner, FR-28'in yasakladığı şey. `networkMode: 'always'` yapıldı ve **davranış** testle
+    sabitlendi (düzeltme geri alınınca test kırılıyor).
+- **Kütüphane davranışı — bilinmesi gereken.** Yeniden denemeler belge **gizliyken** de duraklıyor:
+  retryer'ın `canContinue()` fonksiyonu `focusManager.isFocused()`'ı VE ile bağlıyor, `networkMode`
+  ne olursa olsun. Arka plandaki bir sekme, kendisine bakılana kadar spinner'ını korur. Kütüphanenin
+  tasarımı böyle; ayarın çalışmaması değil. Otomasyon tarayıcısı `visibilityState: hidden`
+  raporladığı için doğrulama sırasında bu davranış uzunca bir süre asıl hatayı maskeledi.
 
 ### ☐ T-25 · Bildirim girişi ve sonucun gösterilmesi *(dikey dilim)*
 Tek metin alanı, gönderim, ardından **kimlikle sorgu** ile sonucun aynı ekranda gösterilmesi.
@@ -734,7 +791,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-1 | Kayıt granülaritesi | T-04 |
 | TC-2 | Metrik veri modeli | T-04 |
 | TC-3 | Sayı ↔ metrik eşleştirme | T-14 |
-| TC-4 | Türkçe bileşik sayı sözcükleri | T-10 |
+| TC-4 | Türkçe bileşik sayı sözcükleri | **Karara bağlandı → ADR-028** · uygulaması T-10 |
 | TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
 | TC-6 | Tarih ayrıştırma ve göreli ifadeler | T-11 |
 | TC-7 | İl tanıma | T-12 |
