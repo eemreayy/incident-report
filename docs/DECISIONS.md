@@ -446,7 +446,8 @@ incident-report/
 - *Kuralları her modülün kendi testinde tanımlamak:* Her modül yalnızca kendi sınıflarını görür; modüller arası kurallar ifade edilemez. Bu yüzden kurallar `app`'te — tüm modülleri classpath'inde gören tek modül.
 
 **Sonuçlar.**
-- 12 kural devrede: modül sınırları, veri tabanı sahipliği, çevrim (cycle) yokluğu, controller'ın persistence tipi sızdırmaması, katman yönü ve alan enjeksiyonu yasağı.
+- 13 kural devrede: modül sınırları, veri tabanı sahipliği, çevrim (cycle) yokluğu, entity/document'ın API'ye sızmaması, katman yönü ve alan enjeksiyonu yasağı.
+- **Bir kural T-06'da keskinleştirildi.** İlk hali "controller persistence tipine bağımlı olamaz" diyordu ve doğru mapping kodunda ateşledi — controller'ın dökümanı *görmesi* DTO'ya çevirmenin ta kendisi. Kural kaldırılmadı, kastedilen şeye indirgendi: handler bir entity/document **döndüremez**, `*Request`/`*Response` alanı entity/document **olamaz**. Fazla geniş bir kural, insanları kuralı zayıflatmaya alıştırır; doğru tepki onu kaldırmak değil, ne demek istediğini tam söylemek.
 - Kurallar isim tabanlı (`*Repository`, `*Controller`); isimlendirme konvansiyonundan sapmak kuralı sessizce devre dışı bırakır. Konvansiyon `CLAUDE.md`'de yazılı.
 - Modüllerin çoğu henüz boş olduğu için `archRule.failOnEmptyShould=false` ayarlandı. Bu, yanlış yazılmış bir paket adının kuralı sessizce geçirmesi riskini doğuruyor; risk, "hiç sınıf import edilmediyse patla" diyen ayrı bir kontrol testiyle kapatıldı. Modüller kod kazandığında ayar tekrar açılmalı.
 - Doğrulandı: `Repository → Controller` bağımlılığı eklendiğinde build `Architecture Violation ... was violated (3 times)` ile kırıldı.

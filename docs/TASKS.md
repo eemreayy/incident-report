@@ -184,13 +184,36 @@ event yayınlanır.
 - **Doğrulandı:** 51 test geçiyor (25'i yeni). Modül başına coverage eşiği tüm modüllerde
   sağlanıyor.
 
-### ☐ T-06 · REST katmanı ve hata sözleşmesi
+### ☑ T-06 · REST katmanı ve hata sözleşmesi
 `POST /api/v1/incident-reports`, `GET /incident-reports`, `GET /incident-reports/{id}`. Girdi doğrulama
 (boş metin, maksimum uzunluk). `@RestControllerAdvice` ile RFC 7807 `application/problem+json`.
 Cevap modelinde `warnings[]` alanı.
 - **Bağımlılık:** T-05
 - **Karşılar:** FR-01, FR-14
 - **DoD:** Geçersiz girdi açıklayıcı problem+json döner; stack trace sızmaz.
+- **Sonuç:** Üç uç çalışıyor; 69 test geçiyor. `POST` **201 Created** + `Location` başlığı
+  döndürüyor — 202 değil, çünkü analiz aynı çağrının içinde senkron tamamlanıyor (ADR-003);
+  202 sonradan gelecek bir sonuç vaat ederdi.
+- **Bean validation kullanılmadı, bilinçli.** Doğrulama kuralları servis katmanında tek yerde:
+  reprocess yolunun arkasında HTTP isteği yok ve aynı kurallara uymak zorunda. Aynı kuralı
+  `@NotBlank` ile ikinci kez yazmak, ikisinden birinin unutulacağı iki kaynak yaratırdı.
+- **Hata sözleşmesi `app` modülünde.** Tüm modüller adına cevap verdiği için tek bir yerde
+  olmalı; `shared` framework'süz kalsın diye oraya konmadı. `ResponseEntityExceptionHandler`
+  genişletildiği için Spring'in kendi hataları da (bozuk JSON, yanlış metot, yanlış content-type)
+  aynı şekilde dönüyor.
+- **Sızıntı yok:** Beklenmeyen hata `internal` kodu ve bir `reference` ile 500 dönüyor; istisna
+  tipi, mesajı ve JDBC URL'i cevaba girmiyor — log'a gidiyor. `failureReason` alanı da DTO'ya
+  hiç konmadı. İkisi de testle sabitlendi.
+- **ArchUnit kuralı keskinleştirildi.** T-03'te yazdığım "controller persistence tipine
+  dokunamaz" kuralı fazla genişti ve doğru mapping kodunda ateşledi. Kural kaldırılmadı,
+  kastedilen şeye indirgendi: *handler bir entity/document **döndüremez**, DTO alanı
+  entity/document **olamaz***. Doğrulandı — controller dökümanı döndürünce build kırılıyor.
+- **Bir hata yakalandı ve düzeltildi:** 405 cevabı `code: request.malformed` diyordu; yanlış
+  metot bozuk gövde değil. Kod artık status'tan türetiliyor:
+  `request.method-not-allowed`, `request.unsupported-media-type`, `request.bad-request`.
+  `code` sözleşmenin makine tarafından okunan yarısı — orada belirsizlik, ayrıntıdan kötü.
+- **Uçtan uca doğrulandı** (Docker): 201+Location, Türkçe karakterler bozulmadan geri geliyor,
+  liste en-yeni-önce sayfalanıyor, 400/404/405/415 hepsi `application/problem+json`.
 
 ### ☐ T-07 · Analiz boru hattı iskeleti ve kalıcılaştırma
 `analysis` modülü event'i **senkron** dinler, (bu aşamada naif/geçici çıkarımla) normalize kayıt üretir,

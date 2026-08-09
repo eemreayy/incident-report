@@ -1,5 +1,7 @@
 package com.emreay.incidentreport.architecture;
 
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
@@ -9,6 +11,8 @@ import com.tngtech.archunit.lang.ArchRule;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.fields;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 
 /**
  * Architecture rules the compiler cannot enforce.
@@ -100,15 +104,41 @@ class ArchitectureRulesTest {
     // Layering and API surface
     // ---------------------------------------------------------------------
 
+    /**
+     * Entities and documents must not reach the wire.
+     *
+     * <p>Stated as two narrow rules rather than one broad "a controller may not touch a persistence
+     * type". A controller legitimately *sees* the stored type — that is what mapping to a DTO
+     * means. What must never happen is the type being serialised: returned from a handler, or
+     * carried inside a payload. An earlier, broader version of this rule banned the dependency
+     * itself and fired on correct mapping code, which teaches people to weaken rules rather than
+     * respect them.
+     */
+    private static final DescribedPredicate<JavaClass> PERSISTENCE_TYPES =
+            new DescribedPredicate<>("a JPA entity or a MongoDB document") {
+                @Override
+                public boolean test(JavaClass type) {
+                    return type.isAnnotatedWith("jakarta.persistence.Entity")
+                            || type.isAnnotatedWith("org.springframework.data.mongodb.core.mapping.Document");
+                }
+            };
+
     @ArchTest
-    static final ArchRule controllersMustNotExposePersistenceTypes =
-            noClasses().that().areAnnotatedWith("org.springframework.web.bind.annotation.RestController")
-                    .or().areAnnotatedWith("org.springframework.stereotype.Controller")
-                    .should().dependOnClassesThat()
-                    .areAnnotatedWith("jakarta.persistence.Entity")
-                    .orShould().dependOnClassesThat()
-                    .areAnnotatedWith("org.springframework.data.mongodb.core.mapping.Document")
-                    .because("controllers speak DTOs; entities and documents never cross the HTTP boundary");
+    static final ArchRule handlersMustNotReturnPersistenceTypes =
+            noMethods().that().areDeclaredInClassesThat()
+                    .areAnnotatedWith("org.springframework.web.bind.annotation.RestController")
+                    .or().areDeclaredInClassesThat()
+                    .areAnnotatedWith("org.springframework.stereotype.Controller")
+                    .should().haveRawReturnType(PERSISTENCE_TYPES)
+                    .because("the storage shape would become the published contract, and could no "
+                            + "longer change without breaking clients");
+
+    @ArchTest
+    static final ArchRule apiPayloadsMustNotCarryPersistenceTypes =
+            noFields().that().areDeclaredInClassesThat().haveSimpleNameEndingWith("Response")
+                    .or().areDeclaredInClassesThat().haveSimpleNameEndingWith("Request")
+                    .should().haveRawType(PERSISTENCE_TYPES)
+                    .because("a DTO wrapping an entity leaks it just as surely as returning it");
 
     @ArchTest
     static final ArchRule repositoriesMustNotDependOnControllers =
