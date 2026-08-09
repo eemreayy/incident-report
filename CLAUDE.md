@@ -18,6 +18,8 @@ Monorepo. One `CLAUDE.md`, at the root, covering every module.
 ```
 docker-compose.yml   full system - the entry point, `docker compose up --build`
 docs/                PRD, DECISIONS, TASKS - project-wide
+docs/postman/        API collection; examples are captured from a running instance, never written
+                     by hand. Extend it when endpoints land: `npx newman run` verifies it still fits.
 backend/             Java 21 / Spring Boot; the Maven reactor root lives HERE, not at repo root
 frontend/            ReactJS (not implemented yet)
 ```

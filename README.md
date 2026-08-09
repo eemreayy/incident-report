@@ -309,6 +309,10 @@ Uçlar `/api/v1` altındadır:
 
 Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 
+API'yi frontend olmadan denemek için [`docs/postman/`](docs/postman/) altında hazır bir Postman
+koleksiyonu var: 12 istek, gerçek örnek cevaplar ve `npx newman run` ile çalıştırılabilen 51
+assertion.
+
 ---
 
 ## Testler ve Kapsam
@@ -328,5 +332,6 @@ Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 | Dosya | İçerik |
 |---|---|
 | [`docs/PRD.md`](docs/PRD.md) | Ürün gereksinim dokümanı: kapsam, fonksiyonel/fonksiyonel olmayan isterler, kabul kriterleri, ister izlenebilirlik matrisi, açık teknik challenge'lar |
+| [`docs/postman/`](docs/postman/) | Postman koleksiyonu — API'yi frontend olmadan denemek için; örnek cevaplar çalışan sistemden yakalanmıştır |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Tüm mimari kararlar; gerekçeleri, elenen alternatifleri, trade-off'ları ve **"İleride"** notları |
 | [`CLAUDE.md`](CLAUDE.md) | Projenin çalışma sözleşmesi: mimari kısıtlar, kodlama ve test kuralları, Türkçe metin işleme tuzakları |
