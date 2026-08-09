@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -65,12 +66,30 @@ public class IngestionService {
 
         try {
             events.publishEvent(new RawReportSubmittedEvent(stored.id(), stored.rawText(), stored.submittedAt()));
-            return stored;
         } catch (RuntimeException failure) {
             log.error("analysis failed for raw report {}; the text is kept for reprocessing",
                     stored.id(), failure);
             return repository.save(stored.failed(clock.instant(), describe(failure)));
         }
+
+        // Analysis ran inside the publish call above and reported back through another event, which
+        // updated this report's status and warnings. The copy captured before publishing is now
+        // stale, so it is read again rather than returned as it was - otherwise every caller would
+        // be told its report is still RECEIVED and carries no warnings.
+        return repository.findById(stored.id()).orElse(stored);
+    }
+
+    /**
+     * Records how analysis went. Called by a listener when the analysis side reports back; there is
+     * no endpoint for it, because this is derived state rather than something a user sets.
+     *
+     * <p>The text and the submission time are carried over untouched — only the outcome changes
+     * (ADR-005).
+     */
+    public void markAnalyzed(String rawReportId, List<String> warnings) {
+        repository.findById(rawReportId).ifPresentOrElse(
+                report -> repository.save(report.analyzed(clock.instant(), warnings)),
+                () -> log.warn("analysis reported on raw report {}, which no longer exists", rawReportId));
     }
 
     public Optional<RawIncidentReport> findById(String id) {

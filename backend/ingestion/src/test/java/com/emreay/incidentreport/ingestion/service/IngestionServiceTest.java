@@ -56,7 +56,7 @@ class IngestionServiceTest {
 
     @Test
     void storesTheTextUntouchedAndStampsItWithTheSubmissionTime() {
-        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        savesAssignIds();
 
         RawIncidentReport submitted = service.submit(TEXT);
 
@@ -74,7 +74,7 @@ class IngestionServiceTest {
      */
     @Test
     void announcesTheReportWithEverythingTheAnalyserNeeds() {
-        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        savesAssignIds();
 
         service.submit(TEXT);
 
@@ -94,7 +94,7 @@ class IngestionServiceTest {
      */
     @Test
     void keepsTheTextWhenAnalysisBlowsUp() {
-        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        savesAssignIds();
         doThrow(new IllegalStateException("province extractor exploded"))
                 .when(events).publishEvent(any(RawReportSubmittedEvent.class));
 
@@ -110,7 +110,7 @@ class IngestionServiceTest {
 
     @Test
     void aFailureIsNotReportedBackToTheCaller() {
-        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        savesAssignIds();
         doThrow(new IllegalStateException("boom")).when(events).publishEvent(any(RawReportSubmittedEvent.class));
 
         assertThat(service.submit(TEXT)).isNotNull();
@@ -119,7 +119,7 @@ class IngestionServiceTest {
     /** A failure with no message must still produce something identifiable, not "null". */
     @Test
     void recordsTheFailureTypeEvenWithoutAMessage() {
-        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        savesAssignIds();
         doThrow(new IllegalStateException()).when(events).publishEvent(any(RawReportSubmittedEvent.class));
 
         assertThat(service.submit(TEXT).failureReason())
@@ -153,7 +153,7 @@ class IngestionServiceTest {
     void textExactlyAtTheLimitIsAccepted() {
         service = new IngestionService(repository, events, new IngestionProperties(20),
                 Clock.fixed(NOW, ZoneOffset.UTC));
-        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        savesAssignIds();
 
         assertThat(service.submit("x".repeat(20))).isNotNull();
     }
@@ -181,6 +181,62 @@ class IngestionServiceTest {
         when(repository.findAll(any(PageRequest.class))).thenReturn(page);
 
         assertThat(service.findAll(PageRequest.of(0, 20))).isSameAs(page);
+    }
+
+    /**
+     * Mimics MongoDB assigning an id on insert, and lets the report be read back afterwards —
+     * which submit() now does, because analysis updates it while the publish call is in flight.
+     */
+    private void savesAssignIds() {
+        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(repository.findById(STORED_ID)).thenAnswer(invocation -> Optional.empty());
+    }
+
+    /**
+     * Analysis runs inside the publish call and reports back through another event, which updates
+     * the report. Returning the copy captured before publishing would tell every caller its report
+     * is still RECEIVED and carries no warnings - a stale answer produced by the very call that
+     * made it stale.
+     */
+    @Test
+    void returnsTheReportAsAnalysisLeftIt() {
+        RawIncidentReport analysed = withId(RawIncidentReport.received(TEXT, NOW))
+                .analyzed(NOW, List.of("No known event type matched this text."));
+        when(repository.save(any())).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(repository.findById(STORED_ID)).thenReturn(Optional.of(analysed));
+
+        RawIncidentReport submitted = service.submit(TEXT);
+
+        assertThat(submitted.status()).isEqualTo(ProcessingStatus.ANALYZED);
+        assertThat(submitted.warnings()).containsExactly("No known event type matched this text.");
+    }
+
+    @Test
+    void markingAnalysedKeepsTheTextAndRecordsTheWarnings() {
+        RawIncidentReport stored = withId(RawIncidentReport.received(TEXT, NOW));
+        when(repository.findById(STORED_ID)).thenReturn(Optional.of(stored));
+
+        service.markAnalyzed(STORED_ID, List.of("date was assumed"));
+
+        ArgumentCaptor<RawIncidentReport> saved = ArgumentCaptor.forClass(RawIncidentReport.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().status()).isEqualTo(ProcessingStatus.ANALYZED);
+        assertThat(saved.getValue().rawText()).isEqualTo(TEXT);
+        assertThat(saved.getValue().submittedAt()).isEqualTo(NOW);
+        assertThat(saved.getValue().warnings()).containsExactly("date was assumed");
+    }
+
+    /**
+     * Analysis answering about a report that is gone should be logged and dropped, not turned into
+     * a failure: the analysis itself succeeded, and there is nothing left to record it against.
+     */
+    @Test
+    void anOutcomeForAVanishedReportIsIgnored() {
+        when(repository.findById("gone")).thenReturn(Optional.empty());
+
+        service.markAnalyzed("gone", List.of("bir uyarı"));
+
+        verify(repository, never()).save(any());
     }
 
     /** Mimics MongoDB assigning an id on insert. */

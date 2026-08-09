@@ -215,13 +215,41 @@ Cevap modelinde `warnings[]` alanı.
 - **Uçtan uca doğrulandı** (Docker): 201+Location, Türkçe karakterler bozulmadan geri geliyor,
   liste en-yeni-önce sayfalanıyor, 400/404/405/415 hepsi `application/problem+json`.
 
-### ☐ T-07 · Analiz boru hattı iskeleti ve kalıcılaştırma
-`analysis` modülü event'i **senkron** dinler, (bu aşamada naif/geçici çıkarımla) normalize kayıt üretir,
-Postgres'e yazar ve ham kayda iki yönlü bağlar. Analiz hatası ham metnin kaydını geri almaz — ham kayıt
-`FAILED` işaretlenir.
+### ☑ T-07 · Analiz boru hattı iskeleti ve kalıcılaştırma
+`analysis` modülü event'i **senkron** dinler, normalize kayıt üretir, Postgres'e yazar ve ham kayda
+iki yönlü bağlar. Analiz hatası ham metnin kaydını geri almaz — ham kayıt `FAILED` işaretlenir.
 - **Bağımlılık:** T-04, T-05
 - **Karşılar:** FR-03, FR-08 · **İlgili kararlar:** ADR-002, ADR-003
 - **DoD:** Metin gönderildiğinde Mongo'ya ve Postgres'e kayıt düşüyor; her iki yönde de izlenebilir; analiz hatası ham kaydı silmiyor.
+- **Sonuç:** Dikey dilim tamamlandı. 97 test geçiyor. Docker'da uçtan uca doğrulandı: tek `POST`
+  isteği içinde Mongo'ya ham metin, Postgres'e türetilmiş kayıt düşüyor ve cevap `ANALYZED`
+  durumu ile uyarıları taşıyarak dönüyor.
+- **Event iki yönlü.** `RawReportSubmittedEvent` gidiyor, `RawReportAnalyzedEvent` dönüyor —
+  ikisi de `shared`'da. Modüller birbirini hâlâ tanımıyor; derleme grafiğinde aralarında kenar yok
+  ve ArchUnit'in çevrim kuralı da temiz. Dönüş yolu olmasaydı her kayıt sonsuza kadar `RECEIVED`
+  kalırdı: analiz edilmiş bir rapor hakkında "kimse bakmadı" diyen bir durum.
+- **`submit()` yayından sonra kaydı yeniden okuyor.** Analiz `publishEvent` çağrısının içinde
+  çalışıp raporu güncelliyor; yayından önce yakalanan kopya artık bayat. Onu döndürmek her
+  çağırana "raporunuz hâlâ RECEIVED ve uyarı yok" demek olurdu — üstelik bunu bayatlatan çağrının
+  kendisi tarafından.
+- **Geçici extractor bir taklit değil.** `UnclassifiedIncidentExtractor`, katalogda hiçbir şey
+  eşleşmediğinde her metnin izleyeceği **gerçek yolun** ta kendisi (ADR-006): `OTHER` /
+  `UNCLASSIFIED`, gönderim tarihinden `DEFAULTED` tarih ve nedenini söyleyen uyarılar. Katalog
+  bugün boş olduğu için her metin bu yoldan geçiyor — ama doğru sebeple. T-09…T-14 tanıdıkları
+  metinler için cevap verecek, tanımadıkları için bu davranış yerinde kalacak.
+- **Seam kuruldu:** `IncidentExtractor` arayüzü + `ExtractedIncident`/`ExtractionResult` değer
+  tipleri. Çıkarım kodu veri tabanı görmüyor; iller entity yerine plaka koduyla taşınıyor ve
+  eşleme sırasında `AnalysisService` çözüyor. Türkçe metin kurallarını JUnit'ten başka hiçbir şey
+  olmadan test edebilmek için.
+- **Kapsam kuralı tek yerde.** `ExtractedIncident` kendi invariant'ını doğrulamıyor; `SINGLE`
+  kaydın il taşıması kuralı `Incident`'in fabrika metotlarında ve şemadaki CHECK'te. Üçüncü kez
+  yazmak, birbiriyle uyumlu tutulacak üç yer demekti; tutarsız bir çıkarım eşleme adımında
+  yüksek sesle patlıyor (testle sabitlendi).
+- **Reprocess yapısal olarak güvenli.** `analyze` önce o rapordan türeyen kayıtları siliyor,
+  sonra yazıyor; hepsi tek Postgres transaction'ında. İkinci çalıştırma satırları ikiye
+  katlamıyor ve T-19 ayrı bir kod yolu yazmak zorunda kalmayacak.
+- **İki yönlü izlenebilirlik (FR-08) çalışan sistemde doğrulandı:** Postgres `raw_report_id` →
+  Mongo `_id`, ve ters yönde sorgu. İki ayrı bildirim birbirine karışmıyor.
 
 ---
 
