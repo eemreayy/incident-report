@@ -26,7 +26,7 @@ services:
     depends_on:
       # Wait for the API to report healthy. The frontend would serve fine
       # without it, but the first thing a user does is load data.
-      app:
+      backend:
         condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
@@ -41,7 +41,7 @@ services:
 
 # There is deliberately no API address configured above. The browser reaches the
 # API on this same origin: nginx inside this container proxies /api and
-# /actuator/health to `app:8080` over the compose network (ADR-025). So the API
+# /actuator/health to `backend:8080` over the compose network (ADR-025). So the API
 # never appears in a URL the browser can see, there is no CORS configuration in
 # the backend, and the user opens exactly one address - http://localhost:3000.
 #

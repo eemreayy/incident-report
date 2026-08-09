@@ -49,11 +49,11 @@ services:
       retries: 10
       start_period: 10s
 
-  app:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: incident-report-app
+    container_name: incident-report-backend
     depends_on:
       # Wait for the databases to report healthy, not merely to have started.
       # `service_started` would let the app race the database on first boot.

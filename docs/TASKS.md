@@ -650,7 +650,7 @@ tek kaynağı hâline gelmesi.
     ve **Tekrar dene** düğmesi görünüyor (FR-28).
   - İstekler göreli; `sameOrigin: true`.
 - **Üç tuzak yakalandı:**
-  - **nginx backend yokken hiç açılmıyordu.** `proxy_pass http://app:8080` upstream'i başlangıçta
+  - **nginx backend yokken hiç açılmıyordu.** `proxy_pass http://backend:8080` upstream'i başlangıçta
     çözüyor; bulamayınca `[emerg] host not found in upstream`. Yani T-23'ün bıraktığı halde
     **backend düşerse arayüz de komple ölüyordu** — FR-28'in tam tersi. Çözüm: `resolver 127.0.0.11`
     + `proxy_pass $backend` ile çözümlemeyi istek anına ertelemek. Artık backend hiç yokken bile

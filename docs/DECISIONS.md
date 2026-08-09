@@ -390,7 +390,7 @@ Sınır şöyle çizildi: **kendi kendine büyüyen veri** (olay tipleri, metrik
 
 **Gerekçe.**
 - **Sahiplik simetrisi.** Full-system compose backend repo'suna konsaydı, backend frontend'e referans verir ve onu sahiplenmiş görünürdü. Ne backend ne frontend diğerinin üstünde değil; kompozisyon üçüncü bir yere ait.
-- **Tekrar yok.** Compose'un `include:` özelliği backend'in kendi compose dosyasını olduğu gibi alıyor. `app`, `postgres`, `mongodb` tanımları **tek yerde**, onları sahiplenen repo'da duruyor; devops repo'su yalnızca frontend'i ve servisler arası bağlantıyı ekliyor. Duplikasyon gerekseydi bu ayrım maliyetli olurdu.
+- **Tekrar yok.** Compose'un `include:` özelliği backend'in kendi compose dosyasını olduğu gibi alıyor. `backend`, `postgres`, `mongodb` tanımları **tek yerde**, onları sahiplenen repo'da duruyor; devops repo'su yalnızca frontend'i ve servisler arası bağlantıyı ekliyor. Duplikasyon gerekseydi bu ayrım maliyetli olurdu.
 - **Sürüm bileşimi kayıt altında.** Submodule'ler belirli commit'lere sabit; "hangi backend hangi frontend ile çalışıyor" sorusunun cevabı devops repo'sunun git geçmişinde duruyor.
 - **Doğal ev.** CI workflow'ları, k8s manifestleri, seed data ve operasyon dokümanının backend veya frontend repo'sunda yeri yok; burada var.
 
@@ -663,7 +663,7 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 
 ## ADR-025 — Aynı Köken: nginx Reverse Proxy (CORS Yerine)
 
-**Karar.** Tarayıcı API'ye **kendi kökeni üzerinden** ulaşır. Frontend container'ındaki nginx statik dosyaları sunar ve `/api/*` ile `/actuator/health` isteklerini compose ağı üzerinden `app:8080`'e proxy'ler. Backend'de **CORS yapılandırması yoktur**; frontend kaynak kodunda **mutlak API adresi yoktur**. Geliştirmede aynı davranışı Vite'ın dev proxy'si verir.
+**Karar.** Tarayıcı API'ye **kendi kökeni üzerinden** ulaşır. Frontend container'ındaki nginx statik dosyaları sunar ve `/api/*` ile `/actuator/health` isteklerini compose ağı üzerinden `backend:8080`'e proxy'ler. Backend'de **CORS yapılandırması yoktur**; frontend kaynak kodunda **mutlak API adresi yoktur**. Geliştirmede aynı davranışı Vite'ın dev proxy'si verir.
 
 **Bağlam.** PRD bunu TC-17 olarak açık bırakmıştı. Frontend ayrı bir portta yayınlanacağı için tarayıcının `localhost:3000`'den `localhost:8080`'e yapacağı çağrılar çapraz kökenli olurdu. Kök `docker-compose.yml`'de bekleyen taslak `VITE_API_BASE_URL` geçiyordu, yani örtük olarak CORS'u varsayıyordu — ama bu bir karar değil, yer tutucuydu.
 

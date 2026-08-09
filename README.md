@@ -257,7 +257,7 @@ Komut tüm servisleri ayağa kaldırır ve uygulama, veri tabanları **sağlıkl
 | Servis | Adres | Açıklama |
 |---|---|---|
 | `frontend` | **http://localhost:3000** | React arayüzü — sistemin giriş noktası; API'yi aynı köken üzerinden proxy'ler |
-| `app` | http://localhost:8080 | Backend API |
+| `backend` | http://localhost:8080 | Backend API |
 | `postgres` | `localhost:5432` | PostgreSQL 17 — normalize/analitik veri |
 | `mongodb` | `localhost:27017` | MongoDB 8 — ham metin (log) |
 

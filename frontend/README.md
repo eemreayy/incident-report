@@ -76,7 +76,7 @@ Bunlar tercih değil, karar:
 
 Kök dizinde `docker compose up --build` → **http://localhost:3000**. Frontend container'ı statik
 dosyaları nginx ile sunar ve `/api/*` ile `/actuator/health` isteklerini compose ağı üzerinden
-`app:8080`'e proxy'ler.
+`backend:8080`'e proxy'ler.
 
 **TC-17 karara bağlandı: aynı köken** ([ADR-025](../docs/DECISIONS.md#adr-025--aynı-köken-nginx-reverse-proxy-cors-yerine)).
 Sonuçları:

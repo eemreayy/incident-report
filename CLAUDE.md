@@ -54,7 +54,7 @@ From the repository root:
 ```
 docker compose up --build              # the whole system
 docker compose up -d postgres mongodb  # databases only, for the `local` profile
-docker compose ps / logs -f app / down -v
+docker compose ps / logs -f backend / down -v
 ```
 
 From `frontend/`: `npm run dev` (Vite on :3000, proxies /api to :8080), `npm run verify`
