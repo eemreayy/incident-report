@@ -42,6 +42,7 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-032](#adr-032--sayı--metrik-eşleştirme-ve-il-kapsamının-belirlenmesi) | Sayı ↔ metrik eşleştirme ve il kapsamının belirlenmesi | Kabul edildi · **TC-3 çözüldü** |
 | [ADR-033](#adr-033--okuma-ucunun-şekli-kapsam-filtresi-uç-seviyesinde-analiz-sonucu-ve-dto-döndüren-okuma-servisi) | Okuma ucunun şekli: kapsam filtresi, uç seviyesinde analiz sonucu | Kabul edildi |
 | [ADR-034](#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik) | Canlı akışın yaşam döngüsü: rapor başına sinyal, commit sonrası yayın | Kabul edildi · **TC-10 çözüldü** |
+| [ADR-035](#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz) | Yeniden işleme ve mükerrer gönderim: aynı metin ikinci kayıt açmaz | Kabul edildi · **TC-9 çözüldü** |
 
 ---
 
@@ -947,3 +948,46 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - nginx tarafında `proxy_buffering off` zaten T-23'te yazılmıştı (ADR-025); bu karar onu bir gereklilik olarak sabitliyor — tamponlama açıkken akış çalışır görünüp sessiz kalır.
 
 **İleride.** Kaçan mesajın da telafi edilmesi istenirse doğal adım `Last-Event-ID` + kısa bir halka tampondur; sinyal zaten kimlik taşıdığı için mesaj şekli değişmez. Gönderimi yapan istemciye özel bir akış (yalnızca kendi bildirimleri) gerekirse korelasyon anahtarı `rawReportId` sinyalde hazır. Analiz asenkrona taşınırsa bu karar aynen geçerli kalır: `AFTER_COMMIT` o zaman istek thread'i yerine dinleyicinin thread'inde çalışır, istemci sözleşmesi değişmez. Çok örnekli dağıtımda `IncidentStream` arayüzü değişmeden altına Redis Pub/Sub gibi bir fan-out konabilir.
+
+---
+
+## ADR-035 — Yeniden İşleme ve Mükerrer Gönderim: Aynı Metin İkinci Kayıt Açmaz
+
+**Karar.** İki ayrı soru, tek bir uçta buluşuyor:
+
+1. **Reprocess.** `POST /api/v1/incident-reports/{id}/reprocess`, saklanmış metnin **aynı gönderim event'ini yeniden yayınlar**. `analysis` tarafı bunu ilk analizden ayırt etmez — tek kod yolu. Ham kayda **hiçbir şey yazılmaz**; türeyen kayıtlar silinip yeniden üretilir. Cevap gönderimle **aynı makbuz**, durum kodu **200** (yaratılan bir şey yok). Bilinmeyen kimlik **404**. Event'te taşınan zaman, raporun **orijinal** gönderim zamanıdır.
+2. **Mükerrer gönderim (TC-9).** Ham metnin **SHA-256** özeti dökümanda `textHash` alanında saklanır ve üzerinde **unique + sparse** bir MongoDB indeksi vardır. Aynı metin ikinci kez gönderilirse yeni kayıt açılmaz, event yayınlanmaz; mevcut kaydın makbuzu **200** ile döner (yeni kayıt **201**). Karşılaştırma **birebir bayt** üzerindedir: kırpma yok, normalizasyon yok. İndeks, `app` tarafındaki genel bir `auto-index-creation` anahtarıyla değil, `ingestion`'ın kendi başlangıç bileşeniyle (`RawIncidentReportIndexes`) kurulur.
+
+**Bağlam.** ADR-012 reprocess yeteneğini karara bağlamış ama "mükerrer kayıt oluşmaması"nı bir tasarım detayı olarak task aşamasına bırakmıştı. Bu arada T-22'de `AnalysisService` zaten "önce sil, sonra yaz" biçiminde yazıldı, yani reprocess'in yarısı fiilen hazırdı; eksik olan tetikleyen uçtu. TC-9 ise bambaşka bir soruydu: aynı metnin iki kez **gönderilmesi**. Sistem sayı üretiyor — vaka, ölü, yaralı — ve bu sayılar kayıt sayısıyla doğrudan orantılı.
+
+**Gerekçe.**
+
+- **Reprocess yeni bir event tipi değil, aynı event.** `RawReportSubmittedEvent`'i yeniden yayınlamak, dinleyici tarafında "ilk analiz" ile "yeniden analiz" ayrımını hiç var etmiyor. Ayrı bir event tipi, `analysis` içinde ikinci bir kod yolu ve zamanla iki kural seti demekti; bugün ikisinin aynı davranması **yapısal**, hatırlanması gereken bir şey değil.
+- **Orijinal gönderim zamanı taşınıyor, `now()` değil.** Göreli ifadelerin ve tarihsiz metinlerin referansı odur (ADR-014). Bugünün saatiyle yeniden işlemek, iki yıllık bir raporu bugüne taşırdı: iyileştirmek için yapılan işlem, iyileştirmeyi amaçladığı geçmişi bozardı.
+- **200, 201 değil.** Reprocess hiçbir şey yaratmıyor. Ham metin işlemin girdisi, konusu değil; türeyen kayıtlar da ekleniyor değil, **yerine geçiyor**.
+- **Cevap yine makbuz.** Sonucu cevaba koymak, ADR-021'in gönderim için çözdüğü sorunu reprocess için geri getirirdi. İstemci sonucu yine `GET /incidents?rawReportId=...` ile okuyor — **tek** okuma yolu, iki değil.
+- **Mükerrer gönderimde belirleyici olan, hangi hatanın daha pahalı olduğu.** İki seçenek de bir hata biçimi taşıyor: (a) tekilleştirmemek → çift tık ya da zaman aşımı sonrası retry, yaralı/ölü sayısını **sessizce ikiye katlar**; (b) tekilleştirmek → gerçekten iki ayrı kaynaktan gelen **birebir aynı** metin tek kayıt sayılır. Serbest Türkçe metinde ikincisinin gerçekleşme ihtimali pratikte yok denecek kadar düşük, birincisi ise her gün olur. Üstelik (b)'nin sonucu görünür ve düzeltilebilir; (a)'nınki ne görünür ne de sonradan ayırt edilebilir — hangi kaydın mükerrer olduğunu artık kimse bilemez.
+- **Bunun yan faydası: `POST` idempotent oluyor.** Cevabı alamayan bir istemci isteği güvenle tekrarlayabiliyor. Bu, akışın ve senkronluğun ileride değişebileceği bir sistemde küçük bir şey değil.
+- **Karşılaştırma birebir bayt üzerinde.** Kırpmak ya da normalize etmek, "bu iki metin aynıdır" hükmünü sisteme verdirmek demek; bir denetim günlüğünün vermemesi gereken hüküm tam olarak budur. Bir boşlukla ayrılan iki metin iki metindir.
+- **`String.hashCode()` değil, SHA-256.** 32 bitlik bir özet kazara yeterince sık çakışır; buradaki çakışma, alakasız bir raporu "mükerrer" diye sessizce düşürmek demektir.
+- **Unique indeks, aramanın yetmediği yeri kapatıyor.** Önce arama (`findByTextHash`) sıradan durumu — kullanıcının iki kez basması — çözüyor. Ama aynı anda gelen iki istek de "yok" bulup ikisi de yazardı. İndeks bu yarışı, servisin cevaplayabileceği bir `DuplicateKeyException`'a çeviriyor: kaybedene kazananın kaydı dönüyor, ki bu zaten bir an sonra alacağı cevaptı.
+- **`sparse`, geçmişi kilitlememek için.** Özet alanı olmayan eski kayıtlar, düz bir unique indekste "hepsi `null` değerini paylaşıyor" diye okunur ve indeks **hiç kurulamaz** — uygulama açılışta patlar. Bedeli, o eski metinlerin mükerrer tespitine katılmaması.
+- **İndeksi modül kendi kuruyor.** PostgreSQL şeması `ddl-auto: update` ile değil Flyway ile yönetiliyor; buradaki indeks de bir doğruluk garantisi olduğu için başka bir modülün YAML'ındaki genel bir anahtarın yan etkisi olmamalı. Adı olan, okunabilen ve test edilebilen bir bileşen kuruyor.
+
+**Alternatifler.**
+- *Tekilleştirme yok:* Sıfır kod. Denetim günlüğü argümanı doğru ama pahalı hatayı seçiyor; ayrıca `POST`'u retry'a karşı savunmasız bırakıyor.
+- *Kaydı yine aç, ama "bu metin daha önce gönderildi" uyarısı dön:* Denetim günlüğü el değmeden kalır. Makbuzun şeklini genişletir (ADR-021 onu bilinçli olarak dar tutuyor) ve çift sayımı önlemez — yalnızca görünür kılar.
+- *Normalize edilmiş metin üzerinden tekilleştirme (kırpma, boşluk sadeleştirme):* Daha çok mükerreri yakalardı. "Aynı" tanımını sisteme verdirir; iki farklı metnin tek kayda düşmesi, tespit edilemez bir veri kaybıdır.
+- *Zaman pencereli tekilleştirme (ör. son 5 dakikada aynı metin):* Çift tıkı yakalar, geç retry'ı kaçırır. Keyfi bir sabit ve iki farklı davranış demek.
+- *`Idempotency-Key` başlığı:* HTTP'nin standart cevabı. İstemcinin anahtar üretmesini şart koşar; kimlik doğrulaması olmayan, tek sayfalık bir arayüzde metnin kendisi zaten doğal anahtar.
+- *Reprocess için ayrı bir event tipi:* Dinleyici "yeniden mi işliyorum" bilirdi. Bugün bu bilgiyle yapılacak hiçbir şey yok; karşılığında ikinci bir kod yolu.
+- *Reprocess'in analiz sonucunu dönmesi:* Tek istek. ADR-021'in tam olarak reddettiği şey; ayrıca senkronluğu tekrar sözleşmeye sokardı.
+
+**Sonuçlar.**
+- `RawIncidentReport` dördüncü bir alan kazandı (`textHash`). Modülün **kendi** verisi — metinden türetiliyor — dolayısıyla "her modül yalnızca sahibi olduğu veriyi yayınlar" kuralı bozulmuyor; alan makbuzda ve okuma DTO'sunda **görünmüyor**.
+- `IngestionService.submit` artık `SubmissionOutcome` dönüyor (kayıt + yeni mi). Ayrım cevabın durum kodunda: **201** yeni, **200** zaten vardı. Gövde her iki durumda aynı şekilde.
+- **Postman koleksiyonu ikinci kez koşturulabilir kalsın diye gevşetildi:** üç örnek gönderim artık `201`'in yanı sıra `200`'ü de kabul ediyor (temiz olmayan bir örneğe karşı ikinci koşu). Karşılığında koleksiyona iki yeni istek girdi: mükerrer gönderim (aynı metin → 200, aynı kimlik) ve reprocess.
+- **Analizi başarısız olmuş bir raporun metni yeniden gönderilirse hâlâ `FAILED` görünür** — çünkü ikinci gönderim analizi yeniden çalıştırmıyor. Bunun için doğru işlem reprocess; uçlar bu yüzden ayrı.
+- Mongo tarafında ilk indeks kuruldu ve bunun kurulduğu yer artık modülün kendi kodu.
+
+**İleride.** Yakın-mükerrer (kopyala-yapıştır sırasında bir kelimesi değişmiş) metinler bugün iki ayrı kayıt; istenirse çözüm normalize edilmiş ikinci bir özet **ek** alan olarak eklenip kullanıcıya "buna benzer bir bildirim var, yine de kaydedeyim mi?" diye sormaktır — kararı sisteme değil kullanıcıya bırakan hâli. Toplu reprocess (katalog sürümü değişince tüm geçmişi yeniden işlemek) bu uç üzerinden bir döngüyle bugün de mümkün; anlamlı hâli, ADR-012'nin "İleride"sindeki analiz sürüm bilgisiyle birlikte gelir — o zaman yalnızca eski sürümle üretilmiş kayıtlar seçilebilir. `Idempotency-Key` gerekirse `textHash` yolunu bozmadan yanına eklenebilir.

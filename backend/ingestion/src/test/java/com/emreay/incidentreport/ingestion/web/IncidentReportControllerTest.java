@@ -2,6 +2,7 @@ package com.emreay.incidentreport.ingestion.web;
 
 import com.emreay.incidentreport.ingestion.domain.RawIncidentReport;
 import com.emreay.incidentreport.ingestion.service.IngestionService;
+import com.emreay.incidentreport.ingestion.service.SubmissionOutcome;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -46,6 +47,7 @@ class IncidentReportControllerTest {
     private static final Instant SUBMITTED_AT = Instant.parse("2026-08-09T09:30:00Z");
     private static final String ID = "652f1a2b3c4d5e6f70819200";
     private static final String TEXT = "20.04.2020 tarihinde Ankara'da 15 yeni vaka tespit edildi.";
+    private static final String HASH = "0".repeat(64);
 
     private final MockMvc mvc;
 
@@ -58,7 +60,7 @@ class IncidentReportControllerTest {
 
     @Test
     void submittingAReportAnswersCreatedAndPointsAtIt() throws Exception {
-        when(ingestionService.submit(TEXT)).thenReturn(stored());
+        when(ingestionService.submit(TEXT)).thenReturn(newlyStored());
 
         mvc.perform(post("/api/v1/incident-reports")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -75,7 +77,7 @@ class IncidentReportControllerTest {
      */
     @Test
     void theReceiptSaysNothingAboutTheAnalysis() throws Exception {
-        when(ingestionService.submit(TEXT)).thenReturn(stored());
+        when(ingestionService.submit(TEXT)).thenReturn(newlyStored());
 
         mvc.perform(post("/api/v1/incident-reports")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -91,13 +93,59 @@ class IncidentReportControllerTest {
     @Test
     void passesTheTextThroughUntouched() throws Exception {
         String padded = "  Ankara'da 15 vaka.  ";
-        when(ingestionService.submit(padded)).thenReturn(stored());
+        when(ingestionService.submit(padded)).thenReturn(newlyStored());
 
         mvc.perform(post("/api/v1/incident-reports")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body(padded)));
 
         verify(ingestionService).submit(padded);
+    }
+
+    /**
+     * The same text again is not a new report and must not be answered as if it were: 201 tells a
+     * client something was created, and a client that believes it has just filed a second incident
+     * will show its user a second incident (ADR-035).
+     */
+    @Test
+    void resubmittingTheSameTextAnswersOkWithTheReportThatAlreadyHasIt() throws Exception {
+        when(ingestionService.submit(TEXT)).thenReturn(new SubmissionOutcome(stored(), false));
+
+        mvc.perform(post("/api/v1/incident-reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(TEXT)))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Location"))
+                .andExpect(jsonPath("$.id").value(ID))
+                .andExpect(jsonPath("$.submittedAt").exists());
+    }
+
+    /**
+     * Reprocessing answers in the submission's own shape: it says the request was accepted, not
+     * what the new analysis found. That is read the same way it is after a submission, so a client
+     * has one way of reading a result rather than two (FR-15, ADR-021).
+     */
+    @Test
+    void reprocessingAnswersWithTheSameReceiptAndNothingAboutTheAnalysis() throws Exception {
+        when(ingestionService.reprocess(ID)).thenReturn(stored());
+
+        mvc.perform(post("/api/v1/incident-reports/{id}/reprocess", ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(ID))
+                .andExpect(jsonPath("$.submittedAt").value("2026-08-09T09:30:00Z"))
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.warnings").doesNotExist())
+                .andExpect(jsonPath("$.text").doesNotExist());
+    }
+
+    /** Nothing is created, so nothing is 201 and nothing is pointed at. */
+    @Test
+    void reprocessingIsNotACreation() throws Exception {
+        when(ingestionService.reprocess(ID)).thenReturn(stored());
+
+        mvc.perform(post("/api/v1/incident-reports/{id}/reprocess", ID))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Location"));
     }
 
     @Test
@@ -153,6 +201,10 @@ class IncidentReportControllerTest {
     }
 
     private static RawIncidentReport stored() {
-        return new RawIncidentReport(ID, TEXT, SUBMITTED_AT);
+        return new RawIncidentReport(ID, TEXT, HASH, SUBMITTED_AT);
+    }
+
+    private static SubmissionOutcome newlyStored() {
+        return new SubmissionOutcome(stored(), true);
     }
 }

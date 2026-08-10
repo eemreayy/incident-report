@@ -4,7 +4,7 @@ Backend API'sini frontend olmadan denemek için hazırlanmış koleksiyon.
 
 | Dosya | İçerik |
 |---|---|
-| `incident-report.postman_collection.json` | 18 istek, 5 klasör, her istekte örnek cevap ve assertion |
+| `incident-report.postman_collection.json` | 21 istek, 5 klasör, her istekte örnek cevap ve assertion |
 
 Koleksiyondaki **her örnek cevap çalışan sistemden yakalanmıştır**, elle yazılmamıştır.
 
@@ -63,7 +63,18 @@ Ham metin gönderme ve geri okuma. Üç Submit isteği, kaynak dokümandaki **ü
 [ADR-019](../DECISIONS.md#adr-019--kayıt-granülaritesi).
 
 **Update ve delete yok, olmayacak da.** Ham metin log niteliğinde; düzenlenebilen bir kayıt,
-ondan türeyen veriyi açıklayamaz.
+ondan türeyen veriyi açıklayamaz. Saklanmış bir metinden istenebilecek tek şey **yeniden okunması**:
+`Reprocess`, güncel kurallarla yeniden analiz eder, ham metne dokunmaz ve türeyen kayıtların yerine
+yenisini koyar — iki kez çalıştırmak, bir kez çalıştırmakla aynı sonucu bırakır (FR-15).
+
+**Aynı metin iki kez gönderilirse ikinci kayıt açılmaz.** `Submit the same text again` isteği bunu
+gösteriyor: cevap `200` ve zaten var olan kaydın makbuzu, `201` ve yeni bir kimlik değil. Sebep,
+çift tık ya da zaman aşımı sonrası retry'ın yaralı/ölü sayısını sessizce ikiye katlaması —
+sonradan hangi kaydın mükerrer olduğunu kimsenin ayırt edemediği bir hata
+([ADR-035](../DECISIONS.md#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz)).
+Bunun bir yan sonucu: üç örnek gönderim, **temiz olmayan** bir instance'a karşı ikinci kez
+koşturulduğunda `201` değil `200` döner. Koleksiyon bu yüzden ikisini de kabul ediyor; makbuzun
+şekli her iki durumda aynı olduğu için diğer assertion'lar değişmiyor.
 
 ### Incidents
 Analizin **çıkardığı** veriyi okuma. Bu klasör yukarıdaki gönderimlere bağlı: `reportId`,
@@ -91,7 +102,7 @@ Anahtar kelime araması ham metinde değil, **çıkarımın kaydettiği** anahta
 ham metinde tam metin arama kapsam dışı (PRD §2.3).
 
 ### Error contract (RFC 7807)
-Yedi hata senaryosu. Hepsi `application/problem+json` döner — hata ister domain'den, ister
+Sekiz hata senaryosu. Hepsi `application/problem+json` döner — hata ister domain'den, ister
 Spring'in kendisinden gelsin.
 
 İstemcinin dayanabileceği alan `code`; `detail` metni serbestçe değişebilir. Her istek ayrıca
@@ -105,7 +116,7 @@ Spring'in kendisinden gelsin.
 npx newman run docs/postman/incident-report.postman_collection.json
 ```
 
-Beklenen: **18 istek, 76 assertion, 0 hata.**
+Beklenen: **21 istek, 88 assertion, 0 hata.**
 
 ---
 

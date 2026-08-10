@@ -191,6 +191,7 @@ bkz. FR-21 kabul kriteri).
 ### FR-01 — Olay bildirimi girişi
 Kullanıcı serbest metin bir olay bildirimi gönderebilir.
 - **Kabul:** Boş olmayan metin gönderildiğinde sistem kaydı oluşturur ve kaydın kimliğini döner. Boş/yalnızca boşluk içeren ya da tanımlı maksimum uzunluğu aşan metin, açıklayıcı bir hata ile reddedilir.
+- **Kural (TC-9):** Birebir aynı metin ikinci kez gönderilirse **ikinci kayıt açılmaz**: mevcut kaydın makbuzu döner ve analiz yeniden çalışmaz. Durum kodu farkı bunu söyler — yeni kayıt `201`, zaten var olan `200`. Gerekçe ve alternatifler [ADR-035](DECISIONS.md#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz)'te; kısaca, çift tık ya da retry sonucu sayıların sessizce ikiye katlanması bu sistemin en pahalı hata biçimi.
 
 ### FR-02 — Ham metnin değiştirilmeden saklanması
 Gönderilen metin, hiçbir normalizasyon uygulanmadan MongoDB'ye yazılır ve sonradan değiştirilemez.
@@ -410,7 +411,7 @@ Alan bazlı şemalar bu belgede tanımlanmaz; tasarım/task aşamasına aittir. 
 
 | Uç | Sorumluluk | İlgili ister |
 |---|---|---|
-| `POST /incident-reports` | Ham metin gönderimi; **yalnızca kayıt makbuzu** döner (kimlik + gönderim zamanı). Analiz aynı istek içinde tetiklenir ama cevaba girmez | FR-01, FR-02, FR-19 |
+| `POST /incident-reports` | Ham metin gönderimi; **yalnızca kayıt makbuzu** döner (kimlik + gönderim zamanı). Analiz aynı istek içinde tetiklenir ama cevaba girmez. Birebir aynı metin ikinci kez gönderilirse yeni kayıt açılmaz; mevcut kaydın makbuzu **200** ile döner (yeni kayıt 201) — [ADR-035](DECISIONS.md#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz) | FR-01, FR-02, FR-19 |
 | `GET /incident-reports` | Ham bildirimleri sayfalı listeleme | FR-14 |
 | `GET /incident-reports/{id}` | Tekil ham bildirim: metin + gönderim zamanı. Analiz durumu ve türeyen kayıtlar burada **dönmez** — bkz. `GET /incidents` | FR-14 |
 | `POST /incident-reports/{id}/reprocess` | Güncel kurallarla yeniden analiz; gönderimle aynı biçimde makbuz döner | FR-15 |
@@ -489,7 +490,7 @@ Bu maddeler bilinçli olarak PRD'de karara bağlanmamıştır; her biri implemen
 | **TC-6** | Tarih ayrıştırma ve göreli ifade çözümleme | Çoklu format; göreli **aralık** ifadelerinin ("son 24 saatte", "son 3 günde") tek güne mi indirgeneceği yoksa tarih aralığı olarak mı modelleneceği; zaman dilimi seçimi (`Europe/Istanbul` vs. UTC) ve gün sınırı; `DEFAULTED` kayıtların grafik/agregasyonlarda nasıl ele alınacağı (FR-06) |
 | **TC-7** | İl tanıma | 81 il; çok kelimeli isimler (Afyonkarahisar, Kahramanmaraş); ilçe adlarının il sanılması |
 | **TC-8** | Sınıflandırma skorlaması | Birden fazla tipin tetiklendiği metinlerde skor/eşik ve güven değeri (FR-09 ile bağlantılı) |
-| **TC-9** | Mükerrer gönderim | Aynı metnin tekrar gönderilmesi; idempotency/dedup stratejisi |
+| ~~TC-9~~ | ~~Mükerrer gönderim~~ | **Çözüldü → [ADR-035](DECISIONS.md#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz).** Ham metnin SHA-256 özeti üzerinde unique (sparse) indeks; birebir aynı metin ikinci kayıt açmaz, mevcut kaydın makbuzu **200** ile döner (yeni kayıt 201) ve analiz yeniden çalışmaz. `POST` böylece idempotent oluyor; belirleyici olan, çift sayımın sessiz ve geri döndürülemez bir hata olması |
 | ~~TC-10~~ | ~~SSE bağlantı yönetimi (sunucu)~~ | **Çözüldü → [ADR-034](DECISIONS.md#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik).** Sinyalin birimi rapor; yayın analiz transaction'ı **commit ettikten sonra**; abonelik süreli, heartbeat yorumu hem bağlantıyı açık tutuyor hem ölü aboneyi ortaya çıkarıyor; akış durumsuz — tekrar oynatma yok, kaçan mesaj gecikmiş tazeleme demek |
 | **TC-11** | Anlamlı %80 kapsam (backend) | Kapsam sayısını şişirmeden gerçek davranışı test etmek; Testcontainers ile mock dengesi |
 | ~~TC-12~~ | ~~Gönderim sonrası sonucun getirilmesi~~ | **Karara bağlandı (v2.0).** `POST` yalnızca makbuz döner; sonuç `GET /incidents?rawReportId=...` ile okunur; SSE tetikleyicidir. Gerekçe: her modül yalnızca sahibi olduğu veriyi yayınlar (§5) ve hiçbir veri tek kanala emanet edilmez (FR-13). Bkz. FR-19. **ADR olarak `docs/DECISIONS.md`'e işlenecek** |
