@@ -217,7 +217,7 @@ Frontend (from T-23 on):
 
 `docs/PRD.md` §10 lists TC-1…TC-18 — decisions deferred out of the PRD (number↔metric matching,
 relative date ranges, SSE lifecycle, live-refresh strategy, frontend deployment, …). TC-1, TC-2, TC-4,
-TC-5, TC-6, TC-7 and TC-12 are already decided. Do not silently pick one of the rest: surface the trade-off, decide
+TC-5, TC-6, TC-7, TC-8 and TC-12 are already decided. Do not silently pick one of the rest: surface the trade-off, decide
 explicitly, then record it in `docs/DECISIONS.md`.
 
 ## Doc discipline

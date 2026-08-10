@@ -813,3 +813,29 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `ProvinceExtractor` bir Spring bileşeni değil, `AnalysisConfiguration` içinde referans veriden kurulan bir bean; testler onu düz bir isim listesiyle kurabiliyor, veritabanı gerekmiyor. İl adları da metinle **aynı normalizasyondan** geçiriliyor (ADR-027) — iki benzer ama ayrı kural yerine tek kural. Kabul edilen sınırlar: kısa/halk arasındaki kullanımlar (`Urfa`, `Antep`, `Maraş`) tanınmıyor, çünkü referans listede yoklar; belirtme hâli (`Hatay'ı`) bilerek eşleşmiyor, zira aynı ek "hatayı" kelimesini il yapardı — kaçırmak, uydurmaktan iyi. İlin metinde **hangi kapsamla** (SINGLE / SHARED / UNKNOWN) yer aldığına burada karar verilmiyor; o T-14'ün işi (ADR-019).
 
 **İleride.** Halk arasındaki kısa adlar ve yaygın yazım hataları, referans veriye bir **eş ad (alias)** tablosu eklenerek karşılanabilir — migration yine tek kaynak olarak kalır. İlçe çakışması büyürse ilçe listesi de referans veriye alınıp "ilçe adı + farklı il bağlamı" kuralı güçlendirilebilir. Ek listesi büyürse kataloğun yanında YAML'a taşınabilir (ADR-007 düzeni).
+
+---
+
+## ADR-031 — Sınıflandırma: Tek Anahtar Kelime Eşiği, Sayısal Güven Yerine Kanıt, Çoklu Tip
+
+**Karar.** Bir olay tipini tetiklemek için **tek bir katalog anahtar kelimesi** yeterlidir. Sayısal bir **güven değeri saklanmaz**; yerine eşleşen anahtar kelimeler ham metindeki konumlarıyla birlikte kanıt olarak taşınır. Birden fazla tip tetiklendiğinde **kazanan seçilmez** — eşleşen her tip, sıralanmış olarak bildirilir. Hiçbiri eşleşmezse cevap yine bir cevaptır: `OTHER` / `UNCLASSIFIED`. TC-8 böylece karara bağlanır.
+
+**Bağlam.** PRD §10 skor/eşik ve güven değerini açık bırakmıştı. Kaynak dokümanın **birinci örneği** bu soruyu fiilen kapatıyor: "15 yeni vaka tespit edildi" cümlesinde olay tipi adlandıran tek kelime `vaka`. İki anahtar kelime isteyen bir eşik, sistemin kendi kabul testini (PRD §11) düşürürdü.
+
+**Gerekçe.**
+- **Eşik nereye konacak sorusu aslında yok.** Kabul kriteri tek kelimelik kanıtla sınıflandırmayı zorunlu kılıyor. Dolayısıyla gerçek soru "barı nereye koyalım" değil, "barı geçenle ne yapalım".
+- **Sayısal güven, kimsenin savunamayacağı bir eşik davet eder.** `0.72` tanımlı bir anlamı olmayan bir sayı; okuyucu onunla ne yapacağını bilemez. Buna karşılık "deprem olarak sınıflandı, çünkü **deprem** ve **enkaz** şu konumlarda geçiyor" doğrulanabilir bir gerekçe. Kural tabanlı bir hattın modele karşı asıl kazancı zaten bu açıklanabilirlik (ADR-008), ve kanıtı zaten saklıyoruz (FR-17, C-3). Güven kolonu ayrıca migration ve tüm sorgu/DTO yüzeyine yayılma maliyeti getirirdi.
+- **Bir metin gerçekten iki şey hakkında olabilir.** "Depremin ardından çıkan yangın" hem deprem hem yangın. Kayıt granülaritesi zaten bir bildirimden olay tipi başına bir kayıt üretilmesine izin veriyor (ADR-019); burada tek kazanan seçmek, veri modelinin taşımak için kurulduğu bir kaydı atmak olurdu.
+- **Sıralama kanıta bakar.** Önce kaç **farklı** anahtar kelimenin eşleştiği, sonra bu kelimelerin kapladığı toplam uzunluk — `trafik kazası`, `kaza`'dan daha spesifik ve uzunluk bunun en ucuz dürüst göstergesi. Kalan eşitlik kataloğun kendi sırasıyla çözülür: keyfi, ama her seferinde aynı keyfi cevap.
+- **Skor tekrarları saymaz.** Aynı kelimenin beş kez geçmesi, beş farklı kelimenin geçmesinden daha zayıf bir kanıt; skor **farklı** anahtar kelime sayısıdır. Tekrarların hepsi yine de kanıt listesinde durur.
+
+**Alternatifler.**
+- *İki veya daha fazla anahtar kelime istemek:* Birinci örnek sınıflandırılamazdı.
+- *Ağırlıklı skor + sayısal eşik (ör. TF-IDF):* Ayarlanacak bir parametre ve açıklanamayan bir sayı getirir; katalog beş tipken kalibre edilecek veri de yok.
+- *Tek kazanan seçmek:* Kod basitleşirdi; iki olaydan biri sessizce kaybolurdu.
+- *Eşleşmeyen metni reddetmek:* ADR-006 ile doğrudan çelişir.
+- *Güven değerini saklamak:* Migration + DTO + arayüz maliyeti; karşılığında yorumlanamayan bir sayı.
+
+**Sonuçlar.** `EventTypeClassifier` her zaman **en az bir** sonuç döndürür, dolayısıyla çağıranın "hiç sonuç yok" durumunu ayrıca ele alması gerekmez. Katalog anahtar kelimeleri bilerek gövde olarak yazılıyor (`hayatını kaybet`, `kurtarıl`), bu yüzden Türkçe ekler üzerinden eşleşiyorlar — ve ekler yine **sayılı**: serbest bir ek `testere` kelimesini `test` anahtarı sanardı; bu tuzağın hattaki üçüncü görünüşü (ADR-029, ADR-030). Kataloğun ifade edemediği bir çekim, koda değil **kataloğa** eklenir (ADR-007). Sınıflandırıcı bu task'ta boru hattına **bağlanmadı**: bir kaydın hangi metriklerle ve hangi il kapsamıyla oluşacağı T-14'ün kararı, ve extractor'ı yarım bağlamak yerine tüm parçalar hazırken birleştirmek daha az risk taşıyor.
+
+**İleride.** Katalog büyüyüp anahtar kelimeler çakışmaya başlarsa, kelime başına bir **ağırlık** alanı kataloğa eklenebilir — karar yine yapılandırmada kalır, kodda değil. Sıralamanın "toplam kanıt uzunluğu" ölçütü, gerekirse kelime uzunluğu yerine açık bir spesifiklik alanıyla değiştirilebilir. Kanıt konumları bugünden saklandığı için, ileride bir güven göstergesi istenirse (soluk seri, uyarı rozeti) veri zaten yerinde olur.

@@ -486,13 +486,38 @@ Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (
   yapardı, kaçırmak uydurmaktan iyi.
 - **Kapsam (SINGLE / SHARED / UNKNOWN) burada belirlenmiyor** — o T-14'ün işi (ADR-019).
 
-### ☐ T-13 · Olay tipi sınıflandırma ve UNCLASSIFIED davranışı
+### ☑ T-13 · Olay tipi sınıflandırma ve UNCLASSIFIED davranışı
 Katalog anahtar kelimelerinden skorlama; eşik ve güven değeri; birden fazla tip tetiklendiğinde çözüm.
 Eşik altında kalan metin **reddedilmez** — `OTHER` / `UNCLASSIFIED` üretilir, çıkarılabilen tarih/il/sayılar
 korunur, cevaba uyarı eklenir.
 - **Bağımlılık:** T-08, T-09
-- **Karşılar:** FR-09 · **Çözer:** TC-8 · **İlgili karar:** ADR-006
+- **Karşılar:** FR-09 · **Çözer:** TC-8 · **İlgili karar:** ADR-006, ADR-031
 - **DoD:** Tanınmayan tip içeren metin 4xx almıyor; `UNCLASSIFIED` kayıt üretiliyor ve `warnings[]` dolu geliyor.
+- **Sonuç:** 386 test geçiyor, `analysis` coverage **%99**; `analysis.extraction` ve `analysis.config`
+  **%100**. `EventTypeClassifier` + `EventTypeMatch` + `KeywordMatcher`; 21 test, **gerçek kataloğa** karşı.
+- **DoD fiilen doğrulandı (çalışan sistemde):** Tanınmayan metin **201** aldı (4xx değil),
+  `OTHER / UNCLASSIFIED / UNKNOWN` kaydı üretildi ve uyarı `analysis_warning` tablosuna yazıldı.
+  Yan gözlem: metin `bugün` dediği için tarih `RELATIVE` çıktı ve "tarih varsayıldı" uyarısı
+  **verilmedi** — T-11'de eklenen davranış çalışıyor.
+- **Eşik sorusu aslında yoktu.** Kaynak dokümanın birinci örneğinde ("15 yeni vaka tespit edildi")
+  olay tipi adlandıran **tek** kelime `vaka`. İki anahtar kelime isteyen bir eşik, sistemin kendi
+  kabul testini düşürürdü. Gerçek soru "barı nereye koyalım" değil, "barı geçenle ne yapalım".
+- **Sayısal güven yok, kanıt var.** `0.72` tanımlı anlamı olmayan bir sayı ve savunulamayan bir eşik
+  davet eder. Yerine: "EARTHQUAKE, çünkü `depremde`, `hasar`, `enkazdan` şu konumlarda geçiyor" —
+  doğrulanabilir. Kanıt zaten saklanıyordu (FR-17, C-3); güven kolonu migration + DTO + arayüz
+  maliyeti getirip karşılığında yorumlanamayan bir sayı verirdi.
+- **Kazanan seçilmiyor.** "Depremin ardından çıkan yangın" hem deprem hem yangın; kayıt granülaritesi
+  zaten olay tipi başına bir kayda izin veriyor (ADR-019). Tek kazanan seçmek, veri modelinin taşımak
+  için kurulduğu bir kaydı atmak olurdu. Sıralama: farklı anahtar kelime sayısı → toplam kanıt
+  uzunluğu (spesifiklik) → katalog sırası.
+- **Skor tekrarları saymaz.** Aynı kelimenin beş kez geçmesi, beş farklı kelimeden daha zayıf kanıt.
+  Tekrarların hepsi yine de kanıt listesinde duruyor.
+- **Aynı tuzağın üçüncü görünüşü:** serbest bırakılan Türkçe eki `testere` kelimesini `test`
+  anahtarı sanardı — ADR-029'daki `ayrı` ve ADR-030'daki `vanilya` ile aynı hata. Ekler sayılı;
+  kataloğun ifade edemediği bir çekim koda değil **kataloğa** eklenir.
+- **Boru hattına bağlanmadı.** Bir kaydın hangi metriklerle ve hangi il kapsamıyla oluşacağı T-14'ün
+  kararı; extractor'ı yarım bağlamak yerine tüm parçalar hazırken birleştirmek daha az risk taşıyor.
+  T-10, T-12 ve T-13 bileşenleri T-14'te birleşecek.
 
 ### ☐ T-14 · Metrik eşleştirme ve il kapsamı
 Sayı ↔ metrik eşleştirmesi (cümle içi yakınlık kuralları). Cümlede birden fazla il varsa sayıların doğru
@@ -853,7 +878,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
 | TC-6 | Tarih ayrıştırma ve göreli ifadeler | **Karara bağlandı → ADR-029** · uygulaması T-11 |
 | TC-7 | İl tanıma | **Karara bağlandı → ADR-030** · uygulaması T-12 |
-| TC-8 | Sınıflandırma skorlaması ve eşik | T-13 |
+| TC-8 | Sınıflandırma skorlaması ve eşik | **Karara bağlandı → ADR-031** · uygulaması T-13 |
 | TC-9 | Mükerrer gönderim | T-19 |
 | TC-10 | SSE bağlantı yönetimi (sunucu) | T-18 |
 | TC-11 | Anlamlı %80 kapsam (backend) | T-03 (altyapı) + her task'ın kendi testleri |
