@@ -17,15 +17,6 @@ export const strings = {
     up: 'bağlı',
     down: 'ulaşılamıyor',
   },
-  catalog: {
-    heading: 'Tanınan olay tipleri',
-    note: 'Bu liste sunucudaki katalogdan gelir; arayüzde sabit yazılı değildir.',
-    loading: 'Katalog yükleniyor…',
-    provinceCount: (count: number) => `${count} il tanımlı`,
-    metricCount: (count: number) => `${count} metrik`,
-    empty: 'Katalogda tanımlı olay tipi yok.',
-    retry: 'Tekrar dene',
-  },
   form: {
     heading: 'Yeni olay bildirimi',
     label: 'Açık kaynaktan aldığınız metni buraya girin',
@@ -47,6 +38,47 @@ export const strings = {
     none: 'Bu metinden yapılandırılmış kayıt üretilemedi. Ham metin saklandı ve kurallar geliştikçe yeniden işlenebilir.',
     failed: 'Analiz başarısız oldu. Ham metin saklandı; sorun giderildiğinde yeniden işlenebilir.',
     missing: 'Bu bildirime ait bir analiz kaydı bulunamadı.',
+  },
+  filters: {
+    heading: 'Filtreler',
+    eventType: 'Olay tipi',
+    province: 'İl',
+    provinceHint: 'Birden fazla il seçmek için Ctrl (Mac’te Cmd) ile tıklayın.',
+    from: 'Başlangıç tarihi',
+    to: 'Bitiş tarihi',
+    keyword: 'Anahtar kelime',
+    keywordHint: 'Metinden çıkarılan anahtar kelimelerde aranır.',
+    apply: 'Ara',
+    clear: 'Filtreleri temizle',
+    sort: 'Sıralama',
+    sortOption: {
+      'date-desc': 'Tarih: yeniden eskiye',
+      'date-asc': 'Tarih: eskiden yeniye',
+    },
+    loading: 'Filtre seçenekleri yükleniyor…',
+    note: 'Seçtiğiniz filtreler adres çubuğuna yansır; bağlantıyı paylaştığınızda aynı görünüm açılır.',
+  },
+  list: {
+    heading: 'Kayıtlar',
+    loading: 'Kayıtlar getiriliyor…',
+    refreshing: 'Güncelleniyor…',
+    retry: 'Tekrar dene',
+    total: (count: number) => `${count} kayıt bulundu`,
+    // FR-21: an empty result says which of the two empties it is, because
+    // "there is nothing" and "nothing matches what you asked for" are different
+    // answers and only one of them is fixed by changing the filters.
+    empty: 'Henüz kayıt yok. Yukarıdaki formdan bir bildirim girerek başlayabilirsiniz.',
+    emptyFiltered: 'Seçtiğiniz filtrelere uyan kayıt yok. Filtreleri genişletmeyi deneyin.',
+    column: {
+      date: 'Tarih',
+      eventType: 'Olay tipi',
+      province: 'İl',
+      metrics: 'Metrikler',
+    },
+    noMetrics: 'Metrik yok',
+    previous: 'Önceki',
+    next: 'Sonraki',
+    pageStatus: (page: number, totalPages: number) => `Sayfa ${page} / ${totalPages}`,
   },
   incident: {
     unknownProvince: 'İl belirtilmemiş',
@@ -71,6 +103,12 @@ export const strings = {
       RELATIVE: 'tarih göreli bir ifadeden çözüldü',
       DEFAULTED: 'metinde tarih yok, gönderim tarihi kullanıldı',
     },
+    /** The same three facts, in a table cell's worth of room (FR-06). */
+    dateSourceShort: {
+      EXPLICIT: 'metinden',
+      RELATIVE: 'göreli ifadeden',
+      DEFAULTED: 'gönderim tarihi',
+    },
     unclassifiedNote:
       'Katalogda eşleşen bir olay tipi yok. Kayıt reddedilmedi; çıkarılabilen bilgiler saklandı.',
   },
@@ -84,6 +122,7 @@ export const strings = {
       'report.text.blank': 'Bildirim metni boş olamaz.',
       'report.text.too-long': 'Bildirim metni izin verilen uzunluğu aşıyor.',
       'resource.not-found': 'Aradığınız kayıt bulunamadı.',
+      'query.date-range.invalid': 'Başlangıç tarihi bitiş tarihinden sonra olamaz.',
       'request.bad-request': 'İstek anlaşılamadı.',
       'request.method-not-allowed': 'Bu işlem bu adres için geçerli değil.',
       'request.unsupported-media-type': 'İstek biçimi desteklenmiyor.',

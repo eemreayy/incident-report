@@ -9,10 +9,12 @@ const CATALOG = {
   provinces: [{ code: 6, name: 'Ankara' }],
 };
 
+const EMPTY_PAGE = { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
+
 /**
- * The shell makes two independent calls - the health probe and the catalog - so
- * the stub answers by URL. A single blanket response would hand the catalog a
- * health payload and pass for the wrong reason.
+ * The shell makes three independent calls - the health probe, the catalog and
+ * the record list - so the stub answers by URL. A single blanket response would
+ * hand the catalog a health payload and pass for the wrong reason.
  */
 function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
@@ -20,7 +22,11 @@ function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
     if (!healthy) {
       return Promise.reject(new TypeError('Failed to fetch'));
     }
-    const body = url.includes('/actuator/health') ? { status: 'UP' } : CATALOG;
+    const body = url.includes('/actuator/health')
+      ? { status: 'UP' }
+      : url.includes('/incidents')
+        ? EMPTY_PAGE
+        : CATALOG;
     return Promise.resolve({ ok: true, status: 200, json: async () => body } as Response);
   });
 }

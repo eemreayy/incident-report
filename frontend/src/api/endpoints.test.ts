@@ -3,6 +3,8 @@ import {
   getIncidentReport,
   getMetadata,
   listIncidentReports,
+  listIncidents,
+  listIncidentsByRawReport,
   submitIncidentReport,
 } from './endpoints';
 
@@ -106,5 +108,63 @@ describe('listIncidentReports', () => {
     await listIncidentReports();
 
     expect(calledUrl()).toBe('/api/v1/incident-reports');
+  });
+});
+
+describe('listIncidents', () => {
+  const EMPTY_PAGE = { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
+
+  it('repeats the multi-valued filters, the way the endpoint reads them', async () => {
+    respondWith(EMPTY_PAGE);
+
+    await listIncidents({ eventTypes: ['EARTHQUAKE', 'EPIDEMIC'], provinces: [16, 41] });
+
+    const url = new URL(calledUrl(), 'http://test');
+    expect(url.searchParams.getAll('eventType')).toEqual(['EARTHQUAKE', 'EPIDEMIC']);
+    // ADR-019: two provinces at once is the case a shared figure must come back
+    // from exactly once, which is the server's job - and it cannot do it if the
+    // second code never leaves here.
+    expect(url.searchParams.getAll('province')).toEqual(['16', '41']);
+  });
+
+  it('carries filters, paging and sorting in one request', async () => {
+    respondWith(EMPTY_PAGE);
+
+    await listIncidents({
+      from: '2020-05-01',
+      to: '2020-05-31',
+      keyword: 'deprem',
+      page: 2,
+      size: 20,
+      sort: ['occurredOn,desc', 'id,desc'],
+    });
+
+    const url = new URL(calledUrl(), 'http://test');
+    expect(url.pathname).toBe('/api/v1/incidents');
+    expect(url.searchParams.get('from')).toBe('2020-05-01');
+    expect(url.searchParams.get('to')).toBe('2020-05-31');
+    expect(url.searchParams.get('keyword')).toBe('deprem');
+    expect(url.searchParams.get('page')).toBe('2');
+    expect(url.searchParams.getAll('sort')).toEqual(['occurredOn,desc', 'id,desc']);
+  });
+
+  it('leaves out what was not asked for', async () => {
+    respondWith(EMPTY_PAGE);
+
+    await listIncidents();
+
+    // An empty `keyword=` is a filter for the empty string as far as the server
+    // is concerned, not the absence of one.
+    expect(calledUrl()).toBe('/api/v1/incidents');
+  });
+
+  it('asks about one report with the filter that answers it', async () => {
+    respondWith({ ...EMPTY_PAGE, analysis: null });
+
+    await listIncidentsByRawReport('6a78b031f6fe3fa987f9ffc9');
+
+    // C-5: with submission answering only with an id (ADR-021), this filter is
+    // the only way to find out what a report produced.
+    expect(calledUrl()).toBe('/api/v1/incidents?rawReportId=6a78b031f6fe3fa987f9ffc9');
   });
 });

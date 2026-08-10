@@ -1,8 +1,9 @@
 import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { createQueryClient } from './queryClient';
-import { CatalogPanel } from '../shell/CatalogPanel';
+import { IncidentListPanel } from '../incidents/IncidentListPanel';
 import { strings } from '../i18n/strings';
 
 afterEach(() => {
@@ -31,12 +32,14 @@ describe('createQueryClient', () => {
 
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <CatalogPanel />
+        <MemoryRouter>
+          <IncidentListPanel />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
 
     const alert = await screen.findByRole('alert', {}, { timeout: 5000 });
     expect(alert).toHaveTextContent(strings.errors.byCode['network.unreachable'] as string);
-    expect(screen.queryByText(strings.catalog.loading)).not.toBeInTheDocument();
+    expect(screen.queryByText(strings.list.loading)).not.toBeInTheDocument();
   });
 });

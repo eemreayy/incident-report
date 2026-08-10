@@ -71,6 +71,10 @@ Bunlar tercih değil, karar:
    mesajları İngilizce. Türkçe metinler tek yerde toplanır, bileşenlerin içine serpiştirilmez.
 7. **Tazeleme sırasında görünüm boşaltılmaz.** Yeni veri gelene kadar eski veri ekranda kalır;
    aksi halde her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenmesidir.
+8. **Filtre durumunun tek kopyası adres çubuğudur** — store, context ya da `useState` kopyası yok
+   ([ADR-037](../docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu)). Filtreye
+   bakan her görünüm `useIncidentFilters`'ı çağırır; birbirlerine prop geçmezler. Çözümleme
+   kanoniktir, çünkü sorgu önbelleğinin anahtarı da odur.
 
 ## Çalıştırma ve API erişimi
 

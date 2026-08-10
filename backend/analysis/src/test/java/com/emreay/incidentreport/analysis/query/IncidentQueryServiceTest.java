@@ -33,6 +33,7 @@ import com.emreay.incidentreport.analysis.repository.IncidentRepository;
 import com.emreay.incidentreport.analysis.repository.ProvinceRepository;
 import com.emreay.incidentreport.analysis.web.IncidentResponse;
 import com.emreay.incidentreport.analysis.web.ProvinceResponse;
+import com.emreay.incidentreport.shared.error.DomainValidationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -248,10 +249,15 @@ class IncidentQueryServiceTest {
 
     @Test
     void anImpossibleDateRangeIsRejectedRatherThanReturningNothing() {
+        // Rejected as the caller's mistake, not the server's: these dates come from a query string,
+        // so an inverted range is something that was typed. As a plain IllegalArgumentException it
+        // reached the caller as a 500 — the interface's own date pickers make it a click away.
         assertThatThrownBy(() -> query(null, null, LocalDate.of(2020, 5, 1), LocalDate.of(2020, 4, 1),
                 null, null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("is after");
+                .isInstanceOf(DomainValidationException.class)
+                .hasMessageContaining("is after the end date")
+                .extracting(exception -> ((DomainValidationException) exception).getCode())
+                .isEqualTo("query.date-range.invalid");
     }
 
     @Test

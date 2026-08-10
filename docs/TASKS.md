@@ -1008,7 +1008,7 @@ Gönderim sırasında düğme kilidi, boş/uzun metin kontrolü, karakter sayac�
 - **SSE'siz çalışıyor.** Sonuç makbuzdaki kimlikle yapılan sorgudan geliyor; akış henüz yok (T-18)
   ve olduğunda da gönderenin sonuç kanalı olmayacak (ADR-021).
 
-### ☐ T-26 · Kayıt listesi, filtreler ve adres çubuğu durumu
+### ☑ T-26 · Kayıt listesi, filtreler ve adres çubuğu durumu
 Sayfalanmış tablo; olay tipi, il, tarih aralığı ve anahtar kelime filtreleri. Filtreleme, sıralama
 ve sayfalama **sunucuda**. Aktif filtreler adres çubuğuna yansır. Grafik ve özetle paylaşılan tek
 filtre kaynağı.
@@ -1016,6 +1016,50 @@ filtre kaynağı.
 - **Karşılar:** FR-21 · **Çözer:** TC-15
 - **DoD:** Filtreli görünümün adresi kopyalanıp yeni sekmede açıldığında aynı görünüm geliyor;
   istemcide filtreleme yapılmıyor (ağ isteği ile doğrulanır); boş sonuçta boş durum mesajı çıkıyor.
+- **Sonuç:** 106 test geçiyor, frontend coverage **%98** (211/215 satır). Yeni modüller:
+  `filters/incidentFilters.ts` + `filters/useIncidentFilters.ts` (durum katmanı),
+  `incidents/FilterBar` · `IncidentListPanel` · `IncidentTable` · `provinceLabel` (görünüm),
+  API katmanına `listIncidents` ve `useIncidents`. Kararlar
+  [ADR-037](DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu)'de.
+- **TC-15 karara bağlandı: filtre durumunun tek kopyası adres çubuğudur.** React tarafında store,
+  context ya da `useState` kopyası yok. "Senkronizasyon" sorusunun cevabı, senkronize edilecek iki
+  şeyin olmaması. Filtre çubuğu ile liste arasında **hiç prop geçmiyor**; ikisi de aynı URL'i
+  okuyor, T-27 ve T-28 de aynı hook'a bağlanacak.
+- **Çözümleme kanonik, çünkü önbellek anahtarı da o.** `province=41&province=16` ile
+  `province=16&province=41` aynı görünüm; sıralanıp tekilleştirilmeseydi iki ayrı sorgu anahtarı,
+  iki istek ve T-29'da yalnızca birini tazeleyen bir geçersizleştirme olurdu. Varsayılanlar URL'e
+  yazılmıyor, dolayısıyla filtresiz görünümün adresi temiz.
+- **Tanınmayan olay tipi düşürülmüyor, bozuk parametre düşürülüyor.** Katalog sunucuda (NFR-14);
+  URL'i anlamak için kataloğun yüklenmiş olmasını şart koşmak, YAML'a eklenen bir tipe bağlantı
+  verilememesi demekti. Buna karşılık `province=abc` ya da `from=dün` sessizce yok sayılıyor —
+  URL elle yazılan bir şey ve bozuk bir karakter hata ekranını hak etmiyor.
+- **Ters tarih aralığı 500 dönüyormuş.** `IncidentQuery`/`AnalyticsQuery` bunu
+  `IllegalArgumentException` ile reddediyor, o da genel yakalayıcıya düşüp "sunucuda beklenmeyen bir
+  hata" oluyordu — oysa hata isteği yapanındı. T-16/T-17'den beri böyleydi; **tarih seçicileri
+  bir tık uzağa getirdiği için** bu task'ta düzeltildi: `DomainValidationException` +
+  `query.date-range.invalid` ile **400**, arayüzde *"Başlangıç tarihi bitiş tarihinden sonra
+  olamaz."* Doğrulaması istemcide tekrarlanmadı; kural sunucunun (NFR-13).
+- **Seçim anında uygulanıyor, yarım yazılmış kelime uygulanmıyor.** Onay kutusu, il, tarih ve
+  sıralama değişince istek gidiyor; anahtar kelime forma gönderilince. Debounce bilinçli olarak yok:
+  her duraklamada bir istek demek olurdu ve ekranın her testini saate bağlardı (TC-16).
+- **DoD fiilen doğrulandı (çalışan sistemde, tarayıcıdan):**
+  - Filtreli adres (`?eventType=TRAFFIC_ACCIDENT&province=16&province=41&keyword=kaza&sort=date-asc`)
+    yeniden açıldığında kutu işaretli, iki il seçili, arama kutusu dolu, sıralama seçili ve **aynı
+    3 kayıt** geliyor — paylaşılan figür iki il birden seçiliyken **bir kez** (ADR-019).
+  - Ağ isteği: `GET /api/v1/incidents?eventType=…&province=16&province=41&keyword=…&page=0&size=20&sort=occurredOn,asc&sort=id,asc`
+    — her filtre sunucuya gidiyor, tarayıcıya gizlenecek satır gelmiyor.
+  - 25 kayıtla sayfalama: `Sayfa 1 / 2`, "Sonraki" `page=1` isteği atıyor, ikinci sayfada 5 satır;
+    ikinci sayfadayken bir filtre işaretlenince `page=0`'a dönülüyor.
+  - Boş sonuçta *"Seçtiğiniz filtrelere uyan kayıt yok"*; filtresiz boşta *"Henüz kayıt yok"*.
+    İkisi ayrı, çünkü yalnızca biri filtre değiştirerek düzelir.
+- **`CatalogPanel` kaldırıldı.** T-23'te "PRD'de olmayan, kuralı görünür ve test edilebilir kılan"
+  geçici panel olarak eklenmişti (kaynağındaki not: *"gerçek ekranlar T-25'te başlıyor"*). Aynı
+  kuralı artık PRD'nin gerçek bir ekranı olan filtre çubuğu gösteriyor: beş olay tipi ve 81 il
+  doğrudan `/metadata`'dan.
+- **Postman koleksiyonuna bir istek girdi** (ters tarih aralığı → 400): 27 istek, 111 assertion.
+- **Bilinçli boşluklar:** sayfa boyutu sabit 20 (kullanıcıya bırakılırsa aynı çözümlemeden geçer);
+  sıralama yalnızca tarih; il seçimi 81 elemanlı çoklu liste — arama kutulu bir bileşen T-31'in
+  erişilebilirlik turunda değerlendirilebilir; kayıt detayına bağlantı T-30'da geliyor.
 
 ### ☐ T-27 · Özet tablo ve il kırılımı
 Olay tipi / il / metrik kırılımında agrega görünüm; agregasyon ucundan gelir, istemcide toplanmaz.
@@ -1133,7 +1177,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-12 | Gönderim sonrası sonucun getirilmesi | **Karara bağlandı → ADR-021** · uygulaması T-22 |
 | TC-13 | Canlı akışta agregasyon tazeleme | T-29 |
 | TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | T-27 |
-| TC-15 | İstemci durumu ile sunucu durumunun ayrımı | T-26 |
+| TC-15 | İstemci durumu ile sunucu durumunun ayrımı | **Karara bağlandı → ADR-037** · uygulaması T-26 |
 | TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |
 | TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | **Karara bağlandı → ADR-025** (T-23) |
 | TC-18 | Anahtar kelime vurgulamasının hizalanması | T-14 (offset üretimi) + T-30 (vurgulama) |
