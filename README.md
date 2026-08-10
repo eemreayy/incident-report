@@ -214,7 +214,7 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | Tercih | Kısa gerekçe | Ayrıntı |
 |---|---|---|
 | Modular monolith | Net domain sınırları + tek komutla ayağa kalkma; dağıtık sistem maliyeti olmadan mikroservise geçiş hattı hazır | [ADR-001](docs/DECISIONS.md#adr-001--modular-monolith) |
-| Mongo = ham metin, Postgres = analitik | Şemasız/yalnız-yazılır kayıt ile agregasyon yükü farklı araçlar ister; ayrım modül sınırını fiziksel olarak da güçlendirir | [ADR-002](docs/DECISIONS.md#adr-002--iki-veri-tabanının-rol-ayrımı) |
+| Mongo = ham metin, Postgres = analitik | Şemasız/yalnız-yazılır kayıt ile agregasyon yükü farklı araçlar ister; ayrım modül sınırını fiziksel olarak da güçlendirir | [ADR-002](docs/DECISIONS.md#adr-002--i̇ki-veri-tabanının-rol-ayrımı) |
 | Senkron Spring Event | Modüller arası gevşek bağ, ek altyapı yok; senkronluk **sözleşmenin parçası değil**, implementasyon detayı | [ADR-003](docs/DECISIONS.md#adr-003--modüller-arası-senkron-spring-application-event) |
 | Her modül yalnızca sahibi olduğu veriyi yayınlar | `ingestion` analiz sonucunu temsil etmez; dönüş event'i yok, ham kayıt write-once, gönderim cevabı makbuz | [ADR-021](docs/DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı) |
 | SSE (WebSocket yerine) — ve **tetikleyici** olarak | İhtiyaç tek yönlü; tarayıcıda yerleşik `EventSource`. Akış veri taşımaz, tazelemeyi tetikler: koptuğunda hiçbir veri erişilemez olmaz | [ADR-004](docs/DECISIONS.md#adr-004--gerçek-zamanlı-bildirim-için-sse) |
@@ -226,14 +226,14 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | Auth kapsam dışı | Kaynak dokümanda ister değil; efor asıl teknik zorluk olan metin analizine ayrıldı | [ADR-011](docs/DECISIONS.md#adr-011--kimlik-doğrulamanın-kapsam-dışı-bırakılması) |
 | Frontend: React + TypeScript + Vite | ReactJS isteri; TypeScript, backend'deki "ihlal derlemede patlasın" çizgisinin istemci karşılığı; SSR'ın karşılığı yok | [ADR-022](docs/DECISIONS.md#adr-022--frontend-teknoloji-tabanı-react--typescript--vite) |
 | Toplam alırken filtre `JOIN` değil `EXISTS` | İki il birden seçildiğinde paylaşılan kayıt join'de iki kez eşleşir ve `SUM` iki katına çıkar; `DISTINCT` bir toplamı düzeltmez. 20 yaralı, 10 kadar makul görünür | [ADR-036](docs/DECISIONS.md#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye) |
-| İl, harita yerine grafik kırılımı | Kaynak "grafiksel" diyor, "haritasal" demiyor; `SHARED` sayılar haritada tanımsız — boyanamaz, bölüştürülemez | [ADR-023](docs/DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) |
+| İl, harita yerine grafik kırılımı | Kaynak "grafiksel" diyor, "haritasal" demiyor; `SHARED` sayılar haritada tanımsız — boyanamaz, bölüştürülemez | [ADR-023](docs/DECISIONS.md#adr-023--coğrafi-i̇zlenebilirlik-harita-yerine-i̇l-kırılımı) |
 | Frontend'de de %80 coverage kapısı | Kaynak dokümandaki ister backend'e daraltılmamış; iki farklı standart, düşük olanın standart olması demek | [ADR-024](docs/DECISIONS.md#adr-024--frontend-coverage-kapısı) |
 | Filtre durumu yalnızca adres çubuğunda | Tek kopya olunca senkronize edilecek iki şey kalmıyor; bağlantı paylaşılabilirliği ve geri düğmesi bedavaya geliyor. Aynı nesne sorgu önbelleğinin de anahtarı | [ADR-037](docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu) |
 | İle atanamayan figürler aynı tabloda, kendi satırında | Uzlaştırma ancak iki sayı yan yana dururken mümkün; toplamlar da sunucudan basılır, çünkü satırları toplayan bir arayüz paylaşılan figürü kaybeder ve tutarlı görünür | [ADR-038](docs/DECISIONS.md#adr-038--shared-ve-unknown-kapsamın-arayüzdeki-temsili-aynı-tabloda-kendi-satırında-adıyla) |
 | Durum asla yalnızca renkle, eylem asla yalnızca fareyle | Gösterge tıklanabilir bir liste öğesiyken seri gizlemek klavyeyle imkânsızdı; `aria-pressed` taşıyan düğmelere çevrildi, gizli seri üstü çizili | [ADR-042](docs/DECISIONS.md#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı) |
 | Vurgulama sunucunun offset'leriyle, metne dokunmadan | İl adları ekle geliyor ve aynı kelime birden çok kez geçiyor — arayan istemci yanlış yeri işaretler; metnin içine işaret koymak da kopyalanan metni bozar | [ADR-041](docs/DECISIONS.md#adr-041--i̇zlenebilirlik-ekranları-sunucudan-gelen-offsetlerle-vurgulama-metne-hiçbir-şey-eklememe-ve-reprocessin-yerinde-tazelenmesi) |
 | Sinyal tazeler, delta uygulamaz | Satır eklemek filtre/sayfalama/toplam kurallarının istemcide kopyası olurdu; art arda sinyaller pencere başına tek tazelemede birleşir ve yalnızca kanıtlanmış ilgisizlikte atlanır | [ADR-040](docs/DECISIONS.md#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama) |
-| Grafiğin iki modu: metrikleri ya da yerleri karşılaştır | Bir eksende "kaza sayısı" ile "can kaybı" hiçbir soruyu cevaplamaz; il kırılımı tek metrikte yapılır, kümülatif ise sunucudan istenir | [ADR-039](docs/DECISIONS.md#adr-039--grafiğin-iki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi) |
+| Grafiğin iki modu: metrikleri ya da yerleri karşılaştır | Bir eksende "kaza sayısı" ile "can kaybı" hiçbir soruyu cevaplamaz; il kırılımı tek metrikte yapılır, kümülatif ise sunucudan istenir | [ADR-039](docs/DECISIONS.md#adr-039--grafiğin-i̇ki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi) |
 
 ---
 
@@ -330,6 +330,18 @@ cd backend && docker compose up --build
 Kökteki compose bu dosyayı `include` ile olduğu gibi kullanır, yani servis tanımları
 tek yerdedir ve iki dosya arasında kopyalama yoktur.
 
+Frontend'i canlı yeniden yükleme ile geliştirmek için (Node 20+ gerekir):
+
+```bash
+cd frontend
+npm install
+npm run dev        # Vite :3000 — /api isteklerini :8080'e proxy'ler
+```
+
+Dev sunucusu ile Docker aynı şekilde davranır: ikisinde de API **aynı köken** üzerindedir, yani
+kaynak kodda mutlak bir API adresi yoktur (ADR-025). Backend'i ayrıca ayağa kaldırmanız gerekir —
+ya `docker compose up -d backend postgres mongodb` ile ya da yukarıdaki Maven komutuyla.
+
 ### Durdurma ve temizlik
 
 ```bash
@@ -371,8 +383,8 @@ Uçlar `/api/v1` altındadır:
 Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 
 API'yi frontend olmadan denemek için [`docs/postman/`](docs/postman/) altında hazır bir Postman
-koleksiyonu var: 26 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
-ile çalıştırılabilen 107 assertion. SSE ucu bilerek dışarıda — bitmeyen bir istek koşuyu askıda
+koleksiyonu var: 27 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
+ile çalıştırılabilen 111 assertion. SSE ucu bilerek dışarıda — bitmeyen bir istek koşuyu askıda
 bırakır; onun doğrulaması `curl -N` ile.
 
 ---
@@ -391,11 +403,12 @@ cd backend
 ./mvnw -pl analysis -am verify   # tek modül ve bağımlılıkları
 ```
 
-Frontend için `frontend/` altında:
+Frontend için `frontend/` altında (Docker gerekmez):
 
 ```bash
+npm install
 npm run verify                   # lint + tip kontrolü + build + kapsam kapısı
-npm test
+npm test                         # yalnızca testler
 ```
 
 ### Kapsam raporu
@@ -411,15 +424,16 @@ npm test
 ### Ölçülen kapsam
 
 Eşik **%80** ve **modül başına** uygulanıyor — proje geneli tek bir ortalama olsaydı, iyi test
-edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/DECISIONS.md#adr-018)).
+edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/DECISIONS.md#adr-018--coverage-kapısı-modül-başına-eşik--proje-geneli-rapor)).
 
-| Modül | Satır kapsamı |
+| Modül / paket | Satır kapsamı |
 |---|---|
-| `shared` | %100 |
-| `ingestion` | %97 |
-| `analysis` | %99 |
-| `app` | %100 |
-| `realtime` | %96 |
+| `shared` | %100 (35/35) |
+| `ingestion` | %96 (82/85) |
+| `analysis` | %99 (1212/1225) |
+| `realtime` | %96 (69/72) |
+| `app` | %100 (41/41) |
+| **frontend** | **%98 (521/532)** — kendi kapısıyla (ADR-024) |
 
 Şu anki durum: **backend 600 test, %98.8 satır kapsamı (1400/1417); frontend 235 test, %97.9
 (521/532).** Kapı bir taban, hedef değil: sayıyı şişiren değil, gerçek davranışı ölçen testler
@@ -444,5 +458,6 @@ yazılıyor — kod tabanında `toMatchSnapshot` **sıfır kez** geçiyor.
 |---|---|
 | [`docs/PRD.md`](docs/PRD.md) | Ürün gereksinim dokümanı: kapsam, fonksiyonel/fonksiyonel olmayan isterler, kabul kriterleri, ister izlenebilirlik matrisi, açık teknik challenge'lar |
 | [`docs/postman/`](docs/postman/) | Postman koleksiyonu — API'yi frontend olmadan denemek için; örnek cevaplar çalışan sistemden yakalanmıştır |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Tüm mimari kararlar; gerekçeleri, elenen alternatifleri, trade-off'ları ve **"İleride"** notları |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Tüm mimari kararlar (ADR-001…ADR-042); gerekçeleri, elenen alternatifleri, trade-off'ları ve **"İleride"** notları |
+| [`docs/TASKS.md`](docs/TASKS.md) | Task kırılımı ve her task'ın **sonuç notları**: ne yapıldı, ne ölçüldü, hangi tuzak çalışan sistemde yakalandı |
 | [`CLAUDE.md`](CLAUDE.md) | Projenin çalışma sözleşmesi: mimari kısıtlar, kodlama ve test kuralları, Türkçe metin işleme tuzakları |

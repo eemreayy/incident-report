@@ -634,7 +634,7 @@ referansını döner.
 `cumulative` parametresi. `GET /analytics/summary` — özet tablo agregasyonu.
 - **Ek kapsam (PRD v2.0):**
   - **C-1 · il kırılımı.** İl yalnızca filtre değil, **seri boyutu** olmalı (`groupBy=province`).
-    FR-24 ve [ADR-023](DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı):
+    FR-24 ve [ADR-023](DECISIONS.md#adr-023--coğrafi-i̇zlenebilirlik-harita-yerine-i̇l-kırılımı):
     "coğrafi bölge bazında izlenebilirlik" tek il seçip bakmak değil, iller arası karşılaştırma.
     Bu olmadan istemci toplama yapmak zorunda kalır — NFR-13'e aykırı.
   - **C-2 · `SHARED` ve `UNKNOWN` ayrı ve etiketli.** Agregasyon uçları bu kapsamları ne
@@ -797,7 +797,7 @@ normalize kayıtların yerini yeni sonuç alır, mükerrer kayıt oluşmaz. Ayn�
 
 ## Faz 6 — Kapanış
 
-### ☐ T-20 · OpenAPI, README ve coverage doğrulaması
+### ☑ T-20 · OpenAPI, README ve coverage doğrulaması
 springdoc-openapi devreye alınır. README'deki `TODO` bölümleri doldurulur: gereksinimler, tek komutla
 çalıştırma, yapılandırma/ortam değişkenleri, yerel geliştirme, durdurma, API örnekleri, test ve kapsam
 raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
@@ -830,8 +830,38 @@ raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
   6 uç ve 15 şema. *(Not: `docker compose up --build` bu makinede takılan bir
   `docker-credential-desktop` süreci yüzünden derlemeyi sessizce atlıyordu; ayrı `docker compose
   build` + `--force-recreate` ile çözüldü.)*
-- **Kalan:** T-17/T-19 uçları geldiğinde API tablosu ve örnekler; T-31 sonrası frontend kurulum,
-  test ve kapsam bölümleri; temiz makinede uçtan uca kurulum provası.
+- **Kapanış (T-31 sonrası).** Açık bırakılan üç maddenin üçü de tamamlandı:
+  - **API tablosu tamam:** on uç (ham bildirim CRUD + reprocess, kayıtlar + tekil kayıt, iki
+    analitik ucu, metadata, SSE) ve her birinin daralan/genişleyen sorumluluğu yazılı. OpenAPI
+    dokümanı **9 yol, 21 şema** taşıyor ve `OpenApiDocumentTest` bunların hepsini isimle
+    doğruluyor — springdoc'un tarif edemediği bir controller build'i kırıyor.
+  - **README frontend'i kapsıyor:** `npm install` + `npm run dev` (Vite :3000, aynı köken),
+    `npm install` + `npm run verify` + `npm test`, kapsam raporunun konumu ve **ölçülen** oran.
+  - **Eskimiş sayılar düzeltildi:** Postman koleksiyonu 26 istek / 107 assertion yazıyordu,
+    gerçek **27 / 111**. Modül kapsam tablosu ölçülen satır oranlarıyla yenilendi ve frontend
+    satırı eklendi. Doküman tablosuna `docs/TASKS.md` girdi.
+  - **Dört kırık doküman bağlantısı bulundu ve düzeltildi** — hepsi aynı sebepten: Türkçe **`İ`**
+    harfi. GitHub başlık bağlantısını üretirken `İ`'yi `i` + *combining dot above* (U+0307) yapıyor
+    ve bu işareti **silmiyor**; elle yazılan `#adr-023--coğrafi-izlenebilirlik-…` gibi bağlantılar
+    ise düz `i` taşıdığı için hiçbir yere gitmiyordu (ADR-002, ADR-018, ADR-023, ADR-039). Bağlantılar
+    artık başlıklardan **hesaplanarak** yazıldı; README'deki 34 göreli bağlantının tamamı ve tüm ADR
+    çapaları çözülüyor. Aynı `i/İ` tuzağı `CLAUDE.md`'de kod tarafı için zaten yazılıydı — dokümanda
+    da geçerliymiş.
+- **Temiz makine provası yapıldı** (`docker compose down -v` + imajlar silinip yeniden derlendi):
+  - Dört servis de **healthy**; `curl localhost:8080/actuator/health` → `UP`.
+  - `swagger-ui` → 302 (index'e), `/v3/api-docs` → **9 yol / 21 şema**, `localhost:3000` → 200,
+    `localhost:3000/api/v1/metadata` → 200 (aynı köken proxy'si çalışıyor).
+  - **Boş veri tabanında Postman koşusu: 27 istek, 111 assertion, 0 hata.**
+  - Arayüz, PRD §11'in kabul tablosunu **birebir** gösteriyor: Salgın/Ankara 15·1·5 ·
+    Deprem/İzmir 12·2·9·40 · Trafik kazası Bursa 8/1, Kocaeli 6/2 ve **Ortak toplam 10 yaralı**
+    (hiçbir ile eklenmemiş), genel toplam 5 kayıt.
+  - **`--no-cache` ile de derlendi:** imajlar katman önbelleğine hiç dayanmadan kuruluyor.
+- **Ölçülen kapsam (kapanış):** `shared` %100 (35/35) · `ingestion` %96 (82/85) · `analysis` %99
+  (1212/1225) · `realtime` %96 (69/72) · `app` %100 (41/41) → backend geneli **%98.8 (1400/1417),
+  600 test**. Frontend **%97.9 (521/532), 235 test**. Her iki kapı da build'i kırıyor ve ikisi de
+  fiilen denendi (T-31).
+- **Projedeki tüm task'lar kapandı**; PRD §10'daki TC-1…TC-18'in tamamı karara bağlanmış ve
+  `docs/DECISIONS.md`'e (ADR-001…ADR-042) işlenmiş durumda.
 
 ### ☑ T-21 · Git deposu ve GitHub'a ilk push  *(T-01 sonrasına alındı)*
 `git init`, ilk commit, GitHub deposu ve push.
@@ -1112,7 +1142,7 @@ agregasyon **sunucudan** istenir. Seri gizle/göster; çok il seçildiğinde oku
 - **Sonuç:** 180 test geçiyor, frontend coverage **%98** (359/365 satır). `analytics/chartOptions.ts`
   (saf çözümleme + çözümleme kuralları), `analytics/chartModel.ts` (seri → satır çevrimi),
   `analytics/ChartPanel.tsx`; API katmanına `getTimeSeries` ve `useTimeSeries`. Kararlar
-  [ADR-039](DECISIONS.md#adr-039--grafiğin-iki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi)'da.
+  [ADR-039](DECISIONS.md#adr-039--grafiğin-i̇ki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi)'da.
   Recharts ilk kez kullanılıyor — ADR-026 onu tam da bu task için seçmişti.
 - **Grafiğin iki modu var, çünkü grafik yalnızca benzeri benzerle karşılaştırabilir.** Kırılımsız
   modda bir çizgi bir **metrik**; il kırılımında bir çizgi bir **yer** ve tek bir metrik çizilir.
