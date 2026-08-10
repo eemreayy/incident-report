@@ -45,6 +45,24 @@ class KeywordMatcherTest {
         assertThat(matches(keyword, text)).isEqualTo(expected);
     }
 
+    @ParameterizedTest(name = "\"{0}\" matches \"{1}\": {2}")
+    @CsvSource({
+            "'trafik kazası',  'trafik kazasında',             true",
+            "'trafik kazası',  'trafik kazasından',            true",
+            "'trafik kazası',  'trafik kazasının',             true",
+            "'trafik kazası',  'trafik kazasını',              true",
+            "kaza,             'kazasında',                    true",
+            "kaza,             'kazasından',                   true"
+    })
+    @DisplayName("a vowel-final stem plus possessive takes the buffer-n before a case ending")
+    void bufferConsonantBeforeCase(String keyword, String text, boolean expected) {
+        // "kazası" already ends in a vowel (the 3rd-person possessive -sı), so locative/ablative
+        // attach with an inserted "n": kazası + nda = kazasında. Missing that buffer-n form used to
+        // make "trafik kazasında" fall through to whatever bare keyword matched elsewhere in the
+        // text instead of the specific phrase actually present.
+        assertThat(matches(keyword, text)).isEqualTo(expected);
+    }
+
     @ParameterizedTest(name = "\"{0}\" softens in \"{1}\"")
     @CsvSource({
             "kaybet, 'hayatını kaybeden kişi'",
