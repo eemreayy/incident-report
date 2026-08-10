@@ -5,7 +5,9 @@ import { SummaryPanel } from '../analytics/SummaryPanel';
 import { FilterBar } from '../incidents/FilterBar';
 import { IncidentListPanel } from '../incidents/IncidentListPanel';
 import { ReportForm } from '../report/ReportForm';
+import { StreamStatus } from '../realtime/StreamStatus';
 import { SubmissionResult } from '../report/SubmissionResult';
+import { useIncidentStream } from '../realtime/useIncidentStream';
 import { strings } from '../i18n/strings';
 
 /**
@@ -20,9 +22,13 @@ import { strings } from '../i18n/strings';
  * result outlives the form's own state - the text area is cleared on success and
  * the result must stay on screen. That id is deliberately not a filter: it is
  * about one submission, not about what the analyst is looking at.
+ *
+ * The stream is subscribed to here for the same reason: one connection for the
+ * page, not one per panel that wants to stay fresh.
  */
 export function AppShell() {
   const [lastRawReportId, setLastRawReportId] = useState<string | null>(null);
+  const { status } = useIncidentStream();
 
   return (
     <div className="app-shell">
@@ -31,7 +37,10 @@ export function AppShell() {
           <h1>{strings.app.title}</h1>
           <p className="app-subtitle">{strings.app.subtitle}</p>
         </div>
-        <BackendStatus />
+        <div className="app-status">
+          <BackendStatus />
+          <StreamStatus status={status} />
+        </div>
       </header>
       <main>
         <ReportForm onSubmitted={setLastRawReportId} />

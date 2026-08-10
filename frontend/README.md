@@ -74,6 +74,8 @@ Bunlar tercih değil, karar:
    mesajları İngilizce. Türkçe metinler tek yerde toplanır, bileşenlerin içine serpiştirilmez.
 7. **Tazeleme sırasında görünüm boşaltılmaz.** Yeni veri gelene kadar eski veri ekranda kalır;
    aksi halde her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenmesidir.
+   Akıştan gelen sinyal ekrana hiçbir şey yazmaz; sorguları geçersizleştirir ve onlar kendini
+   yeniden getirir ([ADR-040](../docs/DECISIONS.md#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama)).
 8. **Görünüm durumunun tek kopyası adres çubuğudur** — store, context ya da `useState` kopyası yok
    ([ADR-037](../docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu)). Filtreye
    bakan her görünüm `useIncidentFilters`'ı çağırır; birbirlerine prop geçmezler. Çözümleme
@@ -96,8 +98,13 @@ Sonuçları:
 - Geliştirmede aynı davranışı Vite dev proxy'si veriyor, yani `npm run dev` ile Docker aynı şekilde
   çalışıyor.
 - [`nginx.conf`](nginx.conf)'taki en kritik satır **`proxy_buffering off`**: SSE için kapatılmazsa
-  nginx olayları tamponlar ve akış hiçbir hata vermeden ölü görünür. O blok yerinde ama **henüz
-  çalışırken doğrulanmadı** — stream ucu T-18'le geliyor, fiili doğrulama T-29'a ait.
+  nginx olayları tamponlar ve akış hiçbir hata vermeden ölü görünür. **T-29'da çalışırken
+  doğrulandı** — Docker'da, nginx üzerinden, başka bir istemciden girilen bildirim tarayıcıda sayfa
+  yenilenmeden göründü.
+- Aynı doğrulama beklenmeyen bir şey de gösterdi: backend durduğunda bağlantı reddedilmiyor, nginx
+  **502** döndürüyor ve `EventSource` bunu ölümcül sayıp bir daha denemiyor. Bu yüzden yeniden
+  bağlanma arayüzün kendi işi
+  ([ADR-040](../docs/DECISIONS.md#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama)).
 
 Backend API sözleşmesi için [`docs/PRD.md`](../docs/PRD.md) §8 ve §8.2'ye bakın. §8.2, frontend'in
 sözleşmeden beklediği ve **bugün henüz mevcut olmayan** maddeleri (C-1…C-8) listeler.

@@ -1153,7 +1153,7 @@ agregasyon **sunucudan** istenir. Seri gizle/göster; çok il seçildiğinde oku
   takvimdeki boşluklar orantılı değil; hafta/ay bazında gruplama ucun `date_trunc` ile genişlemesini
   bekliyor; birden fazla olay tipi tek eksende çizilmiyor (doğru yolu tip başına küçük çoklu grafik).
 
-### ☐ T-29 · Canlı akış: SSE aboneliği ve tazeleme
+### ☑ T-29 · Canlı akış: SSE aboneliği ve tazeleme
 `EventSource` ile akışa abonelik; sinyal geldiğinde liste, özet ve grafiğin tazelenmesi. Bağlantı
 durumu göstergesi (bağlı / yeniden bağlanıyor / kopuk), otomatik yeniden bağlanma ve yeniden
 bağlanınca tazeleme. Sayfa kapanınca bağlantının kapatılması.
@@ -1166,6 +1166,54 @@ her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenme
 - **DoD:** İki sekme açıkken birinde girilen bildirim diğerinde sayfa yenilenmeden listeye, özete
   ve grafiğe yansıyor; akış kapatıldığında gönderen sekme kendi sonucunu görmeye devam ediyor;
   on bildirim peş peşe girildiğinde on ayrı tazeleme yapılmıyor.
+- **Sonuç:** 204 test geçiyor, frontend coverage **%98** (444/450 satır). `realtime/incidentSignal.ts`
+  (saf sözleşme + ilgi kuralı), `realtime/useIncidentStream.ts`, `realtime/StreamStatus.tsx`;
+  `api/client.ts`'e `apiUrl` (akış `fetch` ile değil `EventSource` ile açılıyor, ama adres yine tek
+  kapıdan geçiyor). Kararlar
+  [ADR-040](DECISIONS.md#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama)'ta.
+- **TC-13 karara bağlandı.** Sinyal hiçbir şeyi doğrudan değiştirmiyor: `['incidents']` ve
+  `['analytics']` önekleri geçersizleştiriliyor, sorgular kendini yeniden getiriyor. Sinyalden satır
+  eklemek, "bu kayıt bu filtreye uyar mı / hangi toplamı ne kadar artırır" sorularını istemcide
+  cevaplamak olurdu — üçü de sunucunun kuralı (NFR-13), üstelik paylaşılan figürün aritmetiği
+  (ADR-019) tam olarak tekrarlanmaması gereken şey.
+- **Birleştirme: pencere başına leading + trailing (1 sn).** İlk sinyal anında tazeliyor, pencere
+  içindekiler tek tazelemeye biniyor. Düz debounce olmadı çünkü **sürekli akışta hiç tazelemez**
+  (her sinyal zamanlayıcıyı ileri atar); yalnızca leading de olmadı çünkü penceredeki son değişiklik
+  görünmeden kalır.
+- **Filtreye uymayan sinyal: yalnızca *kanıtlanmış* ilgisizlikte atlanıyor.** Gereksiz tazeleme bir
+  istektir ve ekranda hiçbir şeyi değiştirmez; atlanmış tazeleme ise değişmiş bir sayıyı yerleşmiş
+  gibi gösterir ve akış aynı şeyi bir daha göndermez. Üç durumda koşulsuz tazeleniyor: ekranda o
+  rapordan kayıt varsa (**reprocess siler-yazar, silinenler sinyalin bahsetmediği kayıtlardır** —
+  yalnızca içeriğe bakan bir test bunu kaçırırdı), anahtar kelime filtresi aktifse (sinyal anahtar
+  kelime taşımıyor), ve sinyal okunamadıysa.
+- **Sayfa başına tek bağlantı**, panel başına değil: aksi hâlde tek gönderim üç yeniden bağlanma ve
+  üç kat tazeleme demekti.
+- **Backend durunca `EventSource` vazgeçiyor — çalışan sistemde görüldü.** Bağlantı reddedilmiyor,
+  nginx **502** döndürüyor; `EventSource` HTTP hata cevabını ölümcül sayıp `CLOSED`'a geçiyor ve bir
+  daha denemiyor. Canlı kalması gereken bir sayfa için sessiz ölüm. Yeniden bağlanma bu yüzden
+  bizim: vazgeçilen bağlantı 5 saniyede bir yeniden açılıyor, ve **geri gelince tazeleniyor** çünkü
+  akış tekrar oynatma yapmıyor (ADR-034).
+- **DoD fiilen doğrulandı (çalışan sistemde, tek sayfa yüklemesiyle — `navigations: 1`):**
+  - Başka bir istemciden girilen bildirim, sayfa yenilenmeden **listeye** (31 → 32), **özete**
+    (Deprem bloğuna yeni il satırı) ve **grafiğe** (5 → 6 nokta) yansıdı.
+  - **On ayrı metin aynı anda gönderildi → iki tazeleme** (6 istek), on değil; liste 33 → 43.
+  - Backend durdurulunca gösterge *"Canlı akış: kapalı"* + verinin kaybolmadığı notu, **tablo
+    ekranda kaldı**, ve ~5 saniyede bir yeniden bağlanma denemesi gözlendi. Backend geri gelince
+    gösterge *"bağlı"* oldu ve kopukken girilen bildirim listeye düştü (43 → 44).
+  - Arayüzden gönderim: gönderenin kendi sonucu makbuz sorgusundan geldi (*"1 kayıt üretildi ·
+    Sel · Trabzon"*), liste aynı anda 45'e çıktı.
+- **Akış olmadan gönderenin sonucu görünmeye devam ediyor** — sonuç `rawReportId` sorgusundan gelir,
+  akıştan değil (ADR-021). Bu yol T-25'te akış **hiç yokken** uçtan uca doğrulanmıştı ve bu task'ta
+  hiçbir bağı eklenmedi; `SubmissionResult` testleri de akışsız çalışıyor.
+- **jsdom'da `EventSource` yok**; kurulum dosyasına hiçbir şey yapmayan bir stub kondu (grafiğin
+  `ResizeObserver`'ı gibi). Akışın kendi testleri onu **sürülebilir bir sahte** ile değiştiriyor —
+  açılma, kopma, vazgeçme ve kapanma ancak böyle deterministik test edilebiliyor (TC-16).
+- **Ölçüm hatası, tekrar edildi:** ilk "on gönderim" denemesinde on curl aynı geçici dosyayı
+  paylaştı, dokuzu mükerrer sayıldı (ADR-035 doğru davrandı) ve ölçüm anlamsızdı; on **ayrı** metinle
+  tekrarlandı.
+- **Bilinçli boşluklar:** pencere sabit 1 sn, yeniden bağlanma sabit 5 sn (artan bekleme yok);
+  arka plandaki sekme tazelemeyi durdurmuyor — TanStack'in `focusManager`'ı bu bilgiyi taşıyor,
+  gerekirse oraya bağlanır.
 
 ### ☐ T-30 · İzlenebilirlik ekranları ve reprocess
 Olay kaydı detayı (metrikler, anahtar kelimeler, tarih kaynağı, kapsam, kaynak bildirim bağlantısı)
@@ -1249,7 +1297,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-10 | SSE bağlantı yönetimi (sunucu) | T-18 |
 | TC-11 | Anlamlı %80 kapsam (backend) | T-03 (altyapı) + her task'ın kendi testleri |
 | TC-12 | Gönderim sonrası sonucun getirilmesi | **Karara bağlandı → ADR-021** · uygulaması T-22 |
-| TC-13 | Canlı akışta agregasyon tazeleme | T-29 |
+| TC-13 | Canlı akışta agregasyon tazeleme | **Karara bağlandı → ADR-040** · uygulaması T-29 |
 | TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | **Karara bağlandı → ADR-038** · uygulaması T-27 |
 | TC-15 | İstemci durumu ile sunucu durumunun ayrımı | **Karara bağlandı → ADR-037** · uygulaması T-26 |
 | TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |

@@ -3,7 +3,7 @@ import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 /**
- * Two gaps in jsdom, filled for every test file rather than per test.
+ * Gaps in jsdom, filled for every test file rather than per test.
  *
  * jsdom implements no layout, so it has no ResizeObserver and reports every
  * element as zero by zero. The chart measures its container before drawing, so
@@ -33,6 +33,23 @@ for (const [property, value] of [
 ] as const) {
   Object.defineProperty(HTMLElement.prototype, property, { configurable: true, value });
 }
+
+/**
+ * jsdom has no EventSource either, and every screen subscribes to the stream.
+ * This one does nothing: a connection that never opens and never delivers is
+ * the right default for tests that are about something else. The tests that are
+ * about the stream replace it with one they can drive.
+ */
+globalThis.EventSource = class {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  readyState = 0;
+  constructor(readonly url: string) {}
+  addEventListener() {}
+  removeEventListener() {}
+  close() {}
+} as unknown as typeof EventSource;
 
 afterEach(() => {
   cleanup();

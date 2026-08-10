@@ -10,6 +10,15 @@ import { ApiError, CLIENT_ERROR_CODES } from './problem';
  */
 const API_ROOT = '/api/v1';
 
+/**
+ * For the one endpoint that is not fetched: the stream is opened by
+ * `EventSource`, which builds its own request. It still has to come through this
+ * file, or the rule above would hold for every address but that one.
+ */
+export function apiUrl(path: string): string {
+  return `${API_ROOT}${path}`;
+}
+
 interface RequestOptions {
   method?: string;
   body?: unknown;

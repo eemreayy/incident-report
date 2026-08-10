@@ -17,6 +17,16 @@ export const strings = {
     up: 'bağlı',
     down: 'ulaşılamıyor',
   },
+  stream: {
+    label: 'Canlı akış',
+    connecting: 'bağlanıyor',
+    open: 'bağlı',
+    reconnecting: 'yeniden bağlanıyor',
+    closed: 'kapalı',
+    // FR-25 / ADR-021: losing the stream loses liveness and nothing else, so
+    // the indicator says what still works rather than only what broke.
+    note: 'Akış kapalıyken veriler kaybolmaz; sayfayı yenilediğinizde güncel hâli gelir.',
+  },
   form: {
     heading: 'Yeni olay bildirimi',
     label: 'Açık kaynaktan aldığınız metni buraya girin',
