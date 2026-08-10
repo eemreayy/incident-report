@@ -68,7 +68,22 @@ class OpenApiDocumentTest {
                 .andExpect(jsonPath("$.paths['/api/v1/incident-reports/{id}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/incidents'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/incidents/{id}'].get").exists())
-                .andExpect(jsonPath("$.paths['/api/v1/metadata'].get").exists());
+                .andExpect(jsonPath("$.paths['/api/v1/metadata'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/stream/incidents'].get").exists());
+    }
+
+    /**
+     * The stream is a GET like any other as far as the document is concerned, and that is worth
+     * pinning: springdoc describes what a handler returns, and an {@code SseEmitter} is the one
+     * return type in this API that is not a DTO.
+     */
+    @Test
+    @DisplayName("the live stream is documented as an event stream")
+    void theStreamIsDescribedAsAnEventStream() throws Exception {
+        mvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/stream/incidents'].get.responses['200'].content['text/event-stream']")
+                        .exists());
     }
 
     @Test

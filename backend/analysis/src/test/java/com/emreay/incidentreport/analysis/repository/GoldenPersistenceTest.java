@@ -95,7 +95,9 @@ class GoldenPersistenceTest {
                 catalog,
                 normalizer);
 
-        service = new AnalysisService(extractor, incidents, provinces, results,
+        // Announcements go nowhere here: what this test is about is what reaches PostgreSQL. The
+        // stream has its own tests, in the module that owns it.
+        service = new AnalysisService(extractor, incidents, provinces, results, event -> { },
                 Clock.fixed(Instant.parse("2026-08-10T10:00:00Z"), ZoneOffset.UTC),
                 normalizer, ZoneId.of("Europe/Istanbul"));
     }

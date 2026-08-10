@@ -11,8 +11,11 @@ import com.emreay.incidentreport.analysis.extraction.IncidentExtractor;
 import com.emreay.incidentreport.analysis.repository.AnalysisResultRepository;
 import com.emreay.incidentreport.analysis.repository.IncidentRepository;
 import com.emreay.incidentreport.analysis.repository.ProvinceRepository;
+import com.emreay.incidentreport.shared.event.IncidentRecordsProducedEvent;
+import com.emreay.incidentreport.shared.event.IncidentSignal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +41,10 @@ import java.util.stream.Collectors;
  * <p>The whole thing runs in one PostgreSQL transaction. If any part fails, no half-analysed report
  * is left behind — and the raw text is untouched either way, because it lives in a different store
  * that was written before this ever ran.
+ *
+ * <p>When a run succeeds it announces what now stands, so connected clients can refresh (FR-13).
+ * The announcement carries identifiers, not data: this module owns these records and serves them
+ * from its query endpoints, and the stream only says that looking again is worthwhile (ADR-021).
  */
 @Service
 public class AnalysisService {
@@ -48,6 +55,7 @@ public class AnalysisService {
     private final IncidentRepository incidents;
     private final ProvinceRepository provinces;
     private final AnalysisResultRepository results;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
     private final TurkishTextNormalizer normalizer;
     private final ZoneId reportingZone;
@@ -56,6 +64,7 @@ public class AnalysisService {
                            IncidentRepository incidents,
                            ProvinceRepository provinces,
                            AnalysisResultRepository results,
+                           ApplicationEventPublisher events,
                            Clock clock,
                            TurkishTextNormalizer normalizer,
                            ZoneId reportingZone) {
@@ -63,6 +72,7 @@ public class AnalysisService {
         this.incidents = incidents;
         this.provinces = provinces;
         this.results = results;
+        this.events = events;
         this.clock = clock;
         this.normalizer = normalizer;
         this.reportingZone = reportingZone;
@@ -87,17 +97,55 @@ public class AnalysisService {
             log.debug("rebuilding raw report {}: removed {} previously derived records", rawReportId, removed);
         }
 
-        List<Incident> toStore = result.incidents().stream()
+        List<Incident> stored = incidents.saveAll(result.incidents().stream()
                 .map(extracted -> toEntity(rawReportId, extracted))
-                .toList();
-        incidents.saveAll(toStore);
+                .toList());
 
-        record(AnalysisResult.analyzed(rawReportId, clock.instant(), toStore.size(), result.warnings()));
+        Instant analyzedAt = clock.instant();
+        record(AnalysisResult.analyzed(rawReportId, analyzedAt, stored.size(), result.warnings()));
+
+        announce(rawReportId, analyzedAt, stored);
 
         log.info("analysed raw report {}: {} records, {} warnings",
-                rawReportId, toStore.size(), result.warnings().size());
+                rawReportId, stored.size(), result.warnings().size());
 
-        return new AnalysisOutcome(toStore.size(), result.warnings());
+        return new AnalysisOutcome(stored.size(), result.warnings());
+    }
+
+    /**
+     * Says what now stands for this report, so anyone showing it can refresh.
+     *
+     * <p>Published even when nothing was extracted: a reprocess that produces fewer records than
+     * the run before it still changed what every query answers, and a client left holding the old
+     * rows has no other way to find out.
+     *
+     * <p>The event is a signal, not a payload — ids and the three dimensions a view is filtered by,
+     * nothing a table could be drawn from (ADR-021). It is published inside the transaction, but a
+     * listener that must not act on uncommitted work says so on its own side; deciding that here
+     * would put another module's transaction policy in this method.
+     */
+    private void announce(String rawReportId, Instant analyzedAt, List<Incident> stored) {
+        List<IncidentSignal> signals = stored.stream()
+                .map(incident -> new IncidentSignal(incident.getId(), incident.getOccurredOn(),
+                        incident.getEventType(), coveredProvinceCodes(incident)))
+                .toList();
+
+        events.publishEvent(new IncidentRecordsProducedEvent(rawReportId, analyzedAt, signals));
+    }
+
+    /**
+     * The provinces a record answers a province filter for — one for {@code SINGLE}, all of them
+     * for {@code SHARED}, none for {@code UNKNOWN} (ADR-033). Reading them here, inside the
+     * transaction, is deliberate: both associations are lazy and the session closes with it.
+     */
+    private static Set<Short> coveredProvinceCodes(Incident incident) {
+        return switch (incident.getProvinceScope()) {
+            case SINGLE -> Set.of(incident.getProvince().getCode());
+            case SHARED -> incident.getSharedProvinces().stream()
+                    .map(Province::getCode)
+                    .collect(Collectors.toUnmodifiableSet());
+            case UNKNOWN -> Set.of();
+        };
     }
 
     /**

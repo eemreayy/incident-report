@@ -35,7 +35,7 @@ Maven command fails the enforcer rule. Maven runs from `backend/` (the reactor r
 the repository root.
 
 ```
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 cd backend
 ./mvnw verify                          # all modules: build + tests + coverage gate
 ./mvnw -pl analysis -am verify         # one module and what it depends on

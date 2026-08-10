@@ -65,3 +65,11 @@ incident-report:
   ingestion:
     # Maximum accepted length of the raw text; used by the T-06 request validation.
     max-text-length: 10000
+  realtime:
+    # How long one SSE subscription may stay open. The browser reconnects by itself and the
+    # stream carries no data, so this costs a client nothing; it bounds how long a connection
+    # the server failed to clean up can survive.
+    stream-timeout: 30m
+    # How often a comment is written to every open subscription. Short enough that idle proxies
+    # do not close the connection, and it is what makes an abruptly closed client detectable.
+    heartbeat-interval: 20s

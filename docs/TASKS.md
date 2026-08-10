@@ -174,7 +174,7 @@ event yayınlanır.
   ADR-018'deki boşluk kapandı: testi olmayan modül artık coverage kapısını sessizce geçemiyor.
   **Doğrulandı** — `shared`'ın testleri geçici olarak kaldırıldığında build
   `No tests to run!` ile kırıldı. `realtime` tek istisna: üretim kodu T-18'de geleceği için
-  kendi pom'unda açık bir override taşıyor, kaldırılacağı yorumda yazılı.
+  kendi pom'unda açık bir override taşıyordu — **T-18'de kaldırıldı**, artık istisna yok.
 - **Sonuç:** `IngestionService` — doğrulama, saklama, event yayını, tekil/sayfalı okuma.
   Update/delete yok. Doğrulama servis katmanında, web katmanında değil: reprocess yolunun
   arkasında HTTP isteği yok, kural yine de geçerli olmalı.
@@ -651,7 +651,7 @@ referansını döner.
 
 ## Faz 5 — Gerçek Zamanlı ve Yeniden İşleme
 
-### ☐ T-18 · SSE yayını
+### ☑ T-18 · SSE yayını
 `GET /stream/incidents` — yeni normalize kayıt üretildiğinde bağlı tüm istemcilere tek yönlü yayın.
 Bağlantı yaşam döngüsü: timeout, heartbeat, kopma/temizlik, çok istemcili yayın.
 - **Kapsam daraldı (PRD v2.0 · C-8).** Olay bir **sinyaldir, veri taşıyıcısı değil**: istemcinin
@@ -664,6 +664,48 @@ Bağlantı yaşam döngüsü: timeout, heartbeat, kopma/temizlik, çok istemcili
 - **Karşılar:** FR-13 · **Çözer:** TC-10 · **İlgili kararlar:** ADR-004, ADR-021
 - **DoD:** İki istemci bağlıyken gönderilen bildirim ikisine de ulaşıyor; kopan bağlantı sunucuda
   kaynak sızdırmıyor; olay veri taşımıyor — istemci sinyali alıp sorgu uçlarından tazeliyor.
+- **Sonuç:** `realtime` modülü artık kodlu — `IncidentStream` (abonelik kütüğü + yayın + heartbeat),
+  `IncidentStreamController`, `IncidentSignalMessage`, `IncidentRecordsProducedEventListener`,
+  `RealtimeProperties`/`RealtimeConfiguration`. `shared`'a tek yeni olay:
+  `IncidentRecordsProducedEvent` + `IncidentSignal`. Kararların tamamı
+  [ADR-034](DECISIONS.md#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik)'te — **TC-10 kapandı**.
+- **Sinyalin birimi kayıt değil, rapor.** Bir metin rutin olarak birden fazla kayıt üretiyor (üçüncü
+  örnek üç kayıt); kayıt başına mesaj, tek gönderim için üç tazeleme demekti. Mesaj raporun
+  ürettiği kayıtları listeliyor: `{rawReportId, analyzedAt, incidents[{incidentId, occurredOn,
+  eventType, provinceCodes[]}]}`.
+- **İl, kapsam adı olarak değil kod listesi olarak taşınıyor.** İstemcinin sorusu "bu bana göre mi?";
+  il filtresi `SHARED` kaydı da döndürdüğü için (ADR-033) doğru cevap kaydın hangi illere cevap
+  vereceğidir. `SINGLE` bir kod, `SHARED` birkaç kod, `UNKNOWN` sıfır kod — üç kapsam için tek bir
+  kesişim testi.
+- **Yayın commit'ten sonra.** `analysis` event'i kendi transaction'ının içinden yayınlıyor; düz
+  `@EventListener` mesajı commit'ten **önce** gönderirdi, istemci hemen sorgulayınca eski durumu
+  görürdü ve akış hiçbir şeyi iki kez göndermediği için o istemci bir sonraki alakasız gönderime
+  kadar eski veride kalırdı. Sessiz bir hata; `@TransactionalEventListener(AFTER_COMMIT)` kapatıyor.
+  Geri alınan analizin hiç duyurulmaması da aynı kararın sonucu.
+- **Sıfır kayıt da yayınlanıyor, başarısız analiz yayınlanmıyor.** Reprocess önce siler sonra yazar;
+  sonuç boşalırsa silinen satırları gösteren istemcinin bunu öğrenmesinin başka yolu yok. Başarısız
+  analiz ise hiçbir şey yazmıyor — duyurulacak değişim de yok.
+- **Heartbeat sunucu için de var.** Sekmesini aniden kapatan istemci, **yazılana kadar sağlıklı
+  görünen** bir soket bırakır; periyodik yorum hem boştaki proxy'leri hem ölü aboneyi çözüyor.
+  Yorum (`:`) seçildi, olay değil: `EventSource` yorumu dinleyiciye iletmez, yani heartbeat hiçbir
+  zaman "bir şey oldu" diye okunamaz. Abonelik anında da bir yorum yazılıyor — yoksa olaysız geçen
+  ilk dakikalar kopuk bağlantıyla birebir aynı görünürdü.
+- **`failIfNoTests` override'ı kalktı** (T-03'ten beri duran tek istisna); `realtime` artık modül
+  başına kapıya tabi. Modül `spring-tx`'e bağlandı — yalnızca `@TransactionalEventListener` için.
+  Uygulamada ilk kez `@EnableScheduling` açıldı, sebebi heartbeat.
+- **Yeni ArchUnit kuralı:** `realtime` → `ingestion`/`analysis` bağımlılığı yasak. Maven grafiği
+  zaten engelliyor; kural, birinin derleme hatasını pom'a bağımlılık ekleyerek "düzeltmesini"
+  kapatıyor. Zenginleştirme uğruna atılacak bir sorgu, akışı veri kaynağına çevirirdi.
+- **DoD fiilen doğrulandı:**
+  - `LiveStreamEndToEndTest` (app, iki gerçek veri tabanı): iki abone bağlıyken gönderilen bildirim
+    **ikisine de** ulaşıyor; mesaj kimlik ve boyut taşıyor, metrik/anahtar kelime/ham metin taşımıyor.
+  - `IncidentStreamTest`: yazılamayan abone düşürülüyor ve **diğerleri sinyali almaya devam ediyor**;
+    heartbeat ölü aboneyi topluyor; bağlantı dört kapının (kapanma, timeout, hata, yazma hatası)
+    her birinden çıkabiliyor — timeout'ta sunucu tarafı da serbest bırakılıyor.
+  - Canlı sistemde `curl -N` ile iki terminal: gönderim anında iki abonede de `event:incidents`.
+- **Postman koleksiyonuna alınmadı, bilerek.** Bitmeyen bir istek `newman` koşusunu askıda bırakır ve
+  koleksiyonun duman testi olma özelliğini bitirir. `docs/postman/README.md`'ye `curl -N` ile
+  doğrulama yazıldı.
 
 ### ☐ T-19 · Reprocess ve mükerrer gönderim
 `POST /incident-reports/{id}/reprocess` — güncel kurallarla yeniden analiz. Ham metin değişmez; önceki
