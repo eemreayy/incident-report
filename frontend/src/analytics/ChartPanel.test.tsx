@@ -123,9 +123,12 @@ function seriesRequests(): string[] {
     .filter((url: string) => url.includes('/time-series'));
 }
 
-/** The legend is what names the lines on screen, so it is what the tests read. */
+/**
+ * The legend names the lines and is also the control that hides them, so it is
+ * what the tests read - as buttons, which is what a keyboard user needs it to be.
+ */
 function legend(): string[] {
-  return [...document.querySelectorAll('.recharts-legend-item-text')].map(
+  return [...document.querySelectorAll('.chart-legend button')].map(
     (item) => item.textContent ?? '',
   );
 }
@@ -264,20 +267,41 @@ describe('ChartPanel', () => {
     expect(url).toContain('eventType=TRAFFIC_ACCIDENT');
   });
 
-  it('hides a line when its name in the legend is clicked, and brings it back', async () => {
+  it('hides a line from the keyboard, and brings it back', async () => {
+    // NFR-16: the library's own legend is a list of clickable list items, so
+    // this action existed for a mouse and for nothing else. As a button it is
+    // reachable by Tab, operable by Enter, and says whether it is on.
     stubBackend(() => BY_METRIC);
 
     renderPanel();
 
     await vi.waitFor(() => expect(document.querySelectorAll('.recharts-line').length).toBe(2));
-    await userEvent.click(screen.getByText('Can kaybı'));
+    const toggle = screen.getByRole('button', { name: 'Can kaybı' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    toggle.focus();
+    await userEvent.keyboard('{Enter}');
 
     await vi.waitFor(() => expect(document.querySelectorAll('.recharts-line').length).toBe(1));
-    // Hidden, not filtered out: the name stays in the legend to be clicked again.
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    // Hidden, not filtered out: the name stays to be switched back on.
     expect(legend()).toEqual(['Kaza sayısı', 'Can kaybı']);
 
-    await userEvent.click(screen.getByText('Can kaybı'));
+    await userEvent.keyboard('{Enter}');
     await vi.waitFor(() => expect(document.querySelectorAll('.recharts-line').length).toBe(2));
+  });
+
+  it('says the catalog failed rather than loading forever', async () => {
+    // FR-28: without a catalog there is no event type to plot, and "loading"
+    // would be the wrong reason to show for it.
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    renderPanel();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      strings.errors.byCode['network.unreachable'] as string,
+    );
+    expect(screen.queryByText(strings.chart.loading)).not.toBeInTheDocument();
   });
 
   it('says there is nothing to draw rather than drawing an empty box', async () => {

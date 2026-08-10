@@ -1246,3 +1246,42 @@ Bunun etrafındaki beş karar:
 - `useIncident` yalnızca tam sayı kimlikte çalışıyor; `SubmissionResult` testleri artık router içinde render ediliyor, çünkü kart bir bağlantı taşıyor.
 
 **İleride.** Vurgulama bugün tek bir `<p>` içinde; çok uzun metinlerde parça sayısı arttıkça sanallaştırma gerekebilir, ama bölme kuralı değişmez. Rol başına filtre ("yalnızca metrik tetikleyicilerini göster") aynı segment modelinin üzerine oturur. Ham bildirim listesi ucu (`GET /incident-reports`) bugün arayüzde kullanılmıyor; bir "son bildirimler" ekranı istenirse hazır. Reprocess bugün tek kayıt için; toplu reprocess ADR-035'in "İleride"sindeki analiz sürüm bilgisiyle birlikte anlamlı olur.
+
+---
+
+## ADR-042 — Frontend Kapanışı: Kapsamın Ne Ölçtüğü, Kapının Kırıldığının Kanıtlanması ve Arayüzün İki Erişilebilirlik Kuralı
+
+**Karar.** TC-16 şöyle karara bağlanır: **frontend kapsamı davranış testleriyle tutulur, snapshot ile değil**, ve %80 kapısının gerçekten kırdığı **fiilen kanıtlanır**. Bunun yanında arayüz iki kurala bağlanır:
+
+1. **Durum yalnızca renkle taşınmaz.** Her durum bir kelimeyle de söylenir (sunucu/akış göstergeleri, `SHARED`/`UNKNOWN` satırları, gizlenmiş seri, vurgulanan kelimenin rolü).
+2. **Eylem, bir düğmedir.** Tıklanabilir bir liste öğesi ya da SVG metni değil; odaklanabilir, klavyeden çalışır ve durumunu kendisi söyler.
+
+Kapsam sayısının anlamlı olmasını sağlayan üç yapısal tercih de burada kaydediliyor: **saf çekirdek** (filtre çözümleme, özet düzeni, seri çevrimi, vurgulama segmentleri, sinyal ilgi testi — hepsi DOM'suz test edilebilir), **davranışa bakan görünüm testleri** (gösterge metni, çizgi sayısı, ağ isteğinin şekli), ve **taşımanın deterministik sahtelenmesi** (`EventSource` ve `ResizeObserver` jsdom'da yok; grafiğin kendisi gerçek SVG çiziyor).
+
+**Bağlam.** PRD §10'da TC-16 "sayıyı render testleriyle şişirmeden gerçek davranışı ölçmek; SSE, grafik ve zamanlama içeren kodun deterministik test edilmesi" diyordu. ADR-024 kapıyı koymuştu; T-31 ise kapanış task'ı olarak hem kapının fiilen çalıştığını hem de her veri getiren görünümün üç durumunun (yükleniyor / hata / boş) gerçekten var olduğunu doğrulamakla yükümlüydü (FR-28, NFR-16, NFR-02).
+
+**Gerekçe.**
+- **Snapshot testi kapsamı ucuza şişirir, hiçbir iddiada bulunmaz.** Kod tabanında `toMatchSnapshot` **sıfır kez** geçiyor; sayıyı tutan şey "şu düğmeye basılınca şu istek gitti" türü testler. Bir örnek: özet tablosunun toplamı, satırlarla **kasten çelişen** veriyle doğrulanıyor — modül aritmetik yapsaydı testi geçemezdi.
+- **Kapı kanıtlanmadan kapı sayılmaz.** Kapsanmayan kod eklendiğinde `vitest run --coverage` çıkış kodu **1** verip *"Coverage for lines (67.48%) does not meet global threshold (80%)"* diyor; dosyalar kaldırılınca oran %97.9'a dönüyor. ADR-024'te iddia edilen şey böylece ölçülmüş oldu.
+- **Saf çekirdek, oranın nereden geldiğini belirler.** Gövdesi tek bir JSX `return`'ü olan bileşen tek satır sayılır; bu yüzden oran mantık dosyalarından oluşuyor ve kapının dişi orada. Görünümleri tutan şey oran değil, davranış testleri.
+- **jsdom'un eksiklerini sahtelemek, grafiği sahtelemek değildir.** `ResizeObserver` yok (grafik ölçemeden **hata fırlatıyor**), `EventSource` yok. Konan şey tarayıcının yerleşimi ve taşıması; grafik gerçek SVG çiziyor, akışın kendi testleri ise sürülebilir bir sahte ile açılma/kopma/vazgeçme/kapanma yollarının hepsini deterministik olarak geziyor.
+- **"Yükleniyor" bir hata mesajı değildir.** Kapanış turunda üç yerde tam olarak bu hata bulundu: katalog isteği başarısız olduğunda filtre çubuğu ve grafik sonsuza kadar "yükleniyor" diyordu; ham bildirim ekranı ise başarısız bir sorguyu *"bu metinden kayıt üretilmemiş"* diye rapor ediyordu — cevaplanmamış bir soruyu olgu olarak sunmak. Üçü de mesaj + tekrar denemeye çevrildi ve testle sabitlendi.
+- **Grafiğin göstergesi klavyeye kapalıydı.** Recharts'ın kendi göstergesi tıklanabilir `<li>` öğeleri üretiyor: fareyle çalışır, klavyeyle çalışmaz, durumunu söylemez. Seri gizle/göster bir **eylem** (FR-23), dolayısıyla artık `aria-pressed` taşıyan gerçek düğmeler; bu aynı zamanda renk anahtarı olduğu için sıralama da kütüphanenin alfabetik varsayılanı yerine kataloğun sırası oluyor (T-28'de bunun için konan `itemSorter` gereksizleşip kalktı).
+- **Ham metnin dokunulmazlığı erişilebilirlikten önce gelir.** Vurgunun içine ekran-okuyucu metni koymak erişilebilirlik açısından en kısa yoldu ama kopyalanan metni bozuyordu (ADR-041); rol bilgisi gösterge, `title` ve rol başına alt çizgi biçimiyle **metnin dışında** taşınıyor.
+
+**Alternatifler.**
+- *Kapsamı render/snapshot testleriyle yükseltmek:* Sayı kolayca %100'e çıkardı. Hiçbir davranışı iddia etmeyen bir sayı; TC-16 zaten bunu yasaklıyor.
+- *Kapıyı düşürmek ya da görünüm dosyalarını kapsam dışı bırakmak:* Oran daha "temiz" görünürdü. Kapı taban olmaktan çıkar; NFR-02 iki tarafta da aynı eşiği istiyor.
+- *Kapının kırdığını iddia edip ölçmemek:* T-23'te iddia edilmişti. Bir kapı, kırdığı görülene kadar bir dilektir.
+- *Recharts'ın göstergesini bırakıp yanına ayrı bir düğme grubu koymak:* Kütüphaneye daha az müdahale. Aynı işi yapan iki kontrol ve iki farklı sıralama demek.
+- *Erişilebilirliği bir denetim aracına (axe vb.) bırakmak:* Otomatik tarama yaygın. Bu ölçekte asıl bulgular — klavyeye kapalı gösterge, "yükleniyor"da donan hata durumu — davranış sorusu sorarak bulundu; araç ikisini de raporlamazdı.
+
+**Sonuçlar.**
+- **Ölçülen kapsam:** frontend **521/532 satır (%97.9), 235 test, 24 test dosyası**; backend **1400/1417 satır (%98.8), 600 test**, modül başına en düşük %96. Her iki kapı da build'i kırıyor ve ikisi de fiilen denendi.
+- Filtre çubuğu, grafik ve ham bildirim ekranı artık katalog/kayıt hatasını söylüyor ve tekrar deneme sunuyor; testler bu üç yolu sabitliyor.
+- Grafiğin göstergesi `aria-pressed` taşıyan düğmelerden oluşuyor; gizli seri hem soluk hem **üstü çizili**, yani durum renge bağlı değil.
+- Detay ekranları da `<nav>` + `<main>` taşıyor: bir okuyucu için sayfa iskeleti panel ekranıyla aynı.
+- Tarayıcıda ölçülen denetim (panel ekranı): **14 form kontrolünün tamamı etiketli**, adsız düğme yok, başlık sırası h1 → h2 → h3, `lang="tr"`, pozitif `tabindex` yok, alt metinsiz görsel yok.
+- **Backend kapalıyken doğrulandı:** beyaz ekran yok; beş panelin her biri *"Sunucuya şu anda ulaşılamıyor…"* + **Tekrar dene** gösteriyor, hiçbiri "yükleniyor"da donmuyor, ekranda teknik ayrıntı (stack trace, sınıf adı, URL) yok. Backend geri gelince tekrar deneme düğmeleri görünümü kurtarıyor.
+
+**İleride.** Otomatik bir erişilebilirlik taraması (axe) CI'a eklenebilir; bu turda bulunan iki asıl kusuru bulamazdı ama regresyona karşı ucuz bir ağ olur. Grafiğin ipucu (tooltip) hâlâ fareye bağlı; aynı sayılar özet tablosunda okunabildiği için bugün kabul edilebilir, klavyeyle gezilebilir bir veri noktası listesi ileride eklenebilir. Kapsam kapısı bugün satır bazında; dal (branch) eşiği eklenmesi istenirse mevcut oran (%93) zaten üzerinde.

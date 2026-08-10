@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -34,7 +33,8 @@ import { useChartOptions } from './useChartOptions';
 export function ChartPanel() {
   const { filters } = useIncidentFilters();
   const { options, update } = useChartOptions();
-  const { data: metadata } = useMetadata();
+  const catalog = useMetadata();
+  const metadata = catalog.data;
 
   // Which series are on screen is not filter state: it changes nothing about
   // what was asked or counted, and putting it in the address bar would make
@@ -58,12 +58,26 @@ export function ChartPanel() {
   );
 
   if (eventType === null) {
+    // Three different reasons for having nothing to draw, and they read
+    // differently to a user: the catalog is on its way, the catalog failed, or
+    // there is genuinely no event type to plot (FR-28).
     return (
-      <section className="panel">
+      <section className="panel" aria-busy={catalog.isPending}>
         <h2>{strings.chart.heading}</h2>
-        <p className="muted">
-          {metadata === undefined ? strings.chart.loading : strings.chart.noEventTypes}
-        </p>
+        {catalog.isError ? (
+          <>
+            <p className="error" role="alert">
+              {messageForError(catalog.error)}
+            </p>
+            <button type="button" onClick={() => void catalog.refetch()}>
+              {strings.chart.retry}
+            </button>
+          </>
+        ) : (
+          <p className="muted">
+            {metadata === undefined ? strings.chart.loading : strings.chart.noEventTypes}
+          </p>
+        )}
       </section>
     );
   }
@@ -164,16 +178,6 @@ export function ChartPanel() {
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
                 <Tooltip />
-                <Legend
-                  onClick={(entry) => toggle(String(entry.dataKey), setHidden)}
-                  // The library sorts the legend alphabetically by default. The
-                  // order the lines are in is the catalog's, which is the order
-                  // the summary table uses too - the legend follows it rather
-                  // than inventing a third one.
-                  itemSorter={(item) =>
-                    chart.lines.findIndex((line) => line.key === String(item.dataKey))
-                  }
-                />
                 {chart.lines.map((line) => (
                   <Line
                     key={line.key}
@@ -193,6 +197,35 @@ export function ChartPanel() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+
+          {/* The library's own legend is a list of clickable <li>s: reachable
+              with a mouse and with nothing else. Hiding a series is an action
+              (FR-23), so it is a button - focusable, operable from the
+              keyboard, and announcing its own state. It doubles as the colour
+              key, which also means the order is the catalog's rather than the
+              alphabetical one the library would impose. */}
+          <ul className="chart-legend">
+            {chart.lines.map((line) => {
+              const shown = !hidden.includes(line.key);
+              return (
+                <li key={line.key}>
+                  <button
+                    type="button"
+                    aria-pressed={shown}
+                    data-shown={shown}
+                    onClick={() => toggle(line.key, setHidden)}
+                  >
+                    <span
+                      className="chart-swatch"
+                      style={{ background: line.color }}
+                      aria-hidden="true"
+                    />
+                    {line.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
           <p className="muted">{strings.chart.legendHint}</p>
           <p className="muted">{strings.chart.scopeNote}</p>
         </>

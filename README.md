@@ -230,6 +230,7 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | Frontend'de de %80 coverage kapısı | Kaynak dokümandaki ister backend'e daraltılmamış; iki farklı standart, düşük olanın standart olması demek | [ADR-024](docs/DECISIONS.md#adr-024--frontend-coverage-kapısı) |
 | Filtre durumu yalnızca adres çubuğunda | Tek kopya olunca senkronize edilecek iki şey kalmıyor; bağlantı paylaşılabilirliği ve geri düğmesi bedavaya geliyor. Aynı nesne sorgu önbelleğinin de anahtarı | [ADR-037](docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu) |
 | İle atanamayan figürler aynı tabloda, kendi satırında | Uzlaştırma ancak iki sayı yan yana dururken mümkün; toplamlar da sunucudan basılır, çünkü satırları toplayan bir arayüz paylaşılan figürü kaybeder ve tutarlı görünür | [ADR-038](docs/DECISIONS.md#adr-038--shared-ve-unknown-kapsamın-arayüzdeki-temsili-aynı-tabloda-kendi-satırında-adıyla) |
+| Durum asla yalnızca renkle, eylem asla yalnızca fareyle | Gösterge tıklanabilir bir liste öğesiyken seri gizlemek klavyeyle imkânsızdı; `aria-pressed` taşıyan düğmelere çevrildi, gizli seri üstü çizili | [ADR-042](docs/DECISIONS.md#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı) |
 | Vurgulama sunucunun offset'leriyle, metne dokunmadan | İl adları ekle geliyor ve aynı kelime birden çok kez geçiyor — arayan istemci yanlış yeri işaretler; metnin içine işaret koymak da kopyalanan metni bozar | [ADR-041](docs/DECISIONS.md#adr-041--i̇zlenebilirlik-ekranları-sunucudan-gelen-offsetlerle-vurgulama-metne-hiçbir-şey-eklememe-ve-reprocessin-yerinde-tazelenmesi) |
 | Sinyal tazeler, delta uygulamaz | Satır eklemek filtre/sayfalama/toplam kurallarının istemcide kopyası olurdu; art arda sinyaller pencere başına tek tazelemede birleşir ve yalnızca kanıtlanmış ilgisizlikte atlanır | [ADR-040](docs/DECISIONS.md#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama) |
 | Grafiğin iki modu: metrikleri ya da yerleri karşılaştır | Bir eksende "kaza sayısı" ile "can kaybı" hiçbir soruyu cevaplamaz; il kırılımı tek metrikte yapılır, kümülatif ise sunucudan istenir | [ADR-039](docs/DECISIONS.md#adr-039--grafiğin-iki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi) |
@@ -420,8 +421,13 @@ edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/
 | `app` | %100 |
 | `realtime` | %96 |
 
-Şu anki durum: **558 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
-şişiren değil, gerçek davranışı ölçen testler yazılıyor.
+Şu anki durum: **backend 600 test, %98.8 satır kapsamı (1400/1417); frontend 235 test, %97.9
+(521/532).** Kapı bir taban, hedef değil: sayıyı şişiren değil, gerçek davranışı ölçen testler
+yazılıyor — kod tabanında `toMatchSnapshot` **sıfır kez** geçiyor.
+
+**Kapının kırdığı ölçüldü, iddia edilmedi:** kapsanmayan kod eklendiğinde frontend kapsam koşusu
+çıkış kodu 1 ve *"Coverage for lines (67.48%) does not meet global threshold (80%)"* veriyor
+([ADR-042](docs/DECISIONS.md#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı)).
 
 - Birim test kapsamı **en az %80**; eşik build'de zorunludur ve altına düşüldüğünde build kırılır.
   Aynı kapı **backend ve frontend için ayrı ayrı** geçerlidir (ADR-018, ADR-024).

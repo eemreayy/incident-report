@@ -1,4 +1,5 @@
 import { useMetadata } from '../api/queries';
+import { messageForError } from '../i18n/errorMessages';
 import { SORT_OPTIONS, type IncidentSort } from '../filters/incidentFilters';
 import { useIncidentFilters } from '../filters/useIncidentFilters';
 import { strings } from '../i18n/strings';
@@ -16,7 +17,7 @@ import { strings } from '../i18n/strings';
  */
 export function FilterBar() {
   const { filters, update, clear } = useIncidentFilters();
-  const { data: metadata } = useMetadata();
+  const { data: metadata, isError, error, refetch } = useMetadata();
 
   /**
    * A selection is a decision and applies at once; a half-typed word is not, so
@@ -49,7 +50,19 @@ export function FilterBar() {
       <form onSubmit={applyKeyword}>
         <fieldset className="filter-group">
           <legend>{strings.filters.eventType}</legend>
-          {metadata === undefined ? (
+          {/* FR-28: a catalog that failed to load is not a catalog that is still
+              loading. Said plainly, with a way to try again - and the filters
+              that do not need the catalog keep working meanwhile. */}
+          {isError ? (
+            <>
+              <p className="error" role="alert">
+                {messageForError(error)}
+              </p>
+              <button type="button" className="secondary" onClick={() => void refetch()}>
+                {strings.filters.retry}
+              </button>
+            </>
+          ) : metadata === undefined ? (
             <p className="muted">{strings.filters.loading}</p>
           ) : (
             <div className="checkbox-row">

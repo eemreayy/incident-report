@@ -27,7 +27,11 @@ npm run build     # tsc --noEmit && vite build
 ```
 
 `npm run verify` **coverage eşiğinin altında build'i kırar** (satır bazında %80). Kapı fiilen
-doğrulandı: kapsanmayan bir dosya eklendiğinde çıkış kodu 1 oluyor.
+doğrulandı (T-31): kapsanmayan kod eklendiğinde çıkış kodu **1** ve *"Coverage for lines (67.48%)
+does not meet global threshold (80%)"*; kaldırılınca oran %97.9'a dönüyor.
+
+Şu anki durum: **235 test, 521/532 satır (%97.9)**. Kod tabanında `toMatchSnapshot` **sıfır kez**
+geçiyor ([ADR-042](../docs/DECISIONS.md#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı)).
 
 > Sayıyı okurken: gövdesi tek bir JSX `return`'ü olan bir bileşen **tek satır** sayılıyor. Yani
 > oran mantık dosyalarından oluşuyor; görünümleri tutan şey oran değil, davranış testleridir.
@@ -72,11 +76,16 @@ Bunlar tercih değil, karar:
    ucuza şişirir; ölçülen şey davranış olmalı.
 6. **Dil.** Kullanıcıya görünen arayüz metinleri Türkçedir; kod, tanımlayıcılar, yorumlar ve commit
    mesajları İngilizce. Türkçe metinler tek yerde toplanır, bileşenlerin içine serpiştirilmez.
-7. **Tazeleme sırasında görünüm boşaltılmaz.** Yeni veri gelene kadar eski veri ekranda kalır;
+7. **Durum asla yalnızca renkle, eylem asla yalnızca fareyle taşınmaz.** Her durum bir kelimeyle de
+   söylenir; tıklanabilir bir liste öğesi değil, odaklanabilen ve durumunu söyleyen bir düğme kullanılır
+   ([ADR-042](../docs/DECISIONS.md#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı)).
+   Ayrıca "yükleniyor" bir hata mesajı değildir: başarısız bir istek mesajını ve tekrar deneme yolunu
+   gösterir (FR-28).
+8. **Tazeleme sırasında görünüm boşaltılmaz.** Yeni veri gelene kadar eski veri ekranda kalır;
    aksi halde her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenmesidir.
    Akıştan gelen sinyal ekrana hiçbir şey yazmaz; sorguları geçersizleştirir ve onlar kendini
    yeniden getirir ([ADR-040](../docs/DECISIONS.md#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama)).
-8. **Görünüm durumunun tek kopyası adres çubuğudur** — store, context ya da `useState` kopyası yok
+9. **Görünüm durumunun tek kopyası adres çubuğudur** — store, context ya da `useState` kopyası yok
    ([ADR-037](../docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu)). Filtreye
    bakan her görünüm `useIncidentFilters`'ı çağırır; birbirlerine prop geçmezler. Çözümleme
    kanoniktir, çünkü sorgu önbelleğinin anahtarı da odur. Grafik kendi ayarlarını (`chart`,

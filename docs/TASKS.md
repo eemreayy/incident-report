@@ -1266,7 +1266,7 @@ türeyen kayıtlar, reprocess eylemi). İki yön de gezinilebilir.
   ekranı istenirse hazır); toplu reprocess yok; detay ekranından panele dönüş filtreleri taşımıyor —
   tarayıcının geri düğmesi taşıyor.
 
-### ☐ T-31 · Frontend kapanışı: durumlar, erişilebilirlik, kapsam
+### ☑ T-31 · Frontend kapanışı: durumlar, erişilebilirlik, kapsam
 Her veri getiren görünüm için yükleniyor/hata/boş durumları. Backend erişilemezken beyaz ekrana
 düşmeme. Form etiketleri, klavye erişimi, durumun yalnızca renkle taşınmaması. Gerçek coverage
 oranının ölçülmesi ve %80 eşiğinin doğrulanması.
@@ -1274,6 +1274,46 @@ oranının ölçülmesi ve %80 eşiğinin doğrulanması.
 - **Karşılar:** FR-28, NFR-16, NFR-02 · **Çözer:** TC-16
 - **DoD:** Backend kapalıyken arayüz anlaşılır hata ve tekrar deneme yolu gösteriyor; kapsam ≥ %80
   ve sayı snapshot testleriyle değil davranış testleriyle tutuluyor.
+- **Sonuç:** 235 test geçiyor, frontend coverage **%97.9** (521/532 satır, 24 test dosyası);
+  backend **%98.8** (1400/1417 satır, 600 test), modül başına en düşük %96. Kararlar
+  [ADR-042](DECISIONS.md#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı)'de.
+- **Bu bir denetim task'ıydı ve üç gerçek kusur buldu — üçü de "yükleniyor" ile "hata"yı
+  karıştırıyordu:**
+  - **Filtre çubuğu** katalog isteği başarısız olduğunda sonsuza kadar *"Filtre seçenekleri
+    yükleniyor…"* diyordu. Artık mesaj + tekrar deneme gösteriyor; kataloga ihtiyacı olmayan
+    filtreler (tarih, anahtar kelime, sıralama) çalışmaya devam ediyor.
+  - **Grafik** aynı durumda *"Grafik getiriliyor…"* diyordu. Artık üç sebebi ayırıyor: katalog
+    yolda, katalog başarısız, ya da çizilecek olay tipi yok.
+  - **Ham bildirim ekranı** başarısız bir kayıt sorgusunu *"Bu bildirimden yapılandırılmış kayıt
+    üretilmemiş"* diye raporluyordu — **cevaplanmamış bir soruyu olgu olarak sunmak**. Üçü de
+    testle sabitlendi.
+- **Grafiğin göstergesi klavyeye kapalıydı.** Recharts tıklanabilir `<li>` üretiyor: fareyle
+  çalışır, klavyeyle çalışmaz, durumunu söylemez. Tarayıcıda ölçüldü (`legendFocusable: 0`). Seri
+  gizle/göster bir **eylem** (FR-23), dolayısıyla artık `aria-pressed` taşıyan gerçek düğmeler —
+  gizli seri hem soluk hem **üstü çizili**, yani durum renge bağlı değil. Gösterge aynı zamanda
+  renk anahtarı olduğu için sıralama kataloğun sırası; T-28'de bunun için konan `itemSorter`
+  gereksizleşip kalktı.
+- **Kapı, kırdığı görülene kadar bir dilektir.** Kapsanmayan kod eklenip `vitest run --coverage`
+  koşuldu: çıkış kodu **1**, *"Coverage for lines (67.48%) does not meet global threshold (80%)"*.
+  Dosyalar kaldırılınca oran %97.9'a döndü. ADR-024'ün T-23'te iddia ettiği şey böylece ölçüldü.
+- **Snapshot yok:** kod tabanında `toMatchSnapshot` **sıfır kez** geçiyor. Sayıyı tutan şey davranış
+  testleri; en iyi örneği, özet toplamının satırlarla **kasten çelişen** veriyle doğrulanması —
+  modül aritmetik yapsaydı testi geçemezdi.
+- **DoD fiilen doğrulandı (çalışan sistemde, backend durdurulmuş hâlde):**
+  - Beyaz ekran yok: başlık, header ve beş panelin hepsi çiziliyor; her biri *"Sunucuya şu anda
+    ulaşılamıyor. Kısa süre sonra tekrar deneyin."* + **Tekrar dene** gösteriyor ve hiçbiri
+    "yükleniyor"da donmuyor.
+  - Ekranda teknik ayrıntı yok (stack trace, sınıf adı, URL arandı — hiçbiri yok).
+  - Backend geri gelince **tekrar deneme düğmeleri** görünümü kurtarıyor: ham bildirim ekranında
+    metin, ardından türeyen üç kayıt geri geldi, uyarı kalmadı.
+  - Erişilebilirlik denetimi (panel ekranı, tarayıcıda ölçüldü): **14 form kontrolünün tamamı
+    etiketli**, adsız düğme yok, başlık sırası h1 → h2 → h3, `lang="tr"`, pozitif `tabindex` yok,
+    alt metinsiz görsel yok. Detay ekranlarına da `<nav>` + `<main>` eklendi — sayfa iskeleti artık
+    her ekranda aynı.
+- **Bilinçli boşluklar:** grafiğin ipucu (tooltip) hâlâ fareye bağlı — aynı sayılar özet tablosunda
+  okunabiliyor; otomatik erişilebilirlik taraması (axe) CI'a eklenmedi (bu turdaki iki asıl kusuru
+  zaten bulamazdı, ama regresyona karşı ucuz bir ağ olurdu); kapsam kapısı satır bazında, dal
+  eşiği yok (mevcut dal oranı %93).
 
 ---
 
@@ -1341,6 +1381,6 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-13 | Canlı akışta agregasyon tazeleme | **Karara bağlandı → ADR-040** · uygulaması T-29 |
 | TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | **Karara bağlandı → ADR-038** · uygulaması T-27 |
 | TC-15 | İstemci durumu ile sunucu durumunun ayrımı | **Karara bağlandı → ADR-037** · uygulaması T-26 |
-| TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |
+| TC-16 | Anlamlı %80 kapsam (frontend) | **Karara bağlandı → ADR-042** · T-23 (kapı) + T-31 (doğrulama) |
 | TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | **Karara bağlandı → ADR-025** (T-23) |
 | TC-18 | Anahtar kelime vurgulamasının hizalanması | **Karara bağlandı → ADR-041** · T-14 (offset üretimi) + T-30 (vurgulama) |

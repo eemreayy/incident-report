@@ -273,6 +273,24 @@ describe('RawReportPage', () => {
     expect(screen.queryByText(strings.detail.reprocessDone)).not.toBeInTheDocument();
   });
 
+  it('does not report a failed lookup as "this text produced nothing"', async () => {
+    // FR-28: the difference between an answer and a question that was never
+    // answered. One of them is fixed by trying again.
+    stubBackend((url) => {
+      if (url.includes('/incidents')) {
+        throw new TypeError('Failed to fetch');
+      }
+      return RAW_REPORT;
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      strings.errors.byCode['network.unreachable'] as string,
+    );
+    expect(screen.queryByText(strings.detail.derivedEmpty)).not.toBeInTheDocument();
+  });
+
   it('states a failure and offers a way forward', async () => {
     fetchSpy.mockImplementation((input: RequestInfo | URL) =>
       String(input).includes('/metadata')
