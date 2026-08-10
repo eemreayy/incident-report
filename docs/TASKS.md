@@ -561,12 +561,31 @@ ile bağlanması (`"Bursa'da 8, Kocaeli'nde 6 trafik kazası"`). İle atanamayan
   metinde (C-3), akıl yürütme normalize metinde; boşluk sadeleşmesi yüzünden biri diğerinden
   **türetilemiyor** — ilk sürümdeki doğrusal geri arama bu yüzden yanlıştı.
 
-### ☐ T-15 · Golden testler
+### ☑ T-15 · Golden testler
 PRD §11'deki üç örnek metin uçtan uca doğrulanır. Her örnek ayrıca **cümleleri karıştırılmış** halleriyle
 de test edilir; çıktı değişmemelidir.
 - **Bağımlılık:** T-11, T-12, T-13, T-14
 - **Karşılar:** FR-03, FR-04 · Kabul kriteri §11
 - **DoD:** Üç örnek ve karıştırılmış varyantları beklenen tarih/il/tip/metrikleri üretiyor.
+- **Sonuç:** 450 test geçiyor (27'si golden), `analysis` coverage **%99**.
+  `GoldenExampleTest` (çıkarım) + `GoldenPersistenceTest` (Testcontainers ile veritabanına kadar).
+- **Tek bir karıştırma değil, TÜM permütasyonlar.** Her örneğin 3 cümlesi için 6 sıralamanın hepsi
+  deneniyor (3 örnek × 6 = 18 test). Gerekçe: T-14'te yakalanan hata tam da tek bir keyfi
+  karıştırmanın kaçırabileceği türdendi.
+- **Golden test'in adını hak ettiği kanıtlandı — bilerek iki kez kırıldı:**
+
+  | Bozulan kural | Sonuç |
+  |---|---|
+  | Paylaşım işaretçisi devre dışı | 22 testten **7**'si düştü (örnek 3'ün 6 permütasyonu + çift sayım testi) |
+  | T-14 öncesi "metinde en son geçen il" kuralı geri kondu | **Sıralı üç örnek geçti**, permütasyonların **8**'i düştü |
+
+  İkincisi kritik: yalnızca sıralı örneklerle test edilseydi bu hata sevk edilirdi. FR-04'ün
+  neden ayrı bir ister olduğunu gösteren tam olarak bu.
+- **Kalıcılık ayrı bir iddia.** `GoldenPersistenceTest` üçüncü örneği `AnalysisService` üzerinden
+  gerçek Postgres'e yazıyor ve ADR-019 granülaritesinin **veritabanında** var olduğunu doğruluyor:
+  bir bildirimden üç satır, ikisinde il ve birinde yok, paylaşılan iller kendi tablosunda,
+  metrikler kolon değil satır (ADR-020). Ayrıca yeniden analiz kayıtları **katlamıyor**, değiştiriyor.
+- **Çift sayım kontrolü sayısal:** rapor genelinde `INJURED` toplamı 10; ile eklenseydi 20 olurdu.
 
 ---
 
