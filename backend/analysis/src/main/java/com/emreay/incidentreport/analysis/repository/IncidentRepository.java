@@ -2,6 +2,7 @@ package com.emreay.incidentreport.analysis.repository;
 
 import com.emreay.incidentreport.analysis.domain.Incident;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.List;
 
@@ -10,7 +11,8 @@ import java.util.List;
  *
  * <p>Only this module may use it: PostgreSQL belongs to analysis (ADR-002).
  */
-public interface IncidentRepository extends JpaRepository<Incident, Long> {
+public interface IncidentRepository
+        extends JpaRepository<Incident, Long>, JpaSpecificationExecutor<Incident> {
 
     /** Everything derived from one raw report — the reverse half of the traceability link (FR-08). */
     List<Incident> findByRawReportIdOrderByIdAsc(String rawReportId);

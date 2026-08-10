@@ -867,3 +867,30 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `CatalogIncidentExtractor` boru hattının tek girişi oldu ve `UnclassifiedIncidentExtractor` **kaldırıldı** — aynı arayüzü uygulayan ikinci bir bean, sonraki okuyucuya "hangisi çalışıyor" sorusunu sordururdu; uyarı metinleri `ExtractionWarnings` altında toplandı. `KeywordMatcher` artık hem ham hem normalize konumu taşıyor: kullanıcıya gösterilen konum ham metinde (C-3), akıl yürütme ise normalize metinde yapılıyor ve boşluk sadeleşmesi yüzünden biri diğerinden **türetilemiyor**. Kaynak dokümandaki üç örneğin tamamı, çalışan sistemde PRD §11 tablosuyla birebir eşleşiyor. `analysis.extraction` %99 kapsamda.
 
 **İleride.** Metrik anahtar kelimelerine kataloğun kendisinde bir **birim** alanı (kişi / bina / olay) eklenirse, "kazalarda" ayrımı ek tahmininden çıkıp doğrudan veriye dayanır. Türkçe ek listesi büyüdükçe bir morfoloji kütüphanesi (Zemberek) değerlendirilebilir; bugünkü liste sınırlı ve her maddesi gerçek bir metinden geliyor. Cümle başına ayrı tarih çözümü (bugün rapor düzeyinde tek tarih) granülariteyi bozmadan eklenebilir — `ResolvedDate` zaten konum taşıyor.
+
+---
+
+## ADR-033 — Okuma Ucunun Şekli: Kapsam Filtresi, Uç Seviyesinde Analiz Sonucu ve DTO Döndüren Okuma Servisi
+
+**Karar.** İl filtresi, o ile ait kayıtların **yanı sıra** figürü o ili de kapsayan `SHARED` kayıtları da döndürür; birden fazla il seçildiğinde bağlantı tablosu üzerinden `DISTINCT` ile **bir kez** döner. Analiz durumu ve uyarıları kayıt başına değil, **uç seviyesinde** (`analysis` alanı) döner ve yalnızca `rawReportId` ile sorulduğunda dolar. Okuma servisi entity değil **DTO** döndürür. Anahtar kelime filtresi ham metinde değil, çıkarımın kaydettiği anahtar kelimelerde arar.
+
+**Bağlam.** Gönderim yalnızca kimlik döndüğü için (ADR-021), bir bildirimden ne çıktığını öğrenmenin tek yolu bu uç (C-5). Aynı uç FR-10'un filtreli tablosunu da besliyor. `SHARED` kapsam ise filtrelemeye özel bir sorun çıkarıyor: bir figür hiçbir tek ile ait değil, ama il seçildiğinde görünmezse il toplamları genel toplamla uzlaşmıyor (ADR-019).
+
+**Gerekçe.**
+- **`SHARED` kayıt bağlantı tablosundan yakalanır.** `province` kolonu boş olduğu için doğrudan eşleşemez; düşürmek ise okuyucunun toplamları uzlaştırmasını imkânsız kılardı. Birden fazla il seçildiğinde aynı kayıt her il için bir kez eşleştiğinden sorgu `DISTINCT` — aksi hâlde 10 yaralı, iki il seçildiğinde 20 görünürdü.
+- **Analiz sonucu kayıtların üstünde değil, yanında.** Belirleyici olan **başarısız** durum: analiz çöktüğünde hiç kayıt yoktur, dolayısıyla kayıt başına bir alan asla görünmez. Boş bir liste ve hiçbir açıklama, bu ucun tam olarak engellemek için var olduğu şey. Genel listelemede alan hiç dönmüyor: farklı raporlardan gelen kayıtlar karışıktır ve tek bir sonuç hiçbirini tarif etmez.
+- **`failureReason` cevapta yok.** Sunucu tarafı bir teşhis; hata sözleşmesi yığın izlerini dışarı vermemeyi zaten şart koşuyor. Çağıranın üzerinde işlem yapabileceği şey durum ve uyarılardır.
+- **Okuma servisi DTO döndürür — bu bir üslup tercihi değil.** Uygulama `open-in-view: false` ile çalışıyor, yani oturum transaction ile birlikte kapanıyor. Entity'yi controller'a vermek, yarı yüklenmiş bir nesne vermek demek: metrikleri, anahtar kelimeleri veya paylaşılan illeri sonradan okumak `LazyInitializationException` atıyor. **Bu hata fiilen yaşandı** — birim ve depo testleri geçtiği hâlde çalışan sistem 500 döndü, çünkü test transaction'ı iddiaların etrafında açık kalıyor. Eşleme artık okuma transaction'ının içinde.
+- **Anahtar kelime araması çıkarıma bakar.** Ham metinde tam metin arama kapsam dışı (PRD §2.3); ayrıca bir kaydın var olma sebebi zaten o anahtar kelimeler.
+- **Olay tipi etiketsiz, il adlı.** Katalog yapılandırma ve dağıtım olmadan büyüyebiliyor, bu yüzden etiketlerinin tek çalışma zamanı kaynağı metadata ucu (ADR-007). 81 il ise sabit referans veri; adı da dönmek tabloyu ikinci bir aramaya gerek kalmadan çizilebilir kılıyor.
+
+**Alternatifler.**
+- *`SHARED` kayıtları il filtresinde gizlemek:* Sorgu basitleşirdi; il toplamları ile genel toplam bir daha uzlaşmazdı.
+- *`DISTINCT` yerine sonuçları bellekte tekilleştirmek:* Sayfalama toplamları yanlış çıkardı.
+- *Analiz sonucunu her kayda koymak:* Başarısız analizde hiç kayıt olmadığı için asla görünmezdi.
+- *Ayrı bir uçtan analiz durumu sunmak:* İki istek gerektirir; C-4 tek istekte istiyor.
+- *`open-in-view`'i açmak:* Lazy yükleme çalışırdı, ama HTTP katmanında sessiz sorgular ve kapanmayan oturumlar getirirdi — kapalı olması bilinçli bir tercih.
+
+**Sonuçlar.** `IncidentQueryService` okuma modelinin sahibi: sorguyu çalıştırıyor ve cevabı **transaction içinde** kuruyor. Cevap `IncidentPageResponse`, `PageResponse`'un alan adlarını tekrarlıyor ama nesting yapmıyor; istemci her yerde aynı alan adlarını okuyor, artı bir `analysis` alanı. FR-08'in "ham bildirimden türeyen kayıtlara ulaşma" yönü böylece kapandı — T-11'de açık bıraktığım boşluk.
+
+**İleride.** Anahtar kelime araması bugün `LIKE` ile ve veritabanının küçültme kurallarıyla çalışıyor; Türkçe'ye tam duyarlı arama için PostgreSQL'de bir dil yapılandırması veya normalize edilmiş bir arama kolonu gerekir. Sayfalama offset tabanlı; veri büyürse anahtar tabanlı (keyset) sayfalamaya geçmek sıralama sözleşmesini korur. `IncidentPageResponse`'un `PageResponse` ile alan tekrarı, generic bir zarf tipi gerekirse tek noktada toplanabilir.

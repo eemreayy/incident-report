@@ -591,7 +591,7 @@ de test edilir; çıktı değişmemelidir.
 
 ## Faz 4 — Sorgu ve Analitik
 
-### ☐ T-16 · Olay kayıtlarının listelenmesi ve filtrelenmesi
+### ☑ T-16 · Olay kayıtlarının listelenmesi ve filtrelenmesi
 `GET /incidents` — olay tipi, il, tarih aralığı ve anahtar kelime filtreleri (birlikte uygulanabilir),
 sayfalama ve sıralama. `GET /incidents/{id}` metrikleri, anahtar kelimeleri ve kaynak ham bildirim
 referansını döner.
@@ -603,10 +603,31 @@ referansını döner.
   - **C-7 · toplam kayıt sayısı.** Sayfalama cevabı toplam sayıyı içerir; "sonuç yok" ile
     "sayfa boş" ayrımı istemcide ancak böyle yapılabilir.
 - **Bağımlılık:** T-14, T-22
-- **Karşılar:** FR-10, FR-17, FR-08, FR-19
+- **Karşılar:** FR-10, FR-17, FR-08, FR-19 · **İlgili karar:** ADR-033
 - **DoD:** Filtreler tekil ve kombine çalışıyor; anahtar kelimeler hangi çıkarımı tetiklediğiyle
   birlikte görünüyor; `rawReportId` ile tek istekte o bildirimden türeyen tüm kayıtlar (+ analiz
   durumu ve uyarılar) dönüyor.
+- **Sonuç:** 476 test geçiyor, `analysis` coverage **%99**; `analysis.web` ve `analysis.query` %100.
+  `GET /api/v1/incidents` (+ `/{id}`), `IncidentQuery` + `IncidentSpecifications` +
+  `IncidentQueryService`, 5 cevap DTO'su. 26 yeni test.
+- **DoD fiilen doğrulandı (çalışan sistemde):**
+  - `?rawReportId=` → 3 kayıt + `analysis.status=ANALYZED`, **tek istekte**
+  - `?province=16` → Bursa'nın kendi kaydı **ve** paylaşılan kayıt
+  - `?province=16&province=41` → 3 kayıt, paylaşılan **1 kez** (çift sayım yok)
+  - `?eventType=…&keyword=…&size=2` → kombine filtre + sayfalama
+  - Genel listelemede `analysis` alanı **yok**; bilinmeyen kayıt → **404**
+- **`open-in-view: false` gerçek bir 500'e yol açtı.** İlk sürümde okuma servisi entity döndürüyor,
+  eşleme controller'da yapılıyordu. Birim **ve** depo testleri geçti; çalışan sistem
+  `LazyInitializationException` ile 500 verdi — çünkü test transaction'ı iddiaların etrafında açık
+  kalıyor, üretimde ise oturum transaction ile kapanıyor. Servis artık cevabı transaction **içinde**
+  kuruyor ve DTO döndürüyor. Bu, entegrasyon testinin yapısal olarak göremediği bir sınıf hata.
+- **Analiz sonucu kayıt başına değil, uç seviyesinde.** Belirleyici olan başarısız durum: analiz
+  çöktüğünde **hiç kayıt yoktur**, dolayısıyla kayıt başına bir alan asla görünmezdi. Boş liste +
+  hiçbir açıklama, bu ucun engellemek için var olduğu şeyin ta kendisi.
+- **`SHARED` kayıt bağlantı tablosundan yakalanıyor** ve iki il birden seçildiğinde `DISTINCT` ile
+  bir kez dönüyor — aksi hâlde 10 yaralı, iki il seçildiğinde 20 görünürdü.
+- **FR-08'in açık yönü kapandı.** T-11'de "reprocess ucu yok" diye not düştüğüm gibi, FR-08'in
+  ham bildirim → türeyen kayıtlar yönü de T-06'dan beri açıktı; `?rawReportId=` bunu karşılıyor.
 
 ### ☐ T-17 · Zaman serisi, özet ve kümülatif
 `GET /analytics/time-series` — olay tipi bazlı, metriklere ayrılmış seriler; opsiyonel il ve tarih aralığı;
