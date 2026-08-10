@@ -122,3 +122,39 @@ export interface AnalysisOutcome {
 export interface IncidentPage extends Page<Incident> {
   analysis?: AnalysisOutcome | null;
 }
+
+/**
+ * One cell of the summary table, at whichever level it belongs to (FR-22).
+ *
+ * The same shape serves all three levels, and what a row is about is said by
+ * which keys are present: a bucket row carries an event type and a scope, an
+ * event type total carries only the type, the grand total carries neither. The
+ * server omits them rather than sending nulls - captured from the response, not
+ * assumed.
+ *
+ * `province` appears only for `SINGLE`. A `SHARED` row names no provinces at
+ * all: it is one bucket per event type (ADR-036), and which provinces a figure
+ * covers is read from the record itself.
+ */
+export interface SummaryRow {
+  eventType?: string;
+  provinceScope?: ProvinceScope;
+  province?: Province;
+  incidentCount: number;
+  /** Keyed by catalog metric name. Empty when records carry no figures at all. */
+  metrics: Record<string, number>;
+}
+
+/**
+ * Three levels, from one query over one filtered set.
+ *
+ * `eventTypeTotals` and `total` are not conveniences to be recomputed here: with
+ * a shared figure in play the bucket rows genuinely do not add up to the total
+ * above them (ADR-019), and adding them up in the browser would produce a
+ * different, wrong number - and hide exactly the thing this table exists to show.
+ */
+export interface Summary {
+  rows: SummaryRow[];
+  eventTypeTotals: SummaryRow[];
+  total: SummaryRow;
+}

@@ -58,6 +58,30 @@ export const strings = {
     loading: 'Filtre seçenekleri yükleniyor…',
     note: 'Seçtiğiniz filtreler adres çubuğuna yansır; bağlantıyı paylaştığınızda aynı görünüm açılır.',
   },
+  summary: {
+    heading: 'Özet',
+    loading: 'Özet getiriliyor…',
+    refreshing: 'Güncelleniyor…',
+    retry: 'Tekrar dene',
+    empty: 'Özetlenecek kayıt yok. Yukarıdaki formdan bir bildirim girebilirsiniz.',
+    emptyFiltered: 'Seçtiğiniz filtrelere uyan kayıt yok.',
+    note: 'Bütün toplamlar sunucudan gelir; bu tabloda hiçbir sayı tarayıcıda hesaplanmaz.',
+    column: {
+      breakdown: 'İl / kapsam',
+      incidentCount: 'Kayıt',
+    },
+    eventTypeTotal: 'Tip toplamı',
+    grandTotal: 'Genel toplam',
+    noValue: '—',
+    /**
+     * ADR-019 in one sentence, shown only where it applies. A reader who adds
+     * the province rows and compares them with the total below is *right* to
+     * find a difference — and without this line would reasonably read it as a
+     * bug rather than as the one thing the text did not say.
+     */
+    reconcile: (labels: string) =>
+      `${labels} satırları hiçbir ile eklenmez; bu yüzden il satırlarının toplamı tip toplamına eşit değildir. Tip toplamı = il satırları + bu satırlar.`,
+  },
   list: {
     heading: 'Kayıtlar',
     loading: 'Kayıtlar getiriliyor…',

@@ -1,4 +1,4 @@
-import type { IncidentListQuery } from '../api/endpoints';
+import type { IncidentFilterQuery, IncidentListQuery } from '../api/endpoints';
 
 /**
  * The filter state, and the address bar that holds it (FR-21, TC-15).
@@ -116,14 +116,28 @@ export function toSearchParams(filters: IncidentFilters): URLSearchParams {
 export function toApiQuery(filters: IncidentFilters): IncidentListQuery {
   const direction = filters.sort === 'date-asc' ? 'asc' : 'desc';
   return {
+    ...toFilterQuery(filters),
+    page: filters.page - 1,
+    size: PAGE_SIZE,
+    sort: [`occurredOn,${direction}`, `id,${direction}`],
+  };
+}
+
+/**
+ * The same filters, for the endpoints that aggregate rather than list.
+ *
+ * Paging and ordering are deliberately dropped: an aggregate has no pages, and
+ * asking for one would make the summary answer a narrower question than the
+ * table beside it - two numbers on one screen that disagree, with nothing on
+ * screen to explain why.
+ */
+export function toFilterQuery(filters: IncidentFilters): IncidentFilterQuery {
+  return {
     eventTypes: filters.eventTypes,
     provinces: filters.provinces,
     from: filters.from,
     to: filters.to,
     keyword: filters.keyword,
-    page: filters.page - 1,
-    size: PAGE_SIZE,
-    sort: [`occurredOn,${direction}`, `id,${direction}`],
   };
 }
 

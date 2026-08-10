@@ -1,21 +1,22 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import {
   getMetadata,
+  getSummary,
   listIncidents,
   listIncidentsByRawReport,
   submitIncidentReport,
 } from './endpoints';
 import { probeBackendHealth } from './health';
-import { toApiQuery, type IncidentFilters } from '../filters/incidentFilters';
+import { toApiQuery, toFilterQuery, type IncidentFilters } from '../filters/incidentFilters';
 
 /**
  * Query keys in one place. When the stream starts telling us that something
  * changed (T-29), invalidation will name these keys - so a key invented inline
  * at a call site would be a key nothing can invalidate.
  *
- * Everything read from /incidents sits under one prefix on purpose: a signal
- * says that records changed, not which view of them did, so invalidation has to
- * be able to name all of them at once.
+ * Each family sits under one prefix on purpose: a signal says that records
+ * changed, not which view of them did, so invalidation has to be able to name
+ * all of them at once.
  */
 export const queryKeys = {
   metadata: ['metadata'] as const,
@@ -24,7 +25,17 @@ export const queryKeys = {
   incidentList: (filters: IncidentFilters) => ['incidents', 'list', filters] as const,
   incidentsByRawReport: (rawReportId: string) =>
     ['incidents', 'by-raw-report', rawReportId] as const,
+  analytics: ['analytics'] as const,
+  summary: (filters: IncidentFilters) => ['analytics', 'summary', filters] as const,
 };
+
+/**
+ * Everything whose answer changes when a record is stored. The list, what a
+ * submission produced, and every aggregate over them - a new record moves all of
+ * them, so the stream (T-29) refreshes this list rather than naming views one by
+ * one and forgetting the one added last.
+ */
+export const incidentDerivedKeys = [queryKeys.incidents, queryKeys.analytics] as const;
 
 /**
  * The catalog changes only when the server restarts with a different YAML, so
@@ -75,6 +86,20 @@ export function useIncidents(filters: IncidentFilters) {
   return useQuery({
     queryKey: queryKeys.incidentList(filters),
     queryFn: ({ signal }) => listIncidents(toApiQuery(filters), signal),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The same view, totalled (FR-22). Keyed by the same filters as the list, so the
+ * two cannot be showing different questions, and holding the previous answer for
+ * the same reason the list does: a table that empties on every refresh reads as
+ * a page reload.
+ */
+export function useSummary(filters: IncidentFilters) {
+  return useQuery({
+    queryKey: queryKeys.summary(filters),
+    queryFn: ({ signal }) => getSummary(toFilterQuery(filters), signal),
     placeholderData: keepPreviousData,
   });
 }

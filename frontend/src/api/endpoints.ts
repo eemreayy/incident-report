@@ -1,5 +1,12 @@
 import { request } from './client';
-import type { IncidentPage, Metadata, Page, RawReport, RawReportReceipt } from './types';
+import type {
+  IncidentPage,
+  Metadata,
+  Page,
+  RawReport,
+  RawReportReceipt,
+  Summary,
+} from './types';
 
 /**
  * The endpoints the backend serves today. Each one is a thin named call - the
@@ -39,22 +46,41 @@ export function listIncidentReports(
 }
 
 /**
- * Everything `GET /incidents` accepts. All optional and combinable, exactly as
- * the endpoint has them (FR-10) - repeated `eventType` and `province` for the
- * multi-valued ones, and Spring's `page`/`size`/`sort` for the envelope.
+ * The filters every reading endpoint takes, in the same spelling (FR-10). They
+ * are shared rather than repeated because the record list, the summary and the
+ * chart are three views of one dataset: a filter that reached one of them and
+ * not another would put two contradictory answers on the same screen (FR-23).
  */
-export interface IncidentListQuery {
+export interface IncidentFilterQuery {
   eventTypes?: string[];
   provinces?: number[];
   from?: string | null;
   to?: string | null;
   keyword?: string | null;
+}
+
+/** Adds what only the paged record listing takes: one report, a page, an order. */
+export interface IncidentListQuery extends IncidentFilterQuery {
   rawReportId?: string | null;
   /** Zero-based, the way the server counts. */
   page?: number;
   size?: number;
   /** Spring sort expressions, e.g. `occurredOn,desc`. */
   sort?: string[];
+}
+
+function filterParams(query: IncidentFilterQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const eventType of query.eventTypes ?? []) {
+    params.append('eventType', eventType);
+  }
+  for (const province of query.provinces ?? []) {
+    params.append('province', String(province));
+  }
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  if (query.keyword) params.set('keyword', query.keyword);
+  return params;
 }
 
 /**
@@ -69,16 +95,7 @@ export function listIncidents(
   query: IncidentListQuery = {},
   signal?: AbortSignal,
 ): Promise<IncidentPage> {
-  const params = new URLSearchParams();
-  for (const eventType of query.eventTypes ?? []) {
-    params.append('eventType', eventType);
-  }
-  for (const province of query.provinces ?? []) {
-    params.append('province', String(province));
-  }
-  if (query.from) params.set('from', query.from);
-  if (query.to) params.set('to', query.to);
-  if (query.keyword) params.set('keyword', query.keyword);
+  const params = filterParams(query);
   if (query.rawReportId) params.set('rawReportId', query.rawReportId);
   if (query.page !== undefined) params.set('page', String(query.page));
   if (query.size !== undefined) params.set('size', String(query.size));
@@ -100,4 +117,20 @@ export function listIncidentsByRawReport(
   signal?: AbortSignal,
 ): Promise<IncidentPage> {
   return listIncidents({ rawReportId }, signal);
+}
+
+/**
+ * The summary table's numbers (FR-22, FR-24).
+ *
+ * Takes the filters and nothing else: there is no paging here because the answer
+ * is already an aggregate, and no ordering because the server decides it - single
+ * provinces by name, then the shared figures, then the records that named none.
+ */
+export function getSummary(
+  query: IncidentFilterQuery = {},
+  signal?: AbortSignal,
+): Promise<Summary> {
+  const params = filterParams(query);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  return request<Summary>(`/analytics/summary${suffix}`, signal ? { signal } : {});
 }
