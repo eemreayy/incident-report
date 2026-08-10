@@ -629,7 +629,7 @@ referansını döner.
 - **FR-08'in açık yönü kapandı.** T-11'de "reprocess ucu yok" diye not düştüğüm gibi, FR-08'in
   ham bildirim → türeyen kayıtlar yönü de T-06'dan beri açıktı; `?rawReportId=` bunu karşılıyor.
 
-### ☐ T-17 · Zaman serisi, özet ve kümülatif
+### ☑ T-17 · Zaman serisi, özet ve kümülatif
 `GET /analytics/time-series` — olay tipi bazlı, metriklere ayrılmış seriler; opsiyonel il ve tarih aralığı;
 `cumulative` parametresi. `GET /analytics/summary` — özet tablo agregasyonu.
 - **Ek kapsam (PRD v2.0):**
@@ -646,6 +646,43 @@ referansını döner.
 - **DoD:** Kümülatif modda her nokta kendisi ve öncekilerin toplamı; agregasyon SQL üzerinde
   yapılıyor (bellekte değil); il kırılımlı sorguda örnek 3'ün `SHARED` yaralı toplamı ayrı ve
   etiketli dönüyor, Bursa+Kocaeli birlikte seçildiğinde iki kez sayılmıyor.
+- **Sonuç:** `GET /analytics/time-series` ve `GET /analytics/summary`;
+  `IncidentAggregationRepository` (native SQL), `AnalyticsQuery`/`ProvinceGrouping`,
+  `AnalyticsService`, `TimeSeriesResponse`/`SummaryResponse`. Kararlar
+  [ADR-036](DECISIONS.md#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye)'da.
+- **En pahalı bulgu: toplam alırken `JOIN` + `DISTINCT` yanlış.** Kayıt listesinde doğru olan kalıp
+  (bağlantı tablosuna join + `distinct`) agregasyonda sessizce iki katına çıkarıyor: iki il birden
+  seçildiğinde paylaşılan kayıt iki kez eşleşiyor ve `SUM` 10 yerine 20 diyor. `DISTINCT` satırı
+  tekilleştirir, toplamı düzeltmez; `SUM(DISTINCT ...)` ise aynı değere sahip iki gerçek kaydı tek
+  sayar — yani daha da yanlış. Çözüm: il ve anahtar kelime filtreleri `EXISTS` alt sorgusu. Aynı
+  tuzak anahtar kelimede de var (iki kelimesi eşleşen kayıt iki kez).
+- **Kapsam yalnızca il bir boyut olduğunda görünüyor.** Kırılımsız cevapta tek bir toplam var ve
+  `SINGLE + SHARED + UNKNOWN` onun içinde zaten doğru toplanıyor; kapsamı ayırmak uzlaştırılacak bir
+  şey vermeden gürültü olurdu. `groupBy=province` verildiği anda ayrım zorunlu: **il satırları kendi
+  başlarına genel toplama eşit değil**, ve bu bir hata değil verinin kendisi.
+- **Kümülatif SQL'de** (`sum(sum(...)) over (partition by <seri> order by tarih)`). Java'da döngüyle
+  toplamak aynı sayıyı verirdi ama "toplam"ın tanımını ikiye bölerdi.
+- **Özet üç seviyeyi tek sorguda döndürüyor** (`GROUPING SETS`): kova, olay tipi, genel toplam.
+  "Satırlar toplamla tutmuyor" sınıfı bir tutarsızlık böylece yapısal olarak imkânsız. Sayım ayrı bir
+  sorgu: metrik tablosuna join ederek saymak, iki metrikli kaydı iki kez sayar ve **hiç metriği
+  olmayan kaydı hiç saymaz** — oysa tanınmayan metin de saklanıyor (ADR-006) ve tabloda görünmeli.
+- **`AnalyticsService` hiçbir sayı üretmiyor.** Bir test bunu bilerek tutarsız satırlarla doğruluyor:
+  servis aritmetik yapsaydı toplamı "düzeltirdi", düzeltmiyor.
+- **DoD fiilen doğrulandı:**
+  - `IncidentAggregationRepositoryTest` (gerçek PostgreSQL): kırılımda Bursa 8 · Kocaeli 6 ·
+    `SHARED` 10 ayrı ve etiketli; iki il birlikte seçildiğinde paylaşılan **bir kez**; tek il
+    seçildiğinde onunla paylaşılan figür de görünüyor; kümülatif seri sınırını aşmıyor; iki anahtar
+    kelimesi eşleşen kayıt bir kez sayılıyor.
+  - `AnalyticsEndToEndTest` (app, iki gerçek veri tabanı, **gerçek metin çıkarımı**): örnek 3'ün
+    metni gönderiliyor, `groupBy=province` beş seri döndürüyor ve yaralı figürü **hiçbir il
+    serisinde görünmüyor**, yalnızca `SHARED` serisinde; özet satırları/olay tipi toplamı/genel
+    toplam bu satır üzerinden uzlaşıyor; kümülatif 15 → 20.
+- **Ölçülen kapsam:** `shared` %100 · `ingestion` %97 · `analysis` %99 · `realtime` %96 · `app` %100 ·
+  proje geneli **%99** (1399/1416), **558 test**. Postman: **26 istek, 107 assertion**.
+- **Bilinçli boşluklar:** `rawReportId` agregasyonda yok (tek bildirimin kayıtları aynı günde, seri
+  anlamsız); gruplama yalnızca gün bazında (`date_trunc` ile hafta/ay ileride, aynı yapıya oturur);
+  `SHARED` kovası kapsadığı il kombinasyonuna göre ayrıştırılmıyor — seri anahtarları veri değiştikçe
+  oynardı, uzlaştırma için tek kova yeterli.
 
 ---
 

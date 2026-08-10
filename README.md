@@ -225,6 +225,7 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | Kural/regex tabanlı çıkarım (ML yerine) | Deterministik, açıklanabilir, test edilebilir; ağır bağımlılık yok | [ADR-008](docs/DECISIONS.md#adr-008--kuralregex-tabanlı-çıkarım-ml-yerine) |
 | Auth kapsam dışı | Kaynak dokümanda ister değil; efor asıl teknik zorluk olan metin analizine ayrıldı | [ADR-011](docs/DECISIONS.md#adr-011--kimlik-doğrulamanın-kapsam-dışı-bırakılması) |
 | Frontend: React + TypeScript + Vite | ReactJS isteri; TypeScript, backend'deki "ihlal derlemede patlasın" çizgisinin istemci karşılığı; SSR'ın karşılığı yok | [ADR-022](docs/DECISIONS.md#adr-022--frontend-teknoloji-tabanı-react--typescript--vite) |
+| Toplam alırken filtre `JOIN` değil `EXISTS` | İki il birden seçildiğinde paylaşılan kayıt join'de iki kez eşleşir ve `SUM` iki katına çıkar; `DISTINCT` bir toplamı düzeltmez. 20 yaralı, 10 kadar makul görünür | [ADR-036](docs/DECISIONS.md#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye) |
 | İl, harita yerine grafik kırılımı | Kaynak "grafiksel" diyor, "haritasal" demiyor; `SHARED` sayılar haritada tanımsız — boyanamaz, bölüştürülemez | [ADR-023](docs/DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) |
 | Frontend'de de %80 coverage kapısı | Kaynak dokümandaki ister backend'e daraltılmamış; iki farklı standart, düşük olanın standart olması demek | [ADR-024](docs/DECISIONS.md#adr-024--frontend-coverage-kapısı) |
 
@@ -356,16 +357,16 @@ Uçlar `/api/v1` altındadır:
 | `POST /incident-reports/{id}/reprocess` | Güncel kurallarla yeniden analiz; gönderimle **aynı makbuzu** döner, ham metne dokunmaz |
 | `GET /incidents` | Normalize kayıtlar + analiz durumu ve uyarılar; olay tipi / il / tarih aralığı / keyword / **`rawReportId`** filtreleri + sayfalama |
 | `GET /incidents/{id}` | Tekil olay kaydı + metrikler + anahtar kelimeler + kaynak referansı |
-| `GET /analytics/time-series` | Olay tipi bazlı zaman serisi; `cumulative` parametresi ile kümülatif |
-| `GET /analytics/summary` | Özet tablo agregasyonu |
+| `GET /analytics/time-series` | Olay tipi bazlı zaman serisi, metriklere ayrılmış; `cumulative` ile kümülatif, `groupBy=province` ile **il kırılımı** |
+| `GET /analytics/summary` | Özet tablo: kova / olay tipi / genel toplam, tek sorguda |
 | `GET /metadata` | Desteklenen olay tipleri, metrikleri ve il listesi |
 | `GET /stream/incidents` | SSE akışı (tek yönlü); yeni kayıt **sinyali** — veri taşımaz |
 
 Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 
 API'yi frontend olmadan denemek için [`docs/postman/`](docs/postman/) altında hazır bir Postman
-koleksiyonu var: 21 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
-ile çalıştırılabilen 88 assertion. SSE ucu bilerek dışarıda — bitmeyen bir istek koşuyu askıda
+koleksiyonu var: 26 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
+ile çalıştırılabilen 107 assertion. SSE ucu bilerek dışarıda — bitmeyen bir istek koşuyu askıda
 bırakır; onun doğrulaması `curl -N` ile.
 
 ---
@@ -414,7 +415,7 @@ edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/
 | `app` | %100 |
 | `realtime` | %96 |
 
-Şu anki durum: **520 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
+Şu anki durum: **558 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
 şişiren değil, gerçek davranışı ölçen testler yazılıyor.
 
 - Birim test kapsamı **en az %80**; eşik build'de zorunludur ve altına düşüldüğünde build kırılır.

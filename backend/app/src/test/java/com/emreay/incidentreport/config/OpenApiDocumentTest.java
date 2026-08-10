@@ -70,7 +70,24 @@ class OpenApiDocumentTest {
                 .andExpect(jsonPath("$.paths['/api/v1/incidents'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/incidents/{id}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/metadata'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/analytics/time-series'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/analytics/summary'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/stream/incidents'].get").exists());
+    }
+
+    /**
+     * The two parameters that change what an answer <em>means</em> rather than which records it
+     * covers. A client that cannot see them in the document cannot ask for a cumulative chart or a
+     * province breakdown at all.
+     */
+    @Test
+    @DisplayName("the parameters that change the shape of an answer are documented")
+    void theAnalyticsModesAreDescribed() throws Exception {
+        mvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/analytics/time-series'].get.parameters[?(@.name == 'groupBy')]").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/analytics/time-series'].get.parameters[?(@.name == 'cumulative')]").exists());
     }
 
     /**
@@ -107,7 +124,9 @@ class OpenApiDocumentTest {
         mvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.IncidentResponse").exists())
                 .andExpect(jsonPath("$.components.schemas.IncidentPageResponse").exists())
-                .andExpect(jsonPath("$.components.schemas.KeywordResponse.properties.charStart").exists());
+                .andExpect(jsonPath("$.components.schemas.KeywordResponse.properties.charStart").exists())
+                .andExpect(jsonPath("$.components.schemas.TimeSeriesResponse").exists())
+                .andExpect(jsonPath("$.components.schemas.SummaryResponse").exists());
     }
 
     @Test
