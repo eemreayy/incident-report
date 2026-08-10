@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.UnsupportedEncodingException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -53,6 +54,16 @@ class LiveStreamEndToEndTest {
     private static final String TEXT = """
             20.04.2020 tarihinde Ankara'da sağlık yetkilileri tarafından yapılan açıklamada, \
             salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi.""";
+
+    /**
+     * Each test submits its own text. The same text twice is answered with the report that already
+     * holds it and announces nothing (ADR-035) — correct behaviour, and it would leave the second
+     * test waiting for a signal that will rightly never come.
+     *
+     * <p>Static because JUnit builds a fresh instance per test, and a counter that restarts would
+     * hand the second test the first one's text.
+     */
+    private static final AtomicInteger DISTINCT = new AtomicInteger();
 
     private final MockMvc mvc;
 
@@ -104,9 +115,11 @@ class LiveStreamEndToEndTest {
 
     /** @return the id of the stored raw report, as the receipt gives it */
     private String submit() throws Exception {
+        String text = TEXT + " Kayıt " + DISTINCT.incrementAndGet() + ".";
+
         MvcResult submission = mvc.perform(post("/api/v1/incident-reports")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"text\":\"" + TEXT.replace("\"", "\\\"") + "\"}"))
+                        .content("{\"text\":\"" + text + "\"}"))
                 .andExpect(status().isCreated())
                 .andReturn();
 

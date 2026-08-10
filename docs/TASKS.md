@@ -707,13 +707,54 @@ Bağlantı yaşam döngüsü: timeout, heartbeat, kopma/temizlik, çok istemcili
   koleksiyonun duman testi olma özelliğini bitirir. `docs/postman/README.md`'ye `curl -N` ile
   doğrulama yazıldı.
 
-### ☐ T-19 · Reprocess ve mükerrer gönderim
+### ☑ T-19 · Reprocess ve mükerrer gönderim
 `POST /incident-reports/{id}/reprocess` — güncel kurallarla yeniden analiz. Ham metin değişmez; önceki
 normalize kayıtların yerini yeni sonuç alır, mükerrer kayıt oluşmaz. Aynı metnin tekrar gönderilmesi
 (TC-9) bu task'ta karara bağlanır.
 - **Bağımlılık:** T-14
 - **Karşılar:** FR-15 · **Çözer:** TC-9 · **İlgili karar:** ADR-012
 - **DoD:** İki kez reprocess sonrası kayıt sayısı sabit; çözülen tarih kaymıyor (T-11 ile bağlantılı).
+- **Sonuç:** `POST /api/v1/incident-reports/{id}/reprocess` (200 + makbuz, bilinmeyen kimlik 404),
+  `IngestionService.reprocess`, `SubmissionOutcome`, `RawIncidentReport.textHash` +
+  `RawIncidentReportIndexes`. Kararlar
+  [ADR-035](DECISIONS.md#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz)'te
+  — **TC-9 kapandı**.
+- **Reprocess yeni bir event tipi değil, aynı event.** `RawReportSubmittedEvent` yeniden yayınlanıyor;
+  `analysis` "ilk analiz" ile "yeniden analiz"i ayırt etmiyor, dolayısıyla ikinci bir kod yolu ve
+  zamanla ikinci bir kural seti oluşmuyor. Silme-yeniden yazma zaten T-22'de yerindeydi (ADR-012'nin
+  açık bıraktığı yarı); eksik olan yalnızca tetikleyen uçtu.
+- **Taşınan zaman raporun kendi gönderim zamanı.** `now()` ile yeniden işlemek iki yıllık bir raporu
+  bugüne taşırdı — iyileştirme, iyileştirmeyi amaçladığı geçmişi bozardı (ADR-014).
+- **Cevap yine makbuz, kod 200.** Yaratılan bir şey yok: ham metin işlemin girdisi, konusu değil.
+  Sonuç yine `GET /incidents?rawReportId=...` ile okunuyor — istemcide tek okuma yolu.
+- **TC-9: birebir aynı metin ikinci kayıt açmıyor.** Belirleyici olan hangi hatanın daha pahalı
+  olduğuydu: tekilleştirmemek, çift tık ya da retry sonucu yaralı/ölü sayısını **sessizce ve geri
+  döndürülemez biçimde** ikiye katlar; tekilleştirmek ise ancak birebir aynı iki metnin iki ayrı
+  kaynaktan gelmesi hâlinde yanlış olur — serbest Türkçe metinde pratikte imkânsız, üstelik görünür
+  ve düzeltilebilir. Yan fayda: `POST` idempotent oldu.
+- **Karşılaştırma bayt bayt.** Kırpmak ya da normalize etmek, "bu iki metin aynıdır" hükmünü sisteme
+  verdirmek olurdu; bir denetim günlüğünün vermemesi gereken hüküm tam da bu.
+- **Arama yetmiyor, indeks gerekiyor.** `findByTextHash` sıradan durumu çözüyor; aynı anda gelen iki
+  istek ise ikisi de "yok" bulup ikisi de yazardı. Unique indeks bunu servisin cevaplayabildiği bir
+  `DuplicateKeyException`'a çeviriyor. İndeks **sparse**: özet alanı olmayan eski kayıtlar düz bir
+  unique indekste "hepsi `null`" diye okunur ve indeks hiç kurulamaz — uygulama açılışta patlardı.
+- **İndeksi modül kendi kuruyor** (`RawIncidentReportIndexes`), `app`'in YAML'ındaki genel bir
+  `auto-index-creation` anahtarı değil. Postgres şeması nasıl Flyway ile yönetiliyorsa, bir doğruluk
+  garantisi olan bu indeks de adı olan, okunabilen bir bileşenin işi.
+- **DoD fiilen doğrulandı:** `ReprocessEndToEndTest` (app, iki gerçek veri tabanı) — iki kez reprocess
+  sonrası kayıt sayısı **3** olarak sabit ve tarihler değişmiyor; kayıt kimlikleri değişiyor (yerine
+  konuyor, bırakılmıyor); aynı metnin ikinci gönderimi **200** + aynı kimlik dönüyor ve kayıt sayısı
+  artmıyor; bilinmeyen kimlikle reprocess **404** + RFC 7807.
+- **Canlı sistemde de doğrulandı** (temiz veri tabanı, `docker compose`): 1. gönderim `201`,
+  2. gönderim `200` + **aynı kimlik**, ham bildirim sayısı **1**; iki reprocess sonrası kayıt sayısı
+  3 → 3, tarih aynı, kimlikler `1,2,3` → `7,8,9`. Reprocess ayrıca **akışa da sinyal veriyor**:
+  açık `curl -N` istemcisi yeni kimlikleri anında gördü (T-18 ile birleşen yer).
+- **Postman koleksiyonu:** reprocess ve mükerrer gönderim istekleri eklendi. Üç örnek gönderim artık
+  `200`'ü de kabul ediyor — aksi hâlde koleksiyonun ikinci koşusu, tam da bu task'ın eklediği doğru
+  davranış yüzünden kırılırdı.
+- **Bilinçli boşluk:** analizi `FAILED` olan bir raporun metni yeniden **gönderilirse** durum `FAILED`
+  kalır, çünkü ikinci gönderim analizi çalıştırmıyor. Bunun için doğru işlem reprocess; uçlar bu
+  yüzden ayrı.
 
 ---
 

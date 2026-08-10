@@ -1,11 +1,16 @@
 package com.emreay.incidentreport.ingestion.repository;
 
 import com.emreay.incidentreport.ingestion.domain.RawIncidentReport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.test.context.ActiveProfiles;
@@ -15,8 +20,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Date;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies the two guarantees this module exists to make: the submitted text comes back unchanged,
@@ -27,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * in-memory substitute would not reproduce that.
  */
 @DataMongoTest
+@Import(RawIncidentReportIndexes.class)
 @ActiveProfiles("test")
 @Testcontainers
 class RawIncidentReportRepositoryTest {
@@ -52,6 +62,17 @@ class RawIncidentReportRepositoryTest {
                                     @Autowired MongoTemplate mongo) {
         this.repository = repository;
         this.mongo = mongo;
+    }
+
+    /**
+     * MongoDB has no transaction to roll back around a test, and several of these store the same
+     * text. Since the collection now refuses a second report with that text (ADR-035), leaving the
+     * previous test's document behind would fail the next one for the right reason at the wrong
+     * time.
+     */
+    @BeforeEach
+    void emptyTheCollection() {
+        mongo.getCollection("raw_incident_reports").deleteMany(new org.bson.Document());
     }
 
     @Test
@@ -99,6 +120,64 @@ class RawIncidentReportRepositoryTest {
         assertThat(stored).isNotNull();
         assertThat(stored.keySet())
                 .as("no status, no warnings, no analyzedAt, no failureReason")
-                .containsExactlyInAnyOrder("_id", "rawText", "submittedAt", "_class");
+                .containsExactlyInAnyOrder("_id", "rawText", "textHash", "submittedAt", "_class");
+    }
+
+    // ---------------------------------------------------------------------
+    // Repeated submissions (TC-9, ADR-035)
+    // ---------------------------------------------------------------------
+
+    @Test
+    void aStoredTextCanBeFoundAgainByItsDigest() {
+        RawIncidentReport saved = repository.save(
+                RawIncidentReport.of(RAW_TEXT, Instant.parse("2026-08-09T07:15:30Z")));
+
+        // Hashed the same way a fresh submission of the same text would be - the digest is not
+        // read off the stored document, or this would prove nothing.
+        String digestOfTheSameText = RawIncidentReport.of(RAW_TEXT, Instant.now()).textHash();
+
+        assertThat(repository.findByTextHash(digestOfTheSameText))
+                .map(RawIncidentReport::id)
+                .contains(saved.id());
+    }
+
+    @Test
+    void aTextThatDiffersByOneCharacterIsADifferentText() {
+        repository.save(RawIncidentReport.of(RAW_TEXT, Instant.parse("2026-08-09T07:15:30Z")));
+
+        String otherDigest = RawIncidentReport.of(RAW_TEXT + " ", Instant.now()).textHash();
+
+        assertThat(repository.findByTextHash(otherDigest)).isEmpty();
+    }
+
+    /**
+     * The guarantee behind the lookup, and the only thing that holds when two identical submissions
+     * arrive at the same moment: without it both would find nothing, both would insert, and one
+     * incident would be counted twice for ever.
+     */
+    @Test
+    void theDatabaseItselfRefusesASecondReportWithTheSameText() {
+        Instant submittedAt = Instant.parse("2026-08-09T07:15:30Z");
+        repository.save(RawIncidentReport.of(RAW_TEXT, submittedAt));
+
+        assertThatThrownBy(() -> repository.save(RawIncidentReport.of(RAW_TEXT, submittedAt.plusSeconds(60))))
+                .isInstanceOf(DuplicateKeyException.class);
+
+        assertThat(repository.count()).isOne();
+    }
+
+    /**
+     * Reports written before the digest existed have no such field. A plain unique index would read
+     * them all as sharing the value {@code null} and refuse to build; sparse exempts them, at the
+     * price of leaving those older texts out of duplicate detection.
+     */
+    @Test
+    void reportsWrittenBeforeTheDigestExistedDoNotBlockTheIndex() {
+        mongo.getCollection("raw_incident_reports").insertMany(List.of(
+                new org.bson.Document("rawText", "eski kayıt").append("submittedAt", Date.from(Instant.now())),
+                new org.bson.Document("rawText", "başka eski kayıt").append("submittedAt", Date.from(Instant.now()))));
+
+        assertThatNoException().isThrownBy(() -> mongo.indexOps("raw_incident_reports")
+                .ensureIndex(new Index().on("textHash", Sort.Direction.ASC).unique().sparse()));
     }
 }

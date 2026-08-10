@@ -219,6 +219,7 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | Her modül yalnızca sahibi olduğu veriyi yayınlar | `ingestion` analiz sonucunu temsil etmez; dönüş event'i yok, ham kayıt write-once, gönderim cevabı makbuz | [ADR-021](docs/DECISIONS.md#adr-021--analiz-sonucunun-sahipliği-ve-gönderim-cevabının-kapsamı) |
 | SSE (WebSocket yerine) — ve **tetikleyici** olarak | İhtiyaç tek yönlü; tarayıcıda yerleşik `EventSource`. Akış veri taşımaz, tazelemeyi tetikler: koptuğunda hiçbir veri erişilemez olmaz | [ADR-004](docs/DECISIONS.md#adr-004--gerçek-zamanlı-bildirim-için-sse) |
 | Ham kayıt değiştirilemez | İzlenebilirlik ancak kaynak değişmezse anlamlı; reprocess'i güvenli kılar. Yalnız metin değil, **kaydın tamamı** write-once | [ADR-005](docs/DECISIONS.md#adr-005--ham-kaydın-değiştirilemez-olması) |
+| Aynı metin ikinci kayıt açmaz | Ham metnin özeti üzerinde unique indeks; çift tık ya da retry, yaralı/ölü sayılarını **sessizce** ikiye katlardı — sonradan hangi kaydın mükerrer olduğu ayırt edilemez. Yan fayda: `POST` idempotent | [ADR-035](docs/DECISIONS.md#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz) |
 | Tarih kaynağı kayıtta saklanır | Göreli ifade (`Son 24 saatte`) bir çıkarımdır, varsayım değil; referans gönderim tarihidir ki reprocess geçmiş tarihleri kaydırmasın | [ADR-014](docs/DECISIONS.md#adr-014--tarih-çözümleme-ve-referans-tarih) |
 | Katalog YAML'dan yönetilir | Yeni olay tipi = konfigürasyon değişikliği; veri ile algoritma ayrışır | [ADR-007](docs/DECISIONS.md#adr-007--konfigürasyondan-yönetilen-olay-kataloğu) |
 | Kural/regex tabanlı çıkarım (ML yerine) | Deterministik, açıklanabilir, test edilebilir; ağır bağımlılık yok | [ADR-008](docs/DECISIONS.md#adr-008--kuralregex-tabanlı-çıkarım-ml-yerine) |
@@ -349,10 +350,10 @@ Uçlar `/api/v1` altındadır:
 
 | Uç | Açıklama |
 |---|---|
-| `POST /incident-reports` | Ham metin gönderimi; **kayıt makbuzu** döner (kimlik + gönderim zamanı) |
+| `POST /incident-reports` | Ham metin gönderimi; **kayıt makbuzu** döner (kimlik + gönderim zamanı). Birebir aynı metin ikinci kayıt açmaz: `201` yerine `200` ve mevcut makbuz döner |
 | `GET /incident-reports` | Ham bildirimleri sayfalı listeleme |
 | `GET /incident-reports/{id}` | Tekil ham bildirim (metin + gönderim zamanı) |
-| `POST /incident-reports/{id}/reprocess` | Güncel kurallarla yeniden analiz |
+| `POST /incident-reports/{id}/reprocess` | Güncel kurallarla yeniden analiz; gönderimle **aynı makbuzu** döner, ham metne dokunmaz |
 | `GET /incidents` | Normalize kayıtlar + analiz durumu ve uyarılar; olay tipi / il / tarih aralığı / keyword / **`rawReportId`** filtreleri + sayfalama |
 | `GET /incidents/{id}` | Tekil olay kaydı + metrikler + anahtar kelimeler + kaynak referansı |
 | `GET /analytics/time-series` | Olay tipi bazlı zaman serisi; `cumulative` parametresi ile kümülatif |
@@ -363,8 +364,9 @@ Uçlar `/api/v1` altındadır:
 Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 
 API'yi frontend olmadan denemek için [`docs/postman/`](docs/postman/) altında hazır bir Postman
-koleksiyonu var: 18 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
-ile çalıştırılabilen 76 assertion.
+koleksiyonu var: 21 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
+ile çalıştırılabilen 88 assertion. SSE ucu bilerek dışarıda — bitmeyen bir istek koşuyu askıda
+bırakır; onun doğrulaması `curl -N` ile.
 
 ---
 
@@ -407,12 +409,12 @@ edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/
 | Modül | Satır kapsamı |
 |---|---|
 | `shared` | %100 |
-| `ingestion` | %98 |
+| `ingestion` | %97 |
 | `analysis` | %99 |
 | `app` | %100 |
 | `realtime` | %96 |
 
-Şu anki durum: **501 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
+Şu anki durum: **520 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
 şişiren değil, gerçek davranışı ölçen testler yazılıyor.
 
 - Birim test kapsamı **en az %80**; eşik build'de zorunludur ve altına düşüldüğünde build kırılır.

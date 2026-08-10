@@ -3,6 +3,7 @@ package com.emreay.incidentreport.ingestion.service;
 import com.emreay.incidentreport.ingestion.domain.RawIncidentReport;
 import com.emreay.incidentreport.ingestion.repository.RawIncidentReportRepository;
 import com.emreay.incidentreport.shared.error.DomainValidationException;
+import com.emreay.incidentreport.shared.error.ResourceNotFoundException;
 import com.emreay.incidentreport.shared.event.RawReportSubmittedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -58,13 +60,14 @@ class IngestionServiceTest {
     void storesTheTextUntouchedAndStampsItWithTheSubmissionTime() {
         savesAssignIds();
 
-        RawIncidentReport submitted = service.submit(TEXT);
+        SubmissionOutcome submitted = service.submit(TEXT);
 
         ArgumentCaptor<RawIncidentReport> saved = ArgumentCaptor.forClass(RawIncidentReport.class);
         verify(repository).save(saved.capture());
         assertThat(saved.getValue().rawText()).isEqualTo(TEXT);
         assertThat(saved.getValue().submittedAt()).isEqualTo(NOW);
-        assertThat(submitted.id()).isEqualTo(STORED_ID);
+        assertThat(submitted.report().id()).isEqualTo(STORED_ID);
+        assertThat(submitted.newlyStored()).isTrue();
     }
 
     /**
@@ -108,14 +111,15 @@ class IngestionServiceTest {
     void answersWithTheStoredReportAndNothingAboutAnalysis() {
         savesAssignIds();
 
-        RawIncidentReport submitted = service.submit(TEXT);
+        RawIncidentReport submitted = service.submit(TEXT).report();
 
         assertThat(submitted.rawText()).isEqualTo(TEXT);
         assertThat(submitted.submittedAt()).isEqualTo(NOW);
         assertThat(RawIncidentReport.class.getRecordComponents())
-                .as("the document carries only what this module owns")
+                .as("the document carries only what this module owns - the text, when it arrived, "
+                        + "and a digest of the text itself")
                 .extracting(java.lang.reflect.RecordComponent::getName)
-                .containsExactlyInAnyOrder("id", "rawText", "submittedAt");
+                .containsExactlyInAnyOrder("id", "rawText", "textHash", "submittedAt");
     }
 
     /**
@@ -176,13 +180,142 @@ class IngestionServiceTest {
                 Clock.fixed(NOW, ZoneOffset.UTC));
         savesAssignIds();
 
-        assertThat(service.submit("x".repeat(20))).isNotNull();
+        assertThat(service.submit("x".repeat(20)).report()).isNotNull();
     }
 
     /** Nothing is announced for a report that was never stored. */
     @Test
     void rejectedSubmissionsAreNeverAnnounced() {
         assertThatThrownBy(() -> service.submit("  ")).isInstanceOf(DomainValidationException.class);
+
+        verify(events, never()).publishEvent(any(RawReportSubmittedEvent.class));
+    }
+
+    // ---------------------------------------------------------------------
+    // Repeated submissions (TC-9, ADR-035)
+    // ---------------------------------------------------------------------
+
+    /**
+     * The failure this exists to prevent: a double-clicked form, or a client retrying after a
+     * timeout, turning one incident into two and doubling every figure derived from it.
+     */
+    @Test
+    void theSameTextTwiceIsAnsweredWithTheReportThatAlreadyHasIt() {
+        RawIncidentReport existing = withId(RawIncidentReport.of(TEXT, NOW.minusSeconds(600)));
+        when(repository.findByTextHash(any())).thenReturn(Optional.of(existing));
+
+        SubmissionOutcome outcome = service.submit(TEXT);
+
+        assertThat(outcome.report()).isSameAs(existing);
+        assertThat(outcome.newlyStored()).isFalse();
+        verify(repository, never()).save(any());
+    }
+
+    /**
+     * Recognising a repeat is not re-running it. The records the first submission produced are
+     * still there and still current; asking for them to be rebuilt is what reprocess means.
+     */
+    @Test
+    void aRepeatedSubmissionAnnouncesNothing() {
+        when(repository.findByTextHash(any()))
+                .thenReturn(Optional.of(withId(RawIncidentReport.of(TEXT, NOW))));
+
+        service.submit(TEXT);
+
+        verify(events, never()).publishEvent(any(RawReportSubmittedEvent.class));
+    }
+
+    /** A text differing by a single character is a different text, not a near-duplicate. */
+    @Test
+    void onlyAnExactRepeatCounts() {
+        savesAssignIds();
+        when(repository.findByTextHash(any())).thenReturn(Optional.empty());
+
+        service.submit(TEXT);
+        service.submit(TEXT + " ");
+
+        ArgumentCaptor<String> hashes = ArgumentCaptor.forClass(String.class);
+        verify(repository, times(2)).findByTextHash(hashes.capture());
+        assertThat(hashes.getAllValues()).doesNotHaveDuplicates();
+        verify(repository, times(2)).save(any());
+    }
+
+    /**
+     * Two identical submissions arriving together both find nothing and both try to insert. The
+     * unique index turns the loser into an error rather than a second report, and the honest answer
+     * to the loser is the report the winner wrote — which is the answer it would have received a
+     * moment later anyway.
+     */
+    @Test
+    void anIdenticalSubmissionThatLosesTheRaceIsAnsweredWithTheWinner() {
+        RawIncidentReport winner = withId(RawIncidentReport.of(TEXT, NOW));
+        when(repository.findByTextHash(any()))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(repository.save(any())).thenThrow(new DuplicateKeyException("textHash"));
+
+        SubmissionOutcome outcome = service.submit(TEXT);
+
+        assertThat(outcome.report()).isSameAs(winner);
+        assertThat(outcome.newlyStored()).isFalse();
+        verify(events, never()).publishEvent(any(RawReportSubmittedEvent.class));
+    }
+
+    /**
+     * A duplicate-key error with no duplicate behind it is not a duplicate submission — it is a
+     * broken index or a different constraint, and swallowing it would hide that.
+     */
+    @Test
+    void aDuplicateKeyWithNothingBehindItIsNotHidden() {
+        when(repository.findByTextHash(any())).thenReturn(Optional.empty());
+        when(repository.save(any())).thenThrow(new DuplicateKeyException("something else"));
+
+        assertThatThrownBy(() -> service.submit(TEXT)).isInstanceOf(DuplicateKeyException.class);
+    }
+
+    // ---------------------------------------------------------------------
+    // Reprocessing (FR-15, ADR-012)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Reprocessing republishes the original announcement, so the analysing side runs the code path
+     * it always runs. The submission time is the original one: it is the reference date for
+     * relative and missing dates, and today's clock would move a two-year-old report to today
+     * (ADR-014).
+     */
+    @Test
+    void reprocessingReplaysTheOriginalAnnouncementWithTheOriginalTime() {
+        Instant submittedLongAgo = Instant.parse("2024-04-20T06:00:00Z");
+        when(repository.findById(STORED_ID))
+                .thenReturn(Optional.of(withId(RawIncidentReport.of(TEXT, submittedLongAgo))));
+
+        RawIncidentReport reprocessed = service.reprocess(STORED_ID);
+
+        ArgumentCaptor<RawReportSubmittedEvent> event = ArgumentCaptor.forClass(RawReportSubmittedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().rawReportId()).isEqualTo(STORED_ID);
+        assertThat(event.getValue().rawText()).isEqualTo(TEXT);
+        assertThat(event.getValue().submittedAt()).isEqualTo(submittedLongAgo);
+        assertThat(reprocessed.submittedAt()).isEqualTo(submittedLongAgo);
+    }
+
+    /** The text is the input, not the subject: reprocessing writes nothing here. */
+    @Test
+    void reprocessingDoesNotWriteToTheReport() {
+        when(repository.findById(STORED_ID))
+                .thenReturn(Optional.of(withId(RawIncidentReport.of(TEXT, NOW))));
+
+        service.reprocess(STORED_ID);
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void reprocessingSomethingThatDoesNotExistIsNotFound() {
+        when(repository.findById("nope")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reprocess("nope"))
+                .isInstanceOf(ResourceNotFoundException.class);
 
         verify(events, never()).publishEvent(any(RawReportSubmittedEvent.class));
     }
@@ -210,7 +343,11 @@ class IngestionServiceTest {
 
     /** Mimics MongoDB assigning an id on insert. */
     private static RawIncidentReport withId(RawIncidentReport report) {
+        return withId(report, STORED_ID);
+    }
+
+    private static RawIncidentReport withId(RawIncidentReport report, String id) {
         return report.id() != null ? report
-                : new RawIncidentReport(STORED_ID, report.rawText(), report.submittedAt());
+                : new RawIncidentReport(id, report.rawText(), report.textHash(), report.submittedAt());
     }
 }
