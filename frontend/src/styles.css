@@ -341,3 +341,21 @@ button.secondary {
 .chart-area .recharts-legend-item {
   cursor: pointer;
 }
+
+.app-status {
+  text-align: right;
+}
+
+.stream-status {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.stream-status[data-state='open'] {
+  color: var(--color-up);
+}
+
+.stream-status[data-state='closed'] {
+  color: var(--color-down);
+}

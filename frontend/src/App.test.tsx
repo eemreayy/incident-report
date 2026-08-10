@@ -94,7 +94,11 @@ describe('App', () => {
     // because the element is already there while the probe is still pending.
     await screen.findByText(new RegExp(strings.backendStatus.down));
 
-    const status = screen.getByRole('status');
+    // Two states are reported now - the backend and the live stream - so this
+    // picks the one it is about rather than assuming there is only one.
+    const status = screen
+      .getAllByRole('status')
+      .find((element) => element.className === 'backend-status') as HTMLElement;
     expect(status).toHaveTextContent(strings.backendStatus.down);
     expect(status).toHaveAttribute('data-state', 'down');
   });

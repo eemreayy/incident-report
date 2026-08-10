@@ -1164,3 +1164,47 @@ Bunun etrafındaki beş karar:
 - Testler göstergeyi ve çizgi sayısını okuyor: "seçilen tipin metrikleri ayrı seriler olarak çiziliyor" iddiası ekrandan doğrulanıyor, mock'tan değil.
 
 **İleride.** X ekseni bugün kategorik: yalnızca veri olan günler eşit aralıklarla diziliyor, yani takvimdeki boşluklar orantılı görünmüyor. Gerçek zaman ekseni (`type="number"` + tarih ölçeği) veri sıklaştığında ilk adım. Gün yerine hafta/ay bazında gruplama ucun `date_trunc` ile genişlemesini gerektirir (ADR-036'nın "İleride"si) ve grafikte yalnızca bir seçim kutusu olur. Birden fazla olay tipini birlikte çizmek istenirse doğru yol tek eksende toplamak değil, tip başına küçük çoklu grafik (small multiples) olur; seri anahtarı zaten olay tipini taşıyor.
+
+---
+
+## ADR-040 — Canlı Tazeleme: Sinyal Geçersizleştirir, Delta Uygulamaz; Pencereli Birleştirme ve Kanıtlanmış İlgisizlikte Atlama
+
+**Karar.** Akıştan gelen sinyal, ekrandaki hiçbir şeyi doğrudan değiştirmez; kayıtlardan türeyen sorguları **geçersizleştirir** ve sorgular kendilerini yeniden getirir. Bunun etrafındaki altı karar:
+
+1. **Delta yok.** Sinyal veri taşımadığı için (ADR-021) satır eklenmez, sayaç artırılmaz, toplam güncellenmez. Tazeleme `['incidents']` ve `['analytics']` öneklerini geçersizleştirmekten ibaret; `incidentDerivedKeys` bu iki öneki tek yerde adlandırıyor.
+2. **Görünüm boşaltılmaz.** `keepPreviousData` sayesinde eski veri yeni cevap gelene kadar ekranda kalır. Her sinyalde bir an boşalan tablo, kullanıcı gözünde sayfa yenilemesidir — canlılığın önlemek için var olduğu şey.
+3. **Pencereli birleştirme (leading + trailing, 1 sn).** İlk sinyal **anında** tazeler; pencere içinde gelenler pencerenin sonundaki tek bir tazelemeye biner. On gönderim iki tazeleme eder, on değil.
+4. **Atlama yalnızca kanıtlanmış ilgisizlikte.** Sinyal, taşıdığı alanlarla (olay tipi, tarih, il kodları) aktif filtreye uymadığını **kanıtlıyorsa** atlanır. Üç durumda her hâlükârda tazelenir: (a) ekranda o rapordan üretilmiş kayıtlar duruyorsa, (b) anahtar kelime filtresi aktifse, (c) sinyal okunamadıysa.
+5. **Sayfa başına tek bağlantı.** Abonelik `AppShell`'de açılır; panel başına abonelik, tek gönderim için üç yeniden bağlanma ve üç tazeleme demekti.
+6. **Yeniden bağlanma bize ait.** `EventSource` kendi yeniden denemesini yapar; **vazgeçtiğinde** (readyState `CLOSED`) biz 5 saniyede bir yeni bağlantı açarız. Bağlantı geri geldiğinde **tazelenir**, çünkü akış hiçbir şeyi tekrar oynatmaz (ADR-034).
+
+**Bağlam.** TC-13 iki soruyu birlikte soruyordu: art arda gelen sinyaller nasıl birleştirilir, ve aktif filtreye uymayan olay ne yapar? Uç tarafı ADR-034'te sabitlenmişti: rapor başına bir mesaj, commit sonrası yayın, tekrar oynatma yok, istemci bazlı filtre yok. `CLAUDE.md`'nin 7. kuralı da sözleşmenin niyetini yazıyor: *olay ilgiyi belirlemeye yetecek kadar bilgi taşır, istemci yeniden sorgular*.
+
+**Gerekçe.**
+
+- **Delta, kuralın ikinci kopyasıdır.** Gelen sinyalle tabloya satır eklemek, "bu kayıt bu filtreye uyar mı", "hangi sayfaya girer", "hangi toplamı ne kadar artırır" sorularını istemcide cevaplamak demek — üçü de sunucunun sahip olduğu kurallar (NFR-13). Ayrıca paylaşılan figürün hangi toplamlara girip girmeyeceği (ADR-019) tam olarak istemcide tekrarlanmaması gereken aritmetik.
+- **Birleştirme neden düz debounce değil?** Trailing debounce, sürekli akan bir sinyal dizisinde **hiç** tazelemez: her yeni sinyal zamanlayıcıyı ileri atar. Leading-only ise her sinyalde tazeler, yani birleştirmez. Leading + trailing ikisini de kapatıyor: tek gönderim anında görünür (beklemek arayüzü sebepsiz yavaş hissettirirdi), yoğun akışta ise pencere başına bir tazeleme tavanı var.
+- **Atlamanın yönü tek taraflı seçildi.** Gereksiz bir tazeleme bir istektir ve ekranda hiçbir şeyi değiştirmez; atlanmış bir tazeleme ise değişmiş bir sayıyı **yerleşmiş gibi** gösterir ve akış aynı şeyi bir daha göndermediği için kimse düzeltmez. Bu yüzden atlama yalnızca sinyalin kendisi ilgisizliği kanıtladığında yapılıyor.
+- **Ekrandaki rapor kimlikleri, tek gerçek boşluğu kapatıyor.** Reprocess önce siler sonra yazar (ADR-035); silinen kayıtlar tam olarak yeni sinyalin **bahsetmediği** kayıtlardır. Yalnızca içeriğe bakan bir ilgi testi bu durumu kaçırır ve ekranda artık var olmayan bir satır kalır. Görünen kayıtların rapor kimliğiyle karşılaştırma, zaten elimizdeki veriyle bu boşluğu kapatıyor.
+- **Anahtar kelime hakkında sinyal hiçbir şey söylemiyor**, dolayısıyla o filtre aktifken ilgisizlik kanıtlanamaz. Tahmin etmek, veriye dayanmayan bir cevap uydurmak olurdu.
+- **İl kodu listesi üç kapsamı da tek testle çözüyor.** Kod taşımayan bir kayıt (metinde il yok) il filtresine hiç uymaz — doğrusu da bu, çünkü il filtreli görünüm o kaydı zaten içermez; paylaşılan figür ise kapsadığı her ilin filtresine uyar (ADR-019).
+- **Tarayıcının yeniden bağlanması yetmiyor.** Backend durduğunda bağlantı reddedilmiyor: nginx **502 döndürüyor** ve `EventSource` HTTP hata cevabını ölümcül sayıp `CLOSED`'a geçiyor — bir daha da denemiyor. Canlı kalması gereken bir sayfa için bu sessiz ölümdür; çalışan sistemde görüldü ve yeniden bağlanma bu yüzden bizim işimiz.
+- **Geri gelince tazelemek zorunlu.** Akış durumsuz (ADR-034): bağlantı kopukken yayınlanan her şey kaçtı. Göstergeyi yeşile çevirip veriyi eski bırakmak, en kötü hâli — kullanıcıya "güncelsin" demek.
+
+**Alternatifler.**
+- *Sinyaldeki kayıtları doğrudan tabloya eklemek:* Tazeleme isteği hiç olmazdı. Filtre, sayfalama ve toplam kurallarının istemcide kopyası; ADR-021 zaten payload'ı bu yüzden dar tuttu.
+- *Her sinyalde koşulsuz tazelemek:* En basiti ve her zaman doğru. Filtreye uymayan her gönderim üç isteğe mal olur ve ekranda hiçbir şey değişmez; sözleşme de ilgiyi belirlemek için alan taşıyor.
+- *Yalnızca içeriğe bakıp atlamak (rapor kimliği kontrolü olmadan):* Daha az kod. Reprocess sonrası silinen kayıt ekranda kalırdı.
+- *Düz debounce:* Tek satır. Sürekli akışta hiç tazelemez.
+- *Throttle (yalnızca leading):* Basit tavan. Pencerenin sonundaki son sinyal kaybolur, yani veri değişikliği görünmeden kalır.
+- *Panel başına abonelik:* Bileşenler bağımsız olurdu. Üç bağlantı, üç yeniden bağlanma, üç kat tazeleme.
+- *Seri gizle/göster gibi tazelemeyi de kullanıcıya bırakmak ("yenile" düğmesi):* Öngörülebilir. FR-25 canlı tazeleme istiyor; düğme, akışın var olma sebebini ortadan kaldırır.
+
+**Sonuçlar.**
+- `realtime/incidentSignal.ts` (saf: sözleşme tipleri + `isRelevant`), `realtime/useIncidentStream.ts` (tek abonelik, birleştirme, yeniden bağlanma), `realtime/StreamStatus.tsx`.
+- Gösterge dört durum taşıyor: `bağlanıyor` · `bağlı` · `yeniden bağlanıyor` · `kapalı`. Kapalıyken ayrıca **verinin kaybolmadığı** yazıyor — akış koptuğunda kaybedilen tek şey canlılık (ADR-021).
+- **jsdom'da `EventSource` yok.** Kurulum dosyasına hiçbir şey yapmayan bir stub kondu (grafiğin `ResizeObserver`'ı gibi); akışın kendi testleri onu sürülebilir bir sahte ile değiştiriyor — açılma, kopma, vazgeçme ve kapanma yalnızca böyle deterministik test edilebiliyor (TC-16).
+- Zaman bağımlı davranışlar sahte zamanlayıcıyla test edildi: on sinyal iki tazeleme, sürekli akışta pencere başına bir tazeleme, vazgeçilen bağlantıda 5 saniyede bir yeniden açma.
+- **Doğrulama sırasında bir ölçüm hatası yakalandı ve tekrarlandı:** on gönderimin dokuzu aynı geçici dosyayı paylaştığı için mükerrer sayılmıştı (ADR-035 doğru davrandı); ölçüm ancak on **ayrı** metinle anlamlı oldu.
+
+**İleride.** Pencere bugün sabit 1 saniye; gerçek kullanımda gürültülü bulunursa değeri ayarlanabilir ya da yük altında büyüyen uyarlamalı bir pencereye dönüşebilir — birleştirme noktası tek yerde. Yeniden bağlanma sabit 5 saniye; uzun kesintilerde artan bekleme (exponential backoff) aynı yere girer. `Last-Event-ID` ile tekrar oynatma sunucuya eklenirse (ADR-034'ün "İleride"si) bağlantı geri geldiğinde tazeleme yerine kaçan sinyaller işlenebilir; bugünkü tasarımda tazeleme zaten doğru cevap. Sekme arka plandayken tazelemeyi durdurup öne gelince bir kez tazelemek, çok sekmeli kullanımda istek sayısını düşürür — TanStack'in `focusManager`'ı zaten bu bilgiyi taşıyor.
