@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { eventTypeLabel, metricLabel } from '../i18n/catalogLabels';
 import { strings } from '../i18n/strings';
 import { provinceLabel, provinceNote } from './provinceLabel';
@@ -26,6 +27,7 @@ export function IncidentTable({
             <th scope="col">{strings.list.column.eventType}</th>
             <th scope="col">{strings.list.column.province}</th>
             <th scope="col">{strings.list.column.metrics}</th>
+            <th scope="col">{strings.list.column.detail}</th>
           </tr>
         </thead>
         <tbody>
@@ -73,6 +75,11 @@ export function IncidentTable({
                     ))}
                   </ul>
                 )}
+              </td>
+              <td>
+                {/* FR-08/FR-26: every row is a way into the record and, from
+                    there, into the text it came from. */}
+                <Link to={`/incidents/${incident.id}`}>{strings.list.detail}</Link>
               </td>
             </tr>
           ))}

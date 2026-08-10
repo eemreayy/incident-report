@@ -1215,7 +1215,7 @@ her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenme
   arka plandaki sekme tazelemeyi durdurmuyor — TanStack'in `focusManager`'ı bu bilgiyi taşıyor,
   gerekirse oraya bağlanır.
 
-### ☐ T-30 · İzlenebilirlik ekranları ve reprocess
+### ☑ T-30 · İzlenebilirlik ekranları ve reprocess
 Olay kaydı detayı (metrikler, anahtar kelimeler, tarih kaynağı, kapsam, kaynak bildirim bağlantısı)
 ve ham bildirim detayı (değiştirilmemiş metin, **anahtar kelimelerin metin üzerinde vurgulanması**,
 türeyen kayıtlar, reprocess eylemi). İki yön de gezinilebilir.
@@ -1224,6 +1224,47 @@ türeyen kayıtlar, reprocess eylemi). İki yön de gezinilebilir.
 - **DoD:** Kayıttan ham metne ve ham metinden kayıtlara gidilebiliyor; vurgulama offset'leri Türkçe
   karakterlerde kaymıyor; reprocess arayüzden tetiklenip sonuç aynı ekranda güncelleniyor ve
   mükerrer kayıt görünmüyor.
+- **Sonuç:** 232 test geçiyor, frontend coverage **%98** (519/527 satır). `traceability/highlight.ts`
+  (saf, DOM'suz), `HighlightedText`, `IncidentDetailPage`, `RawReportPage`; API katmanına
+  `getIncident`, `reprocessIncidentReport` ve `useIncident`/`useRawReport`/`useReprocess`. İki yeni
+  adres: `/incidents/:id` ve `/reports/:id`. Kararlar
+  [ADR-041](DECISIONS.md#adr-041--i̇zlenebilirlik-ekranları-sunucudan-gelen-offsetlerle-vurgulama-metne-hiçbir-şey-eklememe-ve-reprocessin-yerinde-tazelenmesi)'de.
+- **TC-18 kapandı: offset'ler kaymıyor, çünkü iki platform aynı birimi sayıyor.** Java `String` ve
+  JavaScript `string` **UTF-16 kod birimi** sayar; `ğ ı İ ş` tek konum tutar ve `text.slice()` tam
+  olarak çıkarıcının eşleştirdiği karakterleri verir. Çalışan sistemden alınan offset'lerle test
+  edildi: saklanan konumdan dilimlenen metin, saklanan kelimenin kendisi.
+- **Metinde arama yapılmıyor.** İl adları ekle geliyor (`Bursa'da`), aynı kelime metinde birden
+  fazla kez geçiyor (üçüncü örnekte `Bursa'da` iki kez) — arayan bir istemci yanlış yeri işaretler.
+  C-3'ün offset'leri sözleşmeye eklemesinin sebebi buydu ve burada karşılığını buldu.
+- **Çakışan aralıklar gerçek çıktı.** Bir metin birden fazla kayıt üretiyor ve her kayıt aynı metin
+  üzerindeki kendi eşleşmelerini taşıyor; `trafik kazası` [40,53) ile `kazası` [47,53) çakışıyor ve
+  aynı aralık hem `EVENT_TYPE` hem `METRIC` olarak geliyor. Metin, **rol kümesinin değiştiği
+  sınırlardan** bölünüp aynı kümeye sahip komşular birleştiriliyor; her aralığı tek tek sarmak iç
+  içe etiket ve çift boyama üretirdi.
+- **Metne hiçbir şey eklenmiyor.** İlk sürümde vurgunun içine ekran-okuyucu için "(il)" gibi gizli
+  bir açıklama koymuştum; test, ekrandaki metnin saklanan metne eşit olmadığını gösterdi. Bu ekranda
+  metin ürünün kendisi — kopyalanan metin gönderilen metin olmalı. Rol bilgisi dışarı taşındı:
+  gösterge listesi, `title`, ve rol başına farklı alt çizgi biçimi (düz/kesikli/noktalı/çift) —
+  anlam dört soluk tonu ayırt etmeye bağlı kalmıyor (NFR-16).
+- **Ham bildirim ekranı iki istek atıyor** (FR-14'ün notu): metin ham bildirim ucundan, türeyen
+  kayıtlar ve analiz sonucu `?rawReportId=` ile kayıt ucundan. Hiçbir modül diğerinin verisini
+  temsil etmiyor.
+- **Reprocess yerinde tazeliyor, metni yeniden okumuyor.** Ham metin sorgusu `staleTime: Infinity` —
+  ham kayıt write-once (ADR-005), cevabı değişemeyecek bir soruyu tekrar sormanın anlamı yok.
+- **Test bir hata yakaladı:** `/incidents/abc` adresinde sunucuya `/incidents/NaN` isteği gidiyordu;
+  yanlış bir adresi sunucu hatasına çevirmek yerine sorgu artık böyle bir kimlikte hiç çalışmıyor.
+- **DoD fiilen doğrulandı (çalışan sistemde, tarayıcıdan):**
+  - Ekrandaki ham metin, uçtan okunan metinle **birebir aynı** (`identical: true`).
+  - Vurgular: `Son 24 saatte` [tarih] · `Bursa'da` ve `Kocaeli'nde` **iki kez de** [il] ·
+    `trafik kazası` tek vurgu, `title="olay tipi, metrik"` · `kazalarda` [olay tipi] ·
+    `hayatını kaybetti`, `yaralı` [metrik].
+  - Kayıt #26 → kaynak bildirim bağlantısı; ham bildirim → türeyen üç kaydın her birine bağlantı;
+    liste tablosunda "Ayrıntı" sütunu.
+  - **Reprocess:** kayıtlar 26/27/28 → 49/50/51 oldu, **sayı üç kaldı** (mükerrer yok), ham metin
+    değişmedi ve ekran aynı sayfada güncellendi.
+- **Bilinçli boşluklar:** ham bildirim listesi ucu arayüzde kullanılmıyor (bir "son bildirimler"
+  ekranı istenirse hazır); toplu reprocess yok; detay ekranından panele dönüş filtreleri taşımıyor —
+  tarayıcının geri düğmesi taşıyor.
 
 ### ☐ T-31 · Frontend kapanışı: durumlar, erişilebilirlik, kapsam
 Her veri getiren görünüm için yükleniyor/hata/boş durumları. Backend erişilemezken beyaz ekrana
@@ -1302,4 +1343,4 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-15 | İstemci durumu ile sunucu durumunun ayrımı | **Karara bağlandı → ADR-037** · uygulaması T-26 |
 | TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |
 | TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | **Karara bağlandı → ADR-025** (T-23) |
-| TC-18 | Anahtar kelime vurgulamasının hizalanması | T-14 (offset üretimi) + T-30 (vurgulama) |
+| TC-18 | Anahtar kelime vurgulamasının hizalanması | **Karara bağlandı → ADR-041** · T-14 (offset üretimi) + T-30 (vurgulama) |

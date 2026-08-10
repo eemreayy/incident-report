@@ -1,10 +1,18 @@
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
+  getIncident,
+  getIncidentReport,
   getMetadata,
   getSummary,
   getTimeSeries,
   listIncidents,
   listIncidentsByRawReport,
+  reprocessIncidentReport,
   submitIncidentReport,
   type TimeSeriesQuery,
 } from './endpoints';
@@ -27,6 +35,8 @@ export const queryKeys = {
   incidentList: (filters: IncidentFilters) => ['incidents', 'list', filters] as const,
   incidentsByRawReport: (rawReportId: string) =>
     ['incidents', 'by-raw-report', rawReportId] as const,
+  incident: (id: number) => ['incidents', 'one', id] as const,
+  rawReport: (id: string) => ['raw-reports', id] as const,
   analytics: ['analytics'] as const,
   summary: (filters: IncidentFilters) => ['analytics', 'summary', filters] as const,
   timeSeries: (query: TimeSeriesQuery) => ['analytics', 'time-series', query] as const,
@@ -127,4 +137,52 @@ export function useTimeSeries(query: TimeSeriesQuery, enabled = true) {
 
 export function useSubmitReport() {
   return useMutation({ mutationFn: (text: string) => submitIncidentReport(text) });
+}
+
+/**
+ * One record and the words behind it (FR-17, FR-26).
+ *
+ * The id comes out of the address bar, so it can be anything a person typed.
+ * Asking the server about `/incidents/NaN` would turn a wrong address into a
+ * server error; the query simply does not run for one that cannot be an id.
+ */
+export function useIncident(id: number) {
+  return useQuery({
+    queryKey: queryKeys.incident(id),
+    queryFn: ({ signal }) => getIncident(id, signal),
+    enabled: Number.isInteger(id),
+  });
+}
+
+/**
+ * The stored text, exactly as submitted. It is written once and never touched
+ * again (ADR-005), so this is the one query in the application whose answer
+ * cannot change - reprocess included.
+ */
+export function useRawReport(id: string) {
+  return useQuery({
+    queryKey: queryKeys.rawReport(id),
+    queryFn: ({ signal }) => getIncidentReport(id, signal),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Runs the rules over a stored text again (FR-15).
+ *
+ * The receipt says nothing about what came out, so everything derived from
+ * records is marked stale and the screen reads the new answer through the same
+ * queries it was already using. The connected clients hear about it on the
+ * stream; this is the same refresh, arriving by the shorter route.
+ */
+export function useReprocess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rawReportId: string) => reprocessIncidentReport(rawReportId),
+    onSuccess: () => {
+      for (const queryKey of incidentDerivedKeys) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
 }
