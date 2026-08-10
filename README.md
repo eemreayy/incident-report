@@ -33,6 +33,7 @@ gerekçesi [ADR-016](docs/DECISIONS.md#adr-016--tek-repo-monorepo)'da.
 - [Olay Tipi ve Metrik Kataloğu](#olay-tipi-ve-metrik-kataloğu)
 - [Tasarım Tercihleri ve Gerekçeleri](#tasarım-tercihleri-ve-gerekçeleri)
 - [Kurulum ve Çalıştırma](#kurulum-ve-çalıştırma)
+- [Örnek Ham Veri Seti](#örnek-ham-veri-seti)
 - [API](#api)
 - [Testler ve Kapsam](#testler-ve-kapsam)
 - [Dokümantasyon](#dokümantasyon)
@@ -348,6 +349,44 @@ ya `docker compose up -d backend postgres mongodb` ile ya da yukarıdaki Maven k
 docker compose down       # container'ları durdurur, veriyi korur
 docker compose down -v    # veri hacimlerini de siler (sıfırdan başlamak için)
 ```
+
+---
+
+## Örnek Ham Veri Seti
+
+Sistem ilk ayağa kalktığında veri tabanları boştur; aşağıdaki 10 metin, kataloğun beş olay tipini
+(her birinden iki örnek) kapsayan, elle hazırlanmış küçük bir deneme setidir. Farklı tarih biçimleri
+(kesin/`EXPLICIT`, göreli/`RELATIVE`), tek/paylaşılan il ve rakam/yazı ile ifade edilmiş sayılar
+kasıtlı olarak karıştırılmıştır — sistemin iddia ettiği çeşitliliği ilk denemede göstermesi için.
+
+| # | Olay Tipi | Metin |
+|---|---|---|
+| 1 | `EPIDEMIC` | 15.03.2024 tarihinde Konya'da yapılan açıklamaya göre bölgede görülen salgın kapsamında 22 yeni vaka tespit edildi. 2 kişi hayatını kaybetti, 9 kişi tedavi sonrası taburcu edildi. |
+| 2 | `EPIDEMIC` | Son 48 saatte Diyarbakır'da salgın nedeniyle yapılan testlerde otuz beş yeni vaka görüldü. İki kişi hayatını kaybetti, on kişi şifa bularak taburcu oldu. |
+| 3 | `EARTHQUAKE` | 06.02.2023 tarihinde Kahramanmaraş'ta meydana gelen depremde 45 bina hasar gördü. 12 kişi hayatını kaybederken, 30 kişi enkazdan sağ olarak kurtarıldı. Ayrıca 18 kişi yaralı olarak hastaneye kaldırıldı. |
+| 4 | `EARTHQUAKE` | Dün gece Van'da meydana gelen depremin ardından artçı sarsıntılar sürdü. Yirmi bina hasar gördü, üç kişi enkazdan kurtarıldı, yedi kişi hafif yaralı. |
+| 5 | `TRAFFIC_ACCIDENT` | Son 24 saatte Bursa'da 8, Kocaeli'nde 6 trafik kazası meydana geldi. Bursa'da 1, Kocaeli'nde ise 2 kişi kazalarda hayatını kaybetti. Her iki ilde toplam 10 kişi yaralı olarak hastaneye kaldırıldı. |
+| 6 | `TRAFFIC_ACCIDENT` | 18 Ocak akşamı Antalya'da meydana gelen zincirleme trafik kazasında 4 kişi yaralandı, 1 kişi hayatını kaybetti. |
+| 7 | `FLOOD` | 22.07.2024 tarihinde Rize'de etkili olan sel felaketinde 3 kişi hayatını kaybetti, 11 kişi yaralandı. 200 kişi tahliye edildi, 15 bina su baskınından etkilendi. |
+| 8 | `FLOOD` | Son 12 saatte Artvin'de yaşanan taşkın nedeniyle altı bina zarar gördü, kırk kişi tahliye edildi. |
+| 9 | `FIRE` | 14.05.2024 tarihinde İzmir'de bir sanayi tesisinde çıkan yangında 2 kişi yaralandı, itfaiye ekipleri 6 saatte söndürdü. 3 bina kül oldu. |
+| 10 | `FIRE` | Bu sabah Muğla'da ormanlık alanda başlayan yangın nedeniyle 150 kişi tahliye edildi. 5 kişi dumandan etkilenerek yaralandı. |
+
+Herhangi birini elle denemek için:
+
+```bash
+curl -s -X POST localhost:8080/api/v1/incident-reports \
+  -H "Content-Type: application/json" \
+  -d '{"text":"18 Ocak akşamı Antalya'\''da meydana gelen zincirleme trafik kazasında 4 kişi yaralandı, 1 kişi hayatını kaybetti."}'
+```
+
+Onluk setin tamamı tek seferde denenecekse `docs/postman/` altındaki koleksiyon (bkz. [API](#api))
+daha uygundur — `npx newman run` ile hepsi otomatik gönderilip cevaplar doğrulanabilir.
+
+> Uygulama ilk kez ayağa kalktığında arayüz boş bir liste gösterir; bu, bir hata değil, henüz hiçbir
+> bildirim girilmediğinin göstergesidir. İleride arayüze, ilk açılışta bu tabloyu (veya bir alt
+> kümesini) tek tıkla gönderen bir "örnek veri ekle" kısayolu eklenmesi değerlendirilebilir — bugün
+> için en hızlı yol yukarıdaki `curl` komutunu veya Postman koleksiyonunu çalıştırmaktır.
 
 ---
 
