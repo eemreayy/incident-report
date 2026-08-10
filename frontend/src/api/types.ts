@@ -145,6 +145,46 @@ export interface SummaryRow {
   metrics: Record<string, number>;
 }
 
+/** A day that had data. Days with none are absent rather than zero (see `TimeSeries`). */
+export interface TimeSeriesPoint {
+  date: string;
+  /** Already cumulative when the query asked for it - never made so here (FR-12). */
+  value: number;
+}
+
+/**
+ * One line of the chart.
+ *
+ * `provinceScope` is absent unless province was asked for as a dimension. When
+ * it is present, `SHARED` and `UNKNOWN` are lines of their own: figures given
+ * for several provinces at once, and records whose text named none. Neither is
+ * folded into a province's line and neither is dropped (ADR-019, FR-24).
+ */
+export interface TimeSeriesSeries {
+  eventType: string;
+  metric: string;
+  provinceScope?: ProvinceScope;
+  province?: Province;
+  points: TimeSeriesPoint[];
+}
+
+/**
+ * The chart's data, already divided into lines by the server (FR-11, FR-23).
+ *
+ * Which points belong to one line is the server's decision, and it has to be: a
+ * cumulative value only means anything within a series, and drawing the boundary
+ * here is what would let a shared figure end up inside a province's line.
+ *
+ * `cumulative` and `groupBy` come back with the answer, so the chart labels
+ * itself from the response rather than from what it asked for - the two differ
+ * for as long as a request is in flight.
+ */
+export interface TimeSeries {
+  cumulative: boolean;
+  groupBy: 'NONE' | 'PROVINCE';
+  series: TimeSeriesSeries[];
+}
+
 /**
  * Three levels, from one query over one filtered set.
  *

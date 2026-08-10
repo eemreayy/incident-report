@@ -1,6 +1,11 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { parseFilters, toSearchParams, type IncidentFilters } from './incidentFilters';
+import {
+  DEFAULT_FILTERS,
+  parseFilters,
+  toSearchParams,
+  type IncidentFilters,
+} from './incidentFilters';
 
 /**
  * The one way to read and change the filters (TC-15).
@@ -29,12 +34,21 @@ export function useIncidentFilters() {
     (patch: Partial<IncidentFilters>) => {
       const changesFilter = Object.keys(patch).some((key) => key !== 'page');
       const next = { ...filters, ...patch };
-      setParams(toSearchParams(changesFilter ? { ...next, page: 1 } : next));
+      setParams(toSearchParams(changesFilter ? { ...next, page: 1 } : next, params));
     },
-    [filters, setParams],
+    [filters, params, setParams],
   );
 
-  const clear = useCallback(() => setParams(new URLSearchParams()), [setParams]);
+  /**
+   * Clears the filters and only the filters. The chart's own settings are not a
+   * filter - they change what is drawn, not which records are counted - so
+   * "clear the filters" leaving the chart pointed somewhere else would be
+   * answering a question nobody asked.
+   */
+  const clear = useCallback(
+    () => setParams(toSearchParams(DEFAULT_FILTERS, params)),
+    [params, setParams],
+  );
 
   return { filters, update, clear };
 }

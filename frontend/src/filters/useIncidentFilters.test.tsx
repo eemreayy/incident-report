@@ -104,6 +104,31 @@ describe('useIncidentFilters', () => {
     expect(filtersOf('list')).toMatchObject({ eventTypes: ['EPIDEMIC'] });
   });
 
+  it('leaves the chart’s own settings alone when a filter changes', async () => {
+    // The address bar carries the whole view, of which the filters are one part.
+    // Rebuilding the query string from the filters alone would reset the chart
+    // every time somebody ticked a box.
+    renderProbe('/?chart=EPIDEMIC&breakdown=province&cumulative=true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'probe: tip' }));
+
+    expect(screen.getByTestId('probe-search')).toHaveTextContent('chart=EPIDEMIC');
+    expect(screen.getByTestId('probe-search')).toHaveTextContent('breakdown=province');
+    expect(screen.getByTestId('probe-search')).toHaveTextContent('cumulative=true');
+  });
+
+  it('clears the filters and only the filters', async () => {
+    renderProbe('/?eventType=EPIDEMIC&province=6&chart=FIRE&cumulative=true');
+
+    await userEvent.click(screen.getByRole('button', { name: 'probe: temizle' }));
+
+    const search = screen.getByTestId('probe-search');
+    expect(search).not.toHaveTextContent('eventType');
+    expect(search).not.toHaveTextContent('province');
+    expect(search).toHaveTextContent('chart=FIRE');
+    expect(search).toHaveTextContent('cumulative=true');
+  });
+
   it('lets the back button undo a filter change', async () => {
     // The router is already keeping this history, which is a large part of why
     // the URL was chosen over a store.

@@ -1119,3 +1119,48 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - Sorgu anahtarları `['analytics', …]` altında; `incidentDerivedKeys` artık kayıtlardan türeyen her şeyi tek yerde adlandırıyor, T-29 bunu geçersizleştirecek.
 
 **İleride.** T-28'de grafik aynı soruyu seri düzeyinde soracak: `SHARED` ve `UNKNOWN` ayrı ve etiketli birer seri olacak, il serilerine eklenmeyecek — kural aynı, taşıyıcı farklı. `SHARED` kovasının kapsadığı il kombinasyonuna göre ayrıştırılması istenirse (ADR-036'nın "İleride"si) tablo yapısı değişmez, yalnızca satır sayısı artar. Metrik sayısı büyürse sütunlar yerine metrik başına satır düzenine geçmek gerekebilir; bugünkü katalogda en fazla dört metrik var ve sütun düzeni okunaklı.
+
+---
+
+## ADR-039 — Grafiğin İki Modu, Grafik Ayarlarının Adres Çubuğunda Yaşaması ve Kümülatifin Sunucudan İstenmesi
+
+**Karar.** Zaman serisi grafiği tek seferde **tek bir olay tipi** çizer ve iki modu vardır:
+
+1. **Kırılımsız** — bir çizgi = bir **metrik**. Okuyucu metrikleri zaman içinde karşılaştırır.
+2. **İl kırılımlı** — bir çizgi = bir **yer** (il, `Ortak toplam`, `İl belirtilmemiş`) ve **tek bir metrik** çizilir. İller ancak aynı sayı üzerinden karşılaştırılabilir.
+
+Bunun etrafındaki beş karar:
+
+- **Grafik ayarları (`chart`, `metric`, `breakdown`, `cumulative`) adres çubuğunda durur** — filtrelerin yanında, ayrı anahtarlarda. Filtre değildirler: hangi kayıtların *sayıldığını* değil, hangi serilerin *çizildiğini* belirlerler; özet ve liste onlardan etkilenmez.
+- **Her modül adres çubuğunda yalnızca kendi anahtarlarını yeniden yazar.** ADR-037'nin "sorgu dizisi filtre durumudur" ifadesi burada netleşiyor: sorgu dizisi **tüm görünümün** durumudur, filtreler onun bir parçası.
+- **Grafik, filtrenin dışladığı bir olay tipini asla çizmez.** Adreste kalmış bir seçim geçerli değilse ilk izin verilen tipe düşülür.
+- **Kümülatif sunucudan istenir** (`cumulative=true`), noktalar toplanarak üretilmez. Etiket de **cevaptan** okunur: istek uçarken anahtar ile cevap birbirini tutmaz ve kümülatif bir grafiği düz diye etiketlemek bambaşka bir olgu bildirmektir.
+- **Seri gizle/göster bileşen durumudur, adres çubuğunda değil.** Ne istendiğini ne de sayılanı değiştirir; URL'de olsaydı her gösterge tıklaması tarayıcı geçmişine bir adım eklerdi.
+
+**Bağlam.** FR-23 grafiği olay tipine bağlıyor ("seçilen tipin metrikleri ayrı seriler olarak çizilir"), FR-24 il kırılımını istiyor, FR-12 kümülatifi sunucudan istiyor. T-28 ayrıca "çok il seçildiğinde okunabilirlik" diyor. Uç tarafı ADR-036'da karara bağlanmıştı: cevap seri listesidir, `SHARED` tek kova, kapsam yalnızca il bir boyutken görünür.
+
+**Gerekçe.**
+- **Grafik yalnızca benzeri benzerle karşılaştırabilir.** Trafik kazası için üç metrik × üç kova dokuz çizgi eder ve "kaza sayısı" ile "can kaybı" aynı eksende anlamsızdır. İki mod bu sorunu bir ayarla değil, **soruyu netleştirerek** çözüyor: ya metrikleri karşılaştırırsın ya yerleri.
+- **Metrik kısıtı hiçbir sayıyı değiştirmez.** Her seri kendi başına duruyor; birini çizmemek diğerini etkilemiyor ve kısıt asla bir serinin **içindeki** noktalara uygulanmıyor. Bu yüzden "istemcide filtreleme" değil, hangi çizginin çizileceği kararı.
+- **Ayarlar URL'de, çünkü paylaşılan bir grafik gönderenin gördüğü grafik olmalı.** Aynı gerekçe ADR-037'nin filtreler için verdiği gerekçe; farklı olan tek şey, bu anahtarların sunucuya sorulan soruyu daraltmaması.
+- **Ayrı anahtar kümeleri, ayrı yazarlar.** Filtre değişince grafiğin ayarlarının sıfırlanması (ya da tersi) tam olarak "iki kopya" hatasının URL'e taşınmış hâli olurdu. "Filtreleri temizle" de yalnızca filtreleri temizliyor.
+- **Kümülatifi istemcide toplamak, "şu ana kadarki toplam"ın ikinci tanımını yazmak olurdu** (NFR-13) — üstelik seri sınırını da istemcinin bilmesi gerekirdi, ki o sınır paylaşılan figürü bir ilin çizgisine sokmamanın tek güvencesi.
+- **Etiketi cevaptan okumak** ucuz bir dürüstlük: `keepPreviousData` ile eski veri ekranda kalırken anahtar yeni durumu gösterir; etiket anahtardan okunsaydı, gelmemiş bir cevabı anlatırdı.
+- **Veri olmayan gün sıfır değil, boşluktur.** Sistem "hiçbir şey olmadı"yı bilmiyor, "hiçbir şey bildirilmedi"yi biliyor. Sıfır yazmak kümülatif modda toplamın düşüp tekrar toplandığı bir çizgi çizerdi. Çizgi boşluğun üzerinden birleştiriliyor (`connectNulls`) — nokta uydurmadan, seyrek seriyi tek çizgi olarak okunur kılmak için.
+
+**Alternatifler.**
+- *Filtredeki tüm olay tiplerini birden çizmek:* Grafik ile tablo birebir aynı kümeyi gösterirdi. Farklı birimlerdeki on beş çizgi okunamaz; FR-23 zaten "seçilen tipin metrikleri" diyor.
+- *İl kırılımında tüm metrikleri çizmek:* Bir seçim kutusu eksilirdi. Dokuz çizgi ve karşılaştırılamaz eksen — task'ın "okunabilirlik" maddesi tam olarak bu.
+- *Grafik ayarlarını bileşen durumunda tutmak:* Daha az URL gürültüsü. Paylaşılan bağlantı gönderenin grafiğini açmazdı ve ADR-037'nin "tek kopya" kuralı grafikte delinirdi.
+- *Grafik ayarlarını `IncidentFilters`'ın içine koymak:* Tek bir çözümleme olurdu. Kümülatif anahtarına basmak listenin ve özetin sorgu anahtarını değiştirir, ikisini de gereksiz yere yeniden getirirdi.
+- *Kümülatifi istemcide hesaplamak:* Sunucuya parametre eklemezdi (zaten var). Kuralın ikinci kopyası.
+- *Veri olmayan günleri sıfırla doldurmak:* Çizgi kesintisiz olurdu. Veriye olmayan bir iddia eklemek.
+- *Seri gizle/göster durumunu URL'e koymak:* Paylaşılan bağlantı gizlenenleri de taşırdı. Her tıklama bir geçmiş adımı; geri düğmesi "seriyi geri getir" hâline gelirdi.
+
+**Sonuçlar.**
+- `analytics/chartOptions.ts` (saf çözümleme + `resolve*` kuralları), `analytics/chartModel.ts` (seri → satır çevrimi; **tek bir toplama içermez**), `analytics/ChartPanel.tsx`. Recharts ilk kez kullanılıyor (ADR-026'nın öngördüğü gibi, ilk kullanıcısı bu task).
+- Gösterge sıralaması kütüphanenin varsayılanına (alfabetik) bırakılmadı; çizgi sırası kataloğun sırası ve gösterge onu izliyor — özet tablo da aynı sırayı kullanıyor.
+- **jsdom'un iki eksiği test kurulumunda kapatıldı:** `ResizeObserver` yok ve her öğe sıfır boyutlu. Bunlar olmadan grafik yalnızca çizilmemekle kalmıyor, **hata fırlatıyor** ve grafiği barındıran her ekran boş sayfa olarak render ediliyor. Konan şey tarayıcının yerleşimi; grafiğin kendisi gerçek SVG çiziyor — ADR-026'nın Recharts'ı seçme gerekçesi buydu.
+- Testler göstergeyi ve çizgi sayısını okuyor: "seçilen tipin metrikleri ayrı seriler olarak çiziliyor" iddiası ekrandan doğrulanıyor, mock'tan değil.
+
+**İleride.** X ekseni bugün kategorik: yalnızca veri olan günler eşit aralıklarla diziliyor, yani takvimdeki boşluklar orantılı görünmüyor. Gerçek zaman ekseni (`type="number"` + tarih ölçeği) veri sıklaştığında ilk adım. Gün yerine hafta/ay bazında gruplama ucun `date_trunc` ile genişlemesini gerektirir (ADR-036'nın "İleride"si) ve grafikte yalnızca bir seçim kutusu olur. Birden fazla olay tipini birlikte çizmek istenirse doğru yol tek eksende toplamak değil, tip başına küçük çoklu grafik (small multiples) olur; seri anahtarı zaten olay tipini taşıyor.
