@@ -4,7 +4,7 @@ Backend API'sini frontend olmadan denemek için hazırlanmış koleksiyon.
 
 | Dosya | İçerik |
 |---|---|
-| `incident-report.postman_collection.json` | 13 istek, 4 klasör, her istekte örnek cevap ve assertion |
+| `incident-report.postman_collection.json` | 18 istek, 5 klasör, her istekte örnek cevap ve assertion |
 
 Koleksiyondaki **her örnek cevap çalışan sistemden yakalanmıştır**, elle yazılmamıştır.
 
@@ -29,9 +29,10 @@ Ayrı bir environment kurmanıza gerek yok; `baseUrl` koleksiyon değişkeni ola
 
 ### 3. Deneyin
 
-**Olay Bildirimleri → Submit** isteklerinden birini gönderin. Test script'i dönen id'yi `reportId`
-koleksiyon değişkenine yazıyor; böylece **Read one** ve hata senaryoları kopyala-yapıştır olmadan
-çalışıyor.
+**Incident Reports → Submit** isteklerinden birini gönderin. Test script'i dönen id'yi `reportId`
+koleksiyon değişkenine yazıyor; böylece **Incidents** klasörü, **Read one** ve hata senaryoları
+kopyala-yapıştır olmadan çalışıyor. `Incidents → By raw report` de aynı şekilde `incidentId`
+değişkenini yazıyor ve **One record** onu kullanıyor.
 
 Ya da koleksiyonun tamamında **Run**'a basın — her istek assertion taşıdığı için koleksiyon aynı
 zamanda API'nin duman testi olarak çalışır.
@@ -64,8 +65,33 @@ Ham metin gönderme ve geri okuma. Üç Submit isteği, kaynak dokümandaki **ü
 **Update ve delete yok, olmayacak da.** Ham metin log niteliğinde; düzenlenebilen bir kayıt,
 ondan türeyen veriyi açıklayamaz.
 
+### Incidents
+Analizin **çıkardığı** veriyi okuma. Bu klasör yukarıdaki gönderimlere bağlı: `reportId`,
+`Incident Reports` klasöründeki son Submit tarafından yazılıyor — yani üçüncü örnek metin, iki il
+kaydı ve bir paylaşılan toplam üreten metin.
+
+| İstek | Gösterdiği |
+|---|---|
+| **By raw report** | Bir gönderimden ne çıktığını öğrenmenin **tek** yolu |
+| **By province** | İl filtresi, o ile *paylaşılan* figürü de görür — ve iki il seçilince **bir kez** |
+| **Filters combined** | Filtreler birlikte uygulanır; sayfalama toplam sayıyı bildirir |
+| **One record** | Metrikler + hangi kelimenin neyi tetiklediği ve **ham metindeki konumu** |
+
+`POST /incident-reports` yalnızca kimlik ve zaman döner, sonuç dönmez
+([ADR-021](../DECISIONS.md#adr-021--analiz-sonucunun-sahipliği)). `?rawReportId=` bu döngüyü
+kapatıyor ve sorunun iki yarısını **tek istekte** cevaplıyor: kayıtlar, ve analizin başarılı olup
+olmadığı. Analiz başarısız olduğunda hiç kayıt olmaz — bu yüzden `analysis` alanı kayıtların
+üstünde değil, **yanında** durur; aksi hâlde tam da açıklanması gereken durumda görünmezdi.
+
+İki il birden seçildiğinde paylaşılan figür **bir kez** dönüyor. Bağlantı tablosu üzerinden her
+seçili il için bir kez eşleştiğinden sorgu `DISTINCT`; olmasaydı iki il arasında paylaşılan 10
+yaralı, ikisi de seçilince 20 görünürdü ([ADR-033](../DECISIONS.md#adr-033--okuma-ucunun-şekli)).
+
+Anahtar kelime araması ham metinde değil, **çıkarımın kaydettiği** anahtar kelimelerde çalışır;
+ham metinde tam metin arama kapsam dışı (PRD §2.3).
+
 ### Error contract (RFC 7807)
-Altı hata senaryosu. Hepsi `application/problem+json` döner — hata ister domain'den, ister
+Yedi hata senaryosu. Hepsi `application/problem+json` döner — hata ister domain'den, ister
 Spring'in kendisinden gelsin.
 
 İstemcinin dayanabileceği alan `code`; `detail` metni serbestçe değişebilir. Her istek ayrıca
@@ -79,7 +105,7 @@ Spring'in kendisinden gelsin.
 npx newman run docs/postman/incident-report.postman_collection.json
 ```
 
-Beklenen: **13 istek, 54 assertion, 0 hata.**
+Beklenen: **18 istek, 76 assertion, 0 hata.**
 
 ---
 
