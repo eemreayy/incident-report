@@ -6,6 +6,7 @@ import com.emreay.incidentreport.analysis.domain.Province;
 import com.emreay.incidentreport.analysis.extraction.ExtractedIncident;
 import com.emreay.incidentreport.analysis.extraction.ExtractedKeyword;
 import com.emreay.incidentreport.analysis.extraction.ExtractionResult;
+import com.emreay.incidentreport.analysis.text.TurkishTextNormalizer;
 import com.emreay.incidentreport.analysis.extraction.IncidentExtractor;
 import com.emreay.incidentreport.analysis.repository.AnalysisResultRepository;
 import com.emreay.incidentreport.analysis.repository.IncidentRepository;
@@ -18,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,17 +49,23 @@ public class AnalysisService {
     private final ProvinceRepository provinces;
     private final AnalysisResultRepository results;
     private final Clock clock;
+    private final TurkishTextNormalizer normalizer;
+    private final ZoneId reportingZone;
 
     public AnalysisService(IncidentExtractor extractor,
                            IncidentRepository incidents,
                            ProvinceRepository provinces,
                            AnalysisResultRepository results,
-                           Clock clock) {
+                           Clock clock,
+                           TurkishTextNormalizer normalizer,
+                           ZoneId reportingZone) {
         this.extractor = extractor;
         this.incidents = incidents;
         this.provinces = provinces;
         this.results = results;
         this.clock = clock;
+        this.normalizer = normalizer;
+        this.reportingZone = reportingZone;
     }
 
     /**
@@ -68,8 +75,12 @@ public class AnalysisService {
      */
     @Transactional
     public AnalysisOutcome analyze(String rawReportId, String rawText, Instant submittedAt) {
-        LocalDate referenceDate = LocalDate.ofInstant(submittedAt, ZoneOffset.UTC);
-        ExtractionResult result = extractor.extract(rawText, referenceDate);
+        // Which calendar day a submission falls on is a local question, not a UTC one - see
+        // ADR-029. The instant itself stays UTC; only the day it is read as is zoned.
+        LocalDate referenceDate = LocalDate.ofInstant(submittedAt, reportingZone);
+        // Normalized once here rather than inside each extractor: they all need the same text, and
+        // normalising it repeatedly would also recompute the offset map every time.
+        ExtractionResult result = extractor.extract(normalizer.normalize(rawText), referenceDate);
 
         long removed = incidents.deleteByRawReportId(rawReportId);
         if (removed > 0) {

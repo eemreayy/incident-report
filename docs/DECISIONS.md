@@ -761,3 +761,29 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `NumberExtractor` `NormalizedText` üzerinde çalışıyor ve offset'leri onun üzerinden ham metne kadar izlenebilir (ADR-027). T-14 iki şeye dikkat etmek zorunda: (1) sözcüklü tarihlerden sızan sayılar (`3`, `2020`), (2) sayı olan ama metrik olmayan ifadeler — kaynak dokümandaki üçüncü örnekte `her iki ilde` ifadesi `2` üretiyor ve bu bir metrik değil. İkisi de teste yazıldı. `bin`/`milyon` gibi çarpanların tek başına sayı sayılması bilinçli (`bin kişi` = 1000).
 
 **İleride.** Sayı sözcüklerinin ekli hâlleri (`ikisi`, `üçü`) şu an tanınmıyor; ihtiyaç doğarsa ek toleransı ADR-027'nin normalizasyon katmanına eklenir, ayrıştırıcıya değil. Sıra sayıları (`3. kişi`) ayrı bir tür olarak işaretlenebilir. Ondalık figürler bir gün metrik olursa (parasal hasar gibi) `NumberToken` bir ölçek/birim alanı kazanır; bugün kataloğda böyle bir metrik yok.
+
+---
+
+## ADR-029 — Zaman Dilimi, Gün Sınırı ve Göreli Aralıkların Tek Güne İndirgenmesi
+
+**Karar.** Bir bildirimin hangi **takvim gününe** ait olduğu `Europe/Istanbul` saatine göre belirlenir (`incident-report.analysis.reporting-zone` ile yapılandırılabilir, varsayılan bu). Zaman damgalarının kendisi UTC `Instant` olarak kalır. Göreli **aralık** ifadeleri tek bir güne indirgenir: geriye bakan pencereler (`son 24 saatte`, `son 3 günde`) **referans günü**, yer değiştiren ifadeler (`dün`, `geçen hafta`) kaydırdıkları günü verir. Açık takvim tarihi, göreli ifadeye üstün gelir. `DEFAULTED` kayıtlar agregasyonlardan **düşürülmez**; kaynak alanı görünür kalır. TC-6 böylece karara bağlanır.
+
+**Bağlam.** ADR-014 tarih kaynağını ve referans tarihin gönderim tarihi olduğunu sabitlemiş, ama zaman dilimini ve aralık semantiğini bilinçli olarak açık bırakmıştı. Kod bu boşluğu geçici olarak `ZoneOffset.UTC` ile doldurmuştu — bir karar değil, bir varsayılan. T-11 bunu karara bağlamak zorundaydı, çünkü çözülen gün doğrudan grafikte görünüyor.
+
+**Gerekçe.**
+- **"Şu an saat kaç" ile "hangi güne düşüyor" farklı sorular.** Anlık zaman UTC kalmalı: makineden bağımsız, tek anlamlı. Ama kullanıcı grafikte **kendi gününü** görüyor. Türkiye saatiyle 00:30'da girilen bir bildirim UTC'ye göre bir önceki güne yazılır — kullanıcının çoktan bitirdiği bir güne. `Europe/Istanbul` seçmek bu sapmayı ortadan kaldırıyor; Türkiye 2016'dan beri sabit UTC+3 olduğu için yaz saati sınır vakası da yok.
+- **Yapılandırılabilir ama varsayılanlı.** Taze bir klon hiçbir ayar olmadan doğru çalışıyor; geçersiz bir zaman dilimi ise ilk bildirimde değil, uygulama açılışında patlıyor.
+- **Aralığı güne yaymak veri uydurmaktır.** "Son 3 günde 9 kaza" ifadesini üç güne bölmek, metnin vermediği bir dağılım üretir — ile atanamayan bir figürü iller arasında bölüştürmemenin (ADR-019) tam olarak aynı gerekçesi. Kaybedilen şey aralığın **genişliği**, günün kendisi değil.
+- **Pencere referans günde biter.** "Son 24 saatte" ifadesinin işaret ettiği en savunulabilir tek gün, pencerenin kapandığı gün — yani metnin yazıldığı gün. "Dün" ise bir pencere değil, yer değiştirme; onu referans güne çekmek metindeki bilgiyi silerdi.
+- **Açık tarih göreli ifadeye üstün.** Günü adıyla söylemek, işaret etmekten daha kesin. Eşitler arasında metinde önce geçen kazanır.
+- **`DEFAULTED` kayıtlar düşürülmez.** Onları agregasyondan çıkarmak veriyi sessizce yok etmek olurdu (ADR-006). Kaynak alanı görünür olduğu için kullanıcı gönderim gününde oluşan yığılmayı görebiliyor.
+
+**Alternatifler.**
+- *UTC'de kalmak:* Değişiklik gerektirmezdi. Gece yarısına yakın girilen her bildirim bir gün geriye kayardı ve bu hata yalnızca günlük grafiklerde, sessizce görünürdü.
+- *Zaman dilimini kullanıcıdan/istekten almak:* Aynı ham kayıt farklı okuyucularda farklı güne düşer, reprocess belirsizleşirdi. Sistem tek bir ülke için (81 il) çalışıyor.
+- *Aralığı gerçek aralık olarak modellemek (başlangıç–bitiş):* En doğrusu; ama kayıt granülaritesini (ADR-019) ve şemayı değiştirir, tüm sorgu/agregasyon yüzeyine yayılır. ADR-014'ün "İleride" bölümünde zaten bu yol açık bırakılmıştı.
+- *Aralığı günlere eşit bölmek:* Metinde olmayan bir dağılım uydurur.
+
+**Sonuçlar.** `AnalysisService` metni **bir kez** normalize ediyor ve extractor'lar artık ham `String` değil `NormalizedText` alıyor (ADR-027, ADR-028'de kayıtlı niyet) — offset haritası her extractor için yeniden hesaplanmıyor. Sınıflandırılamayan kayıtlar da artık metinden tarihleniyor: olay tipinin tanınmaması, metnin tarih söyleyip söylemediğinden bağımsız. Buna bağlı olarak "tarih bulunamadı" uyarısı yalnızca gerçekten bulunamadığında veriliyor; tarihi açıkça yazan bir metne bu uyarıyı vermek okuyucuyu uyarıları göz ardı etmeye alıştırırdı. Türkçe ek desenleri **sayılı** tutuldu: serbest bir ek (`ay\p{L}*`) "son iki **ayrı** olayda" ifadesini iki aylık bir pencere, `dün\p{L}*` ise "**dünya**"yı dün sanıyordu — ikisi de sıradan cümleleri sessizce yanlış okuyordu.
+
+**İleride.** Aralık semantiği gerektiğinde `ResolvedDate` bir bitiş günü kazanabilir; bugün kaynağı ve offset'i taşıyor olması bu evrimin ön koşulunu karşılıyor. Zaman dilimi tek bir yapılandırma anahtarında toplandığı için çok ülkeli bir kuruluma geçiş tek noktadan yapılır. Göreli ifade sözlüğü (`dün`, `geçen hafta`, …) büyürse kataloğun yanında YAML'a taşınabilir — ADR-007'nin olay tipleri için kurduğu düzenin aynısı.

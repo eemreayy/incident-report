@@ -2,6 +2,8 @@ package com.emreay.incidentreport.analysis.extraction;
 
 import java.time.LocalDate;
 
+import com.emreay.incidentreport.analysis.text.NormalizedText;
+
 /**
  * Turns one free-form Turkish text into structured incidents.
  *
@@ -16,11 +18,13 @@ import java.time.LocalDate;
 public interface IncidentExtractor {
 
     /**
-     * @param rawText       the submitted text, exactly as stored
+     * @param text          the submitted text, normalized once for every extractor to share.
+     *                      It still knows where each character came from, so a keyword can be
+     *                      reported at its position in the text the user actually wrote (C-3)
      * @param referenceDate the date relative expressions resolve against, and the date used when
      *                      the text carries none. This is the report's <em>submission</em> date,
      *                      never today's — otherwise reprocessing an old report would move it to
      *                      the present (ADR-014).
      */
-    ExtractionResult extract(String rawText, LocalDate referenceDate);
+    ExtractionResult extract(NormalizedText text, LocalDate referenceDate);
 }

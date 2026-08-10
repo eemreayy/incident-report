@@ -417,14 +417,46 @@ Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (
 - **T-14 için iki tuzak teste yazıldı:** sözcüklü tarihten sızan sayılar (`3`, `2020`) ve sayı olup
   metrik olmayan ifadeler — üçüncü örnekteki `her iki ilde` ifadesi `2` üretiyor.
 
-### ☐ T-11 · Tarih çözümleme (EXPLICIT / RELATIVE / DEFAULTED)
+### ☑ T-11 · Tarih çözümleme (EXPLICIT / RELATIVE / DEFAULTED)
 Çoklu format (`20.04.2020`, `3 Mayıs 2020`, `2020-04-20`); göreli ifadeler (`Son 24 saatte`, `dün`,
 `bugün`) **referans tarihe** göre çözülür. Referans tarih ham bildirimin **gönderim tarihidir**,
 `now()` değil. Çözüm kaynağı kayıtta saklanır. Bu task'ta ayrıca TC-6'nın açık kalan kısmı
 (aralık semantiği, zaman dilimi ve gün sınırı) karara bağlanır.
 - **Bağımlılık:** T-09, T-10
-- **Karşılar:** FR-06 · **Çözer:** TC-6 · **İlgili karar:** ADR-014
+- **Karşılar:** FR-06 · **Çözer:** TC-6 · **İlgili karar:** ADR-014, ADR-029
 - **DoD:** Örnek 3 `RELATIVE` olarak çözülüyor (`DEFAULTED` değil); aynı bildirim reprocess edildiğinde tarih değişmiyor; timezone kararı ADR'ye yazılmış.
+- **Sonuç:** 297 test geçiyor, `analysis` coverage **%98**; `analysis.extraction` ve `analysis.config`
+  paketleri **%100**. `DateResolver` + `ResolvedDate` + `AnalysisConfiguration`; 43 tablo bazlı test.
+- **DoD fiilen doğrulandı (çalışan sistemde, Postgres'ten okunarak):** Dört metin gönderildi —
+
+  | Metin | `occurred_on` | `date_source` |
+  |---|---|---|
+  | `20.04.2020 tarihinde…` | 2020-04-20 | `EXPLICIT` |
+  | `3 Mayıs 2020 günü…` | 2020-05-03 | `EXPLICIT` |
+  | `Son 24 saatte…` (örnek 3) | gönderim günü | **`RELATIVE`** |
+  | tarihsiz metin | gönderim günü | `DEFAULTED` |
+
+  Örnek 3 son iki satırla aynı günü veriyor ama kaynağı farklı — ayrımın korunmasının sebebi tam
+  olarak bu.
+- **Reprocess kararlılığı** unit testle ve inşa gereği garanti: referans, değişmez ham belgenin
+  `submittedAt` alanından geliyor. **Uçtan uca doğrulanamadı — reprocess ucu T-19'da.**
+- **TC-6 karara bağlandı (ADR-029):** zaman dilimi `Europe/Istanbul` (yapılandırılabilir),
+  anlık zaman UTC kalıyor; göreli aralıklar tek güne indirgeniyor (pencere → referans gün,
+  yer değiştirme → kaydırılan gün); açık tarih göreliye üstün; `DEFAULTED` kayıtlar düşürülmüyor.
+- **Kod geçici bir varsayılanla yaşıyordu:** `AnalysisService` içinde `ZoneOffset.UTC` vardı — karar
+  değil, doldurulmuş boşluk. Türkiye saatiyle 00:30'da girilen bildirim UTC'de bir önceki güne
+  yazılıyordu; sapma yalnızca günlük grafiklerde ve sessizce görünürdü. Sınır vakası teste sabitlendi.
+- **Extractor'lar artık `NormalizedText` görüyor.** ADR-028'de kaydettiğim niyet uygulandı: metin
+  `AnalysisService` içinde **bir kez** normalize ediliyor, offset haritası her extractor için
+  yeniden hesaplanmıyor.
+- **Sınıflandırılamayan kayıt da metinden tarihleniyor.** Olay tipinin tanınmaması, metnin tarih
+  söyleyip söylemediğinden bağımsız. Buna bağlı olarak "tarih bulunamadı" uyarısı yalnızca gerçekten
+  bulunamadığında veriliyor — tarihi açıkça yazan metne bu uyarıyı vermek, okuyucuyu uyarıları göz
+  ardı etmeye alıştırırdı.
+- **Test iki sessiz yanlış okuma yakaladı:** serbest bırakılan Türkçe eki (`ay\p{L}*`)
+  "son iki **ayrı** olayda" ifadesini iki aylık pencere sanıyordu; `dün\p{L}*` ise "**dünya**"yı
+  dün sanıyordu. Ekler sayılı hâle getirildi. Ayrıca desenler `UNICODE_CHARACTER_CLASS` olmadan
+  "geçen" kelimesinin **içinde** sınır buluyordu.
 
 ### ☐ T-12 · İl çıkarımı
 81 il sözlüğü; ek ve apostrof toleransı (`Ankara'da`, `Kocaeli'nde`, `İzmir'de`, apostrofsuz yazımlar);
@@ -798,7 +830,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-3 | Sayı ↔ metrik eşleştirme | T-14 |
 | TC-4 | Türkçe bileşik sayı sözcükleri | **Karara bağlandı → ADR-028** · uygulaması T-10 |
 | TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
-| TC-6 | Tarih ayrıştırma ve göreli ifadeler | T-11 |
+| TC-6 | Tarih ayrıştırma ve göreli ifadeler | **Karara bağlandı → ADR-029** · uygulaması T-11 |
 | TC-7 | İl tanıma | T-12 |
 | TC-8 | Sınıflandırma skorlaması ve eşik | T-13 |
 | TC-9 | Mükerrer gönderim | T-19 |

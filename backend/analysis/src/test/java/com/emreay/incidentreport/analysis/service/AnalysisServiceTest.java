@@ -22,9 +22,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.emreay.incidentreport.analysis.text.NormalizedText;
+import com.emreay.incidentreport.analysis.text.SentenceSplitter;
+import com.emreay.incidentreport.analysis.text.TurkishTextNormalizer;
+import org.mockito.ArgumentCaptor;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +40,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,9 +53,10 @@ import static org.mockito.Mockito.when;
 class AnalysisServiceTest {
 
     private static final String REPORT_ID = "652f1a2b3c4d5e6f70819200";
-    private static final Instant SUBMITTED_AT = Instant.parse("2020-04-20T21:30:00Z");
+    private static final Instant SUBMITTED_AT = Instant.parse("2020-04-20T09:30:00Z");
     private static final LocalDate REFERENCE_DATE = LocalDate.of(2020, 4, 20);
 
+    private static final ZoneId REPORTING_ZONE = ZoneId.of("Europe/Istanbul");
     private static final Instant ANALYSED_AT = Instant.parse("2026-08-09T10:00:00Z");
 
     private IncidentExtractor extractor;
@@ -66,7 +73,9 @@ class AnalysisServiceTest {
         results = mock(AnalysisResultRepository.class);
         when(results.findByRawReportId(any())).thenReturn(Optional.empty());
         service = new AnalysisService(extractor, incidents, provinces, results,
-                Clock.fixed(ANALYSED_AT, ZoneOffset.UTC));
+                Clock.fixed(ANALYSED_AT, ZoneOffset.UTC),
+                new TurkishTextNormalizer(new SentenceSplitter()),
+                REPORTING_ZONE);
     }
 
     /**
@@ -75,18 +84,47 @@ class AnalysisServiceTest {
      */
     @Test
     void readsTheTextAgainstTheReportsOwnSubmissionDate() {
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(List.of(), List.of()));
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(List.of(), List.of()));
 
         service.analyze(REPORT_ID, "Ankara'da 15 vaka", SUBMITTED_AT);
 
-        verify(extractor).extract("Ankara'da 15 vaka", REFERENCE_DATE);
+        ArgumentCaptor<NormalizedText> text = ArgumentCaptor.forClass(NormalizedText.class);
+        verify(extractor).extract(text.capture(), eq(REFERENCE_DATE));
+        assertThat(text.getValue().original()).isEqualTo("Ankara'da 15 vaka");
+    }
+
+    /**
+     * Which calendar day a submission belongs to is a local question (ADR-029). This report was
+     * filed at 09:30 UTC, so the two zones agree; the one below is the case where they do not.
+     */
+    @Test
+    void readsTheTextAgainstTheSubmissionDayInTheReportingZone() {
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(List.of(), List.of()));
+
+        // 21:30 UTC on the 20th is 00:30 on the 21st in Istanbul. UTC would file this report a day
+        // early, on a day the user in Turkey had already finished.
+        service.analyze(REPORT_ID, "Ankara'da 15 vaka", Instant.parse("2020-04-20T21:30:00Z"));
+
+        verify(extractor).extract(any(), eq(LocalDate.of(2020, 4, 21)));
+    }
+
+    @Test
+    void handsTheExtractorTextItCanMatchAgainstWithoutLosingTheOriginal() {
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(List.of(), List.of()));
+
+        service.analyze(REPORT_ID, "İZMİR'de   sel\nvar", SUBMITTED_AT);
+
+        ArgumentCaptor<NormalizedText> text = ArgumentCaptor.forClass(NormalizedText.class);
+        verify(extractor).extract(text.capture(), any());
+        assertThat(text.getValue().value()).isEqualTo("izmir'de sel var");
+        assertThat(text.getValue().original()).isEqualTo("İZMİR'de   sel\nvar");
     }
 
     @Test
     void storesWhatWasExtractedAndLinksItBackToTheReport() {
         Province ankara = province(6, "Ankara");
         when(provinces.findById((short) 6)).thenReturn(Optional.of(ankara));
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SINGLE,
                         (short) 6, null, "EPIDEMIC", ClassificationStatus.CLASSIFIED,
                         Map.of("NEW_CASE", 15, "DEATH", 1),
@@ -113,7 +151,7 @@ class AnalysisServiceTest {
         Province bursa = province(16, "Bursa");
         Province kocaeli = province(41, "Kocaeli");
         when(provinces.findAllById(any())).thenReturn(List.of(bursa, kocaeli));
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.RELATIVE, ProvinceScope.SHARED,
                         null, Set.of((short) 16, (short) 41), "TRAFFIC_ACCIDENT",
                         ClassificationStatus.CLASSIFIED, Map.of("INJURED", 10), List.of())),
@@ -129,7 +167,7 @@ class AnalysisServiceTest {
 
     @Test
     void aReportWithNoProvinceIsStillStored() {
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(unclassified()), List.of("nothing matched")));
 
         AnalysisOutcome outcome = service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
@@ -149,7 +187,7 @@ class AnalysisServiceTest {
     @Test
     void clearsWhatWasDerivedBeforeWritingTheNewResult() {
         when(incidents.deleteByRawReportId(REPORT_ID)).thenReturn(3L);
-        when(extractor.extract(anyString(), any()))
+        when(extractor.extract(any(), any()))
                 .thenReturn(new ExtractionResult(List.of(unclassified()), List.of()));
 
         service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
@@ -161,7 +199,7 @@ class AnalysisServiceTest {
     /** Finding nothing is a legitimate answer, not a failure. */
     @Test
     void anEmptyResultStoresNothingAndSaysSo() {
-        when(extractor.extract(anyString(), any()))
+        when(extractor.extract(any(), any()))
                 .thenReturn(new ExtractionResult(List.of(), List.of("nothing recognised")));
 
         AnalysisOutcome outcome = service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
@@ -179,7 +217,7 @@ class AnalysisServiceTest {
     @Test
     void refusesAProvinceCodeThatDoesNotExist() {
         when(provinces.findById((short) 99)).thenReturn(Optional.empty());
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SINGLE,
                         (short) 99, null, "EPIDEMIC", ClassificationStatus.CLASSIFIED, Map.of(), List.of())),
                 List.of()));
@@ -193,7 +231,7 @@ class AnalysisServiceTest {
     void refusesASharedFigureNamingAProvinceThatDoesNotExist() {
         Province bursa = province(16, "Bursa");
         when(provinces.findAllById(any())).thenReturn(List.of(bursa));
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.RELATIVE, ProvinceScope.SHARED,
                         null, Set.of((short) 16, (short) 99), "TRAFFIC_ACCIDENT",
                         ClassificationStatus.CLASSIFIED, Map.of(), List.of())),
@@ -207,7 +245,7 @@ class AnalysisServiceTest {
     /** A SINGLE record without a province contradicts itself; it must not reach the database. */
     @Test
     void refusesASingleIncidentWithNoProvince() {
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SINGLE,
                         null, null, "EPIDEMIC", ClassificationStatus.CLASSIFIED, Map.of(), List.of())),
                 List.of()));
@@ -223,7 +261,7 @@ class AnalysisServiceTest {
      */
     @Test
     void writesDownHowTheRunWent() {
-        when(extractor.extract(anyString(), any())).thenReturn(new ExtractionResult(
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
                 List.of(unclassified()), List.of("nothing matched", "date was assumed")));
 
         service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
@@ -257,7 +295,7 @@ class AnalysisServiceTest {
     void reprocessingOverwritesTheExistingAnswerInsteadOfAddingOne() {
         AnalysisResult existing = AnalysisResult.failed(REPORT_ID, SUBMITTED_AT, "earlier failure");
         when(results.findByRawReportId(REPORT_ID)).thenReturn(Optional.of(existing));
-        when(extractor.extract(anyString(), any()))
+        when(extractor.extract(any(), any()))
                 .thenReturn(new ExtractionResult(List.of(unclassified()), List.of()));
 
         service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
