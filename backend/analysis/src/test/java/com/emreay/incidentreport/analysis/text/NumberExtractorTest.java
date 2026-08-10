@@ -104,6 +104,23 @@ class NumberExtractorTest {
         assertThat(valuesIn(text)).isEmpty();
     }
 
+    @ParameterizedTest(name = "\"{0}\" has no numbers")
+    @ValueSource(strings = {
+            "Kaza, D-100 karayolunun İnegöl mevkiinde meydana geldi",
+            "E-80 karayolunda kaza oldu",
+            "O-4 otoyolunda trafik kazası"
+    })
+    @DisplayName("a road designator is not a count")
+    void routeCodesAreNotCounts(String text) {
+        assertThat(valuesIn(text)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a route code next to a real count still yields only the count")
+    void routeCodeDoesNotSwallowANearbyCount() {
+        assertThat(valuesIn("D-100 karayolunda 3 kişi yaralandı")).containsExactly(3L);
+    }
+
     @Test
     @DisplayName("a date is one date, not three numbers")
     void datesAreNotShreddedIntoNumbers() {

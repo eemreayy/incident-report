@@ -34,6 +34,13 @@ public class NumberExtractor {
     private static final Pattern DATE_LIKE = Pattern.compile(
             "\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}");
 
+    /**
+     * A road designator, so its digits are not mistaken for a count: {@code D-100} is the state
+     * highway D-100, not one hundred of anything. Turkish road codes are a short letter prefix and
+     * digits joined by a hyphen with no space ({@code D-100}, {@code E-80}, {@code O-4}).
+     */
+    private static final Pattern ROUTE_CODE = Pattern.compile("\\b\\p{L}{1,3}-\\d+\\b");
+
     /** A digit group, with Turkish thousands separators or a decimal part. */
     private static final Pattern DIGIT_GROUP = Pattern.compile("\\d{1,3}(?:\\.\\d{3})+|\\d+(?:,\\d+)?");
 
@@ -118,16 +125,20 @@ public class NumberExtractor {
 
     /** The pieces a number can be built from, in the order they appear. */
     private List<Atom> atomsOf(String text) {
-        List<int[]> dates = new ArrayList<>();
+        List<int[]> excluded = new ArrayList<>();
         Matcher dateMatcher = DATE_LIKE.matcher(text);
         while (dateMatcher.find()) {
-            dates.add(new int[]{dateMatcher.start(), dateMatcher.end()});
+            excluded.add(new int[]{dateMatcher.start(), dateMatcher.end()});
+        }
+        Matcher routeMatcher = ROUTE_CODE.matcher(text);
+        while (routeMatcher.find()) {
+            excluded.add(new int[]{routeMatcher.start(), routeMatcher.end()});
         }
 
         List<Atom> atoms = new ArrayList<>();
         Matcher matcher = ATOM.matcher(text);
         while (matcher.find()) {
-            if (overlapsDate(dates, matcher.start(), matcher.end())) {
+            if (overlapsAny(excluded, matcher.start(), matcher.end())) {
                 continue;
             }
             Atom atom = atomOf(matcher.group(), matcher.start(), matcher.end());
@@ -173,8 +184,8 @@ public class NumberExtractor {
         return new Atom(0, start, end, NO_ADDITIVE_YET, false, true, true);
     }
 
-    private boolean overlapsDate(List<int[]> dates, int start, int end) {
-        return dates.stream().anyMatch(date -> start < date[1] && date[0] < end);
+    private boolean overlapsAny(List<int[]> spans, int start, int end) {
+        return spans.stream().anyMatch(span -> start < span[1] && span[0] < end);
     }
 
     private boolean onlySpaceBetween(String text, int from, int to) {
