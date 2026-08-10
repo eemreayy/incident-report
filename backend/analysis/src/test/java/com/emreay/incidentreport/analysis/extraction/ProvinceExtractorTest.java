@@ -1,6 +1,7 @@
 package com.emreay.incidentreport.analysis.extraction;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,10 +22,16 @@ class ProvinceExtractorTest {
      * A slice of the reference data: the provinces the source examples use, the longest names, and
      * the short ones that are ordinary Turkish words as well.
      */
-    private static final List<String> PROVINCES = List.of(
-            "Ankara", "İzmir", "Bursa", "Kocaeli", "İstanbul", "Aksaray",
-            "Afyonkarahisar", "Kahramanmaraş", "Şanlıurfa", "Çanakkale",
-            "Van", "Ordu", "Muş", "Rize", "Hatay", "Mersin", "Adana");
+    private static final Map<Short, String> PROVINCES = Map.ofEntries(
+            Map.entry((short) 6, "Ankara"), Map.entry((short) 35, "İzmir"),
+            Map.entry((short) 16, "Bursa"), Map.entry((short) 41, "Kocaeli"),
+            Map.entry((short) 34, "İstanbul"), Map.entry((short) 68, "Aksaray"),
+            Map.entry((short) 3, "Afyonkarahisar"), Map.entry((short) 46, "Kahramanmaraş"),
+            Map.entry((short) 63, "Şanlıurfa"), Map.entry((short) 17, "Çanakkale"),
+            Map.entry((short) 65, "Van"), Map.entry((short) 52, "Ordu"),
+            Map.entry((short) 49, "Muş"), Map.entry((short) 53, "Rize"),
+            Map.entry((short) 31, "Hatay"), Map.entry((short) 33, "Mersin"),
+            Map.entry((short) 1, "Adana"));
 
     private final TurkishTextNormalizer normalizer = new TurkishTextNormalizer(new SentenceSplitter());
     private final ProvinceExtractor extractor = new ProvinceExtractor(PROVINCES, normalizer);
@@ -181,14 +188,14 @@ class ProvinceExtractorTest {
     @Test
     @DisplayName("an empty reference table is a startup failure, not a silent no-op")
     void refusesToBeBuiltWithNoProvinces() {
-        assertThatThrownBy(() -> new ProvinceExtractor(List.of(), normalizer))
+        assertThatThrownBy(() -> new ProvinceExtractor(Map.of(), normalizer))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("reference data");
     }
 
     @Test
     void aMentionRangeMustMakeSense() {
-        assertThatThrownBy(() -> new ProvinceMention("Ankara", 4, 4))
+        assertThatThrownBy(() -> new ProvinceMention((short) 6, "Ankara", 4, 4))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("[4, 4)");
     }

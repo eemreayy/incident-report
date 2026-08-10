@@ -31,10 +31,13 @@ final class KeywordMatcher {
      * "kaybettiler" is kaybet + ti + ler.
      *
      * <p>The bare vowel comes last: it matches the most and would otherwise swallow the start of a
-     * longer ending.
+     * longer ending. The converb endings — "-erek", "-erken", "-ince" — are here because the source
+     * document uses one: "hayatını kaybederken" is a death, and without "-erken" the sentence
+     * hands its figure to the next keyword along instead.
      */
     private static final String INFLECTION = "(?:l[ae]r|l[ıiuü]k?|d[aeıiuü]n?|t[aeıiuü]n?"
-            + "|n[ıiuü]n|n[ıiuü]|s[ıiuü]|[ıiuü]yor|m[ae]k|m[ıiuü]ş|[ae]n|y[ae]|[ıiuü]n|[aeıiuü]){0,3}";
+            + "|[ae]rken|[ae]r[ae]k|[ıiuü]nc[ae]|n[ıiuü]n|n[ıiuü]|s[ıiuü]|[ıiuü]yor|m[ae]k"
+            + "|m[ıiuü]ş|[ae]n|y[ae]|[ıiuü]p|[ıiuü]n|[aeıiuü]){0,3}";
 
     private final Pattern pattern;
 
@@ -47,27 +50,57 @@ final class KeywordMatcher {
         // single spaces, but the catalog is hand-written and need not be. The words themselves are
         // quoted - the catalog is edited by hand, and a stray character in it should not become a
         // regex that matches something else entirely.
-        String body = Arrays.stream(keyword.trim().split("\\s+", -1))
-                .map(Pattern::quote)
-                .collect(Collectors.joining("\\s+"));
+        String[] words = keyword.trim().split("\\s+", -1);
+        words[words.length - 1] = softenable(words[words.length - 1]);
+        String body = String.join("\\s+", words);
         this.pattern = Pattern.compile("\\b" + body + INFLECTION + "\\b", UNICODE);
     }
 
     /**
-     * Every occurrence, positioned in the raw text rather than the normalized one — the interface
-     * highlights what the user wrote, not what we made of it (C-3).
+     * Every occurrence, carrying both positions.
+     *
+     * <p>The keyword itself is positioned in the <em>raw</em> text, because the interface highlights
+     * what the user wrote rather than what we made of it (C-3). The normalized position comes along
+     * because attribution reasons in normalized space — which sentence a hit is in, how far it is
+     * from a number — and deriving one from the other after the fact is not possible: collapsed
+     * whitespace means several normalized characters can share a raw offset.
      */
-    List<ExtractedKeyword> findIn(NormalizedText text, KeywordRole role) {
-        List<ExtractedKeyword> found = new ArrayList<>();
+    List<KeywordHit> findIn(NormalizedText text, KeywordRole role) {
+        List<KeywordHit> found = new ArrayList<>();
         Matcher matcher = pattern.matcher(text.value());
 
         while (matcher.find()) {
-            found.add(new ExtractedKeyword(
+            ExtractedKeyword keyword = new ExtractedKeyword(
                     text.originalTextIn(matcher.start(), matcher.end()),
                     role,
                     text.sourceStart(matcher.start()),
-                    text.sourceEnd(matcher.end() - 1)));
+                    text.sourceEnd(matcher.end() - 1));
+            found.add(new KeywordHit(keyword, matcher.start(), matcher.end()));
         }
         return found;
+    }
+
+    /**
+     * A stem ending in a hard consonant softens before a vowel: "kaybet" becomes "kaybed" in
+     * "hayatını kaybederken". Without this the catalog would have to list both spellings of every
+     * verb it uses, and the one it lists would be the one that loses.
+     */
+    private String softenable(String word) {
+        int last = word.length() - 1;
+        String soft = switch (word.charAt(last)) {
+            case 'p' -> "b";
+            case 'ç' -> "c";
+            case 't' -> "d";
+            case 'k' -> "ğg";
+            default -> "";
+        };
+        if (soft.isEmpty()) {
+            return Pattern.quote(word);
+        }
+        return Pattern.quote(word.substring(0, last)) + "[" + word.charAt(last) + soft + "]";
+    }
+
+    /** One occurrence: what to show the user, and where it sits in the text we reason about. */
+    record KeywordHit(ExtractedKeyword keyword, int start, int end) {
     }
 }

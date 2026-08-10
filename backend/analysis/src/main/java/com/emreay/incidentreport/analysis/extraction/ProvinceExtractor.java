@@ -1,7 +1,6 @@
 package com.emreay.incidentreport.analysis.extraction;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -49,24 +48,23 @@ public class ProvinceExtractor {
             "\\s*(?:ilçe|semt|mahalle|belde|köy|bucak|beldesi)\\p{L}*\\b", UNICODE);
 
     private final Pattern pattern;
-    private final Map<String, String> canonicalByNormalized;
+    private final Map<String, Province> byNormalizedName;
 
     /**
-     * @param provinceNames the canonical names, as the reference data spells them
-     * @param normalizer    the same normalizer the text goes through, so a name and its mention are
-     *                      reduced by identical rules rather than by two similar-looking ones
+     * @param provinces  the reference data: licence-plate code to canonical name
+     * @param normalizer the same normalizer the text goes through, so a name and its mention are
+     *                   reduced by identical rules rather than by two similar-looking ones
      */
-    public ProvinceExtractor(Collection<String> provinceNames, TurkishTextNormalizer normalizer) {
-        if (provinceNames.isEmpty()) {
+    public ProvinceExtractor(Map<Short, String> provinces, TurkishTextNormalizer normalizer) {
+        if (provinces.isEmpty()) {
             throw new IllegalArgumentException("no provinces to recognise; is the reference data loaded?");
         }
 
-        this.canonicalByNormalized = new HashMap<>();
-        for (String name : provinceNames) {
-            canonicalByNormalized.put(normalizer.normalize(name).value(), name);
-        }
+        this.byNormalizedName = new HashMap<>();
+        provinces.forEach((code, name) ->
+                byNormalizedName.put(normalizer.normalize(name).value(), new Province(code, name)));
 
-        String alternatives = canonicalByNormalized.keySet().stream()
+        String alternatives = byNormalizedName.keySet().stream()
                 .sorted(Comparator.comparingInt(String::length).reversed())
                 .map(Pattern::quote)
                 .reduce((a, b) -> a + "|" + b)
@@ -90,10 +88,15 @@ public class ProvinceExtractor {
             if (isDistrict(value, matcher.end())) {
                 continue;
             }
+            Province province = byNormalizedName.get(matcher.group(1));
             mentions.add(new ProvinceMention(
-                    canonicalByNormalized.get(matcher.group(1)), matcher.start(), matcher.end()));
+                    province.code(), province.name(), matcher.start(), matcher.end()));
         }
         return List.copyOf(mentions);
+    }
+
+    /** Reference data as this class needs it, without dragging the JPA entity into extraction. */
+    private record Province(short code, String name) {
     }
 
     private boolean isDistrict(String value, int from) {

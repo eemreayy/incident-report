@@ -1,6 +1,7 @@
 package com.emreay.incidentreport.analysis.repository;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,8 +52,8 @@ class ProvinceReferenceDataTest {
     private ProvinceExtractor extractor() {
         if (extractor == null) {
             normalizer = new TurkishTextNormalizer(new SentenceSplitter());
-            extractor = new ProvinceExtractor(
-                    provinces.findAll().stream().map(Province::getName).toList(), normalizer);
+            extractor = new ProvinceExtractor(provinces.findAll().stream()
+                    .collect(Collectors.toMap(Province::getCode, Province::getName)), normalizer);
         }
         return extractor;
     }

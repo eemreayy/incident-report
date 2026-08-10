@@ -68,10 +68,10 @@ public class EventTypeClassifier {
             int score = 0;
 
             for (KeywordMatcher matcher : entry.getValue()) {
-                List<ExtractedKeyword> hits = matcher.findIn(text, KeywordRole.EVENT_TYPE);
+                List<KeywordMatcher.KeywordHit> hits = matcher.findIn(text, KeywordRole.EVENT_TYPE);
                 if (!hits.isEmpty()) {
                     score++;
-                    evidence.addAll(hits);
+                    hits.forEach(hit -> evidence.add(hit.keyword()));
                 }
             }
 

@@ -519,7 +519,7 @@ korunur, cevaba uyarı eklenir.
   kararı; extractor'ı yarım bağlamak yerine tüm parçalar hazırken birleştirmek daha az risk taşıyor.
   T-10, T-12 ve T-13 bileşenleri T-14'te birleşecek.
 
-### ☐ T-14 · Metrik eşleştirme ve il kapsamı
+### ☑ T-14 · Metrik eşleştirme ve il kapsamı
 Sayı ↔ metrik eşleştirmesi (cümle içi yakınlık kuralları). Cümlede birden fazla il varsa sayıların doğru
 ile bağlanması (`"Bursa'da 8, Kocaeli'nde 6 trafik kazası"`). İle atanamayan toplamların
 (`"her iki ilde toplam 10 kişi"`) T-04'te kararlaştırılan modele göre temsili — **çift sayım yok**.
@@ -528,9 +528,38 @@ ile bağlanması (`"Bursa'da 8, Kocaeli'nde 6 trafik kazası"`). İle atanamayan
   metni yeniden aramadan yapmak zorunda (TC-18): Türkçe ek ve apostrof toleransı yüzünden
   istemcide arama yanlış yeri işaretler.
 - **Bağımlılık:** T-04, T-10, T-12, T-13
-- **Karşılar:** FR-03, FR-07, FR-17 · **Çözer:** TC-3
+- **Karşılar:** FR-03, FR-07, FR-17 · **Çözer:** TC-3 · **İlgili karar:** ADR-032
 - **DoD:** Örnek 3'ün Bursa/Kocaeli kırılımı doğru; toplam yaralı hiçbir ile iki kez yazılmıyor;
   anahtar kelime offset'i ham metinde doğru aralığı işaret ediyor.
+- **Sonuç:** 398 test geçiyor, `analysis` coverage **%99**; `analysis.extraction` %99,
+  `analysis.config` %100. `CatalogIncidentExtractor` + `ExtractionWarnings` + `KeywordMatcherTest`.
+- **DoD fiilen doğrulandı — PRD §11 altın tablosunun tamamı, çalışan sistemde Postgres'ten okunarak:**
+
+  | Örnek | Olay tipi | Tarih | Kapsam / İl | Metrikler |
+  |---|---|---|---|---|
+  | 1 | `EPIDEMIC` | 2020-04-20 `EXPLICIT` | `SINGLE` Ankara | `NEW_CASE`=15, `DEATH`=1, `RECOVERED`=5 |
+  | 2 | `EARTHQUAKE` | 2020-05-03 `EXPLICIT` | `SINGLE` İzmir | `DAMAGED_BUILDING`=12, `DEATH`=2, `RESCUED`=9, `INJURED`=40 |
+  | 3 | `TRAFFIC_ACCIDENT` | gönderim günü `RELATIVE` | `SINGLE` Bursa | `ACCIDENT_COUNT`=8, `DEATH`=1 |
+  | 3 | `TRAFFIC_ACCIDENT` | " | `SINGLE` Kocaeli | `ACCIDENT_COUNT`=6, `DEATH`=2 |
+  | 3 | `TRAFFIC_ACCIDENT` | " | **`SHARED` {Bursa, Kocaeli}** | `INJURED`=10 |
+
+- **En önemli hatayı karıştırma testi yakaladı.** İlk yazdığım il kuralı "metinde en son geçen il"di
+  ve **üç örnekte de doğru çalışıyordu**. Cümleler karıştırılınca çöktü: örnek 1'in ili son cümleye
+  taşınınca ilk iki figür ilsiz kalıyordu — yani FR-04 ihlali. Kural değişti: cümlenin kendi ili →
+  metnin tek ili → aksi hâlde `UNKNOWN`. Birden fazla il varken tahmin edilmiyor.
+- **Bulunma hâli sayılan şey değil.** "2 kişi **kazalarda** hayatını kaybetti" iki ölüdür; ama
+  "kazalarda" sayıya "hayatını kaybetti"den daha yakın. Salt yakınlık bu cümleyi yanlış okuyor.
+- **İşaretçinin kendi sayısı da metrik değil.** "Her **iki** ilde toplam **10**" ifadesindeki iki,
+  ili sayıyor; ilk sürümde `INJURED`=12 çıkıyordu. Tarih rakamlarını dışlamakla aynı sınıftan hata.
+- **Türkçe morfolojisi iki ek daha istedi:** `hayatını kaybet` gövdesi metinde "kaybed**erken**"
+  olarak geçiyor — hem ulaç eki (`-erken`) hem son ses yumuşaması (t→d). Kurala bağlandı; katalog
+  her fiili iki yazımla listelemek zorunda değil.
+- **`UnclassifiedIncidentExtractor` kaldırıldı.** Sınıflandırılamayan yol artık asıl extractor'ın
+  içinde; aynı arayüzü uygulayan ikinci bir bean sonraki okuyucuya "hangisi çalışıyor" sorusunu
+  sordururdu. Uyarı metinleri `ExtractionWarnings` altında toplandı.
+- **`KeywordMatcher` hem ham hem normalize konumu taşıyor.** Kullanıcıya gösterilen konum ham
+  metinde (C-3), akıl yürütme normalize metinde; boşluk sadeleşmesi yüzünden biri diğerinden
+  **türetilemiyor** — ilk sürümdeki doğrusal geri arama bu yüzden yanlıştı.
 
 ### ☐ T-15 · Golden testler
 PRD §11'deki üç örnek metin uçtan uca doğrulanır. Her örnek ayrıca **cümleleri karıştırılmış** halleriyle
@@ -873,7 +902,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 |---|---|---|
 | TC-1 | Kayıt granülaritesi | T-04 |
 | TC-2 | Metrik veri modeli | T-04 |
-| TC-3 | Sayı ↔ metrik eşleştirme | T-14 |
+| TC-3 | Sayı ↔ metrik eşleştirme | **Karara bağlandı → ADR-032** · uygulaması T-14 |
 | TC-4 | Türkçe bileşik sayı sözcükleri | **Karara bağlandı → ADR-028** · uygulaması T-10 |
 | TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
 | TC-6 | Tarih ayrıştırma ve göreli ifadeler | **Karara bağlandı → ADR-029** · uygulaması T-11 |

@@ -1,7 +1,8 @@
 package com.emreay.incidentreport.analysis.config;
 
 import java.time.ZoneId;
-import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -41,7 +42,8 @@ public class AnalysisConfiguration {
      */
     @Bean
     ProvinceExtractor provinceExtractor(ProvinceRepository provinces, TurkishTextNormalizer normalizer) {
-        List<String> names = provinces.findAll().stream().map(Province::getName).toList();
-        return new ProvinceExtractor(names, normalizer);
+        Map<Short, String> reference = provinces.findAll().stream()
+                .collect(Collectors.toMap(Province::getCode, Province::getName));
+        return new ProvinceExtractor(reference, normalizer);
     }
 }

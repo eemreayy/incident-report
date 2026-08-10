@@ -839,3 +839,31 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `EventTypeClassifier` her zaman **en az bir** sonuç döndürür, dolayısıyla çağıranın "hiç sonuç yok" durumunu ayrıca ele alması gerekmez. Katalog anahtar kelimeleri bilerek gövde olarak yazılıyor (`hayatını kaybet`, `kurtarıl`), bu yüzden Türkçe ekler üzerinden eşleşiyorlar — ve ekler yine **sayılı**: serbest bir ek `testere` kelimesini `test` anahtarı sanardı; bu tuzağın hattaki üçüncü görünüşü (ADR-029, ADR-030). Kataloğun ifade edemediği bir çekim, koda değil **kataloğa** eklenir (ADR-007). Sınıflandırıcı bu task'ta boru hattına **bağlanmadı**: bir kaydın hangi metriklerle ve hangi il kapsamıyla oluşacağı T-14'ün kararı, ve extractor'ı yarım bağlamak yerine tüm parçalar hazırken birleştirmek daha az risk taşıyor.
 
 **İleride.** Katalog büyüyüp anahtar kelimeler çakışmaya başlarsa, kelime başına bir **ağırlık** alanı kataloğa eklenebilir — karar yine yapılandırmada kalır, kodda değil. Sıralamanın "toplam kanıt uzunluğu" ölçütü, gerekirse kelime uzunluğu yerine açık bir spesifiklik alanıyla değiştirilebilir. Kanıt konumları bugünden saklandığı için, ileride bir güven göstergesi istenirse (soluk seri, uyarı rozeti) veri zaten yerinde olur.
+
+---
+
+## ADR-032 — Sayı ↔ Metrik Eşleştirme ve İl Kapsamının Belirlenmesi
+
+**Karar.** Bir sayı, **aynı cümlede kendisinden sonra gelen en yakın** metrik anahtar kelimesine bağlanır; yoksa kendisinden önceki en yakına. Bulunduğu hâldeki (`-da/-de/-ta/-te`) metrik anahtar kelimeleri **durum bildirir**, sayılan şeyi değil, ve aday sayılmaz. Bir sayı **tek bir kayda** girer: en güçlü sınıflanmış olay tipine. İl ataması **cümle sırasından bağımsızdır**: paylaşım işaretçisi varsa `SHARED`, yoksa cümlenin kendi ili, yoksa metnin baştan sona tek ili, o da yoksa `UNKNOWN`. Tarih ifadelerinin ve paylaşım işaretçisinin **kendi rakamları metrik değeri değildir**. TC-3 böylece karara bağlanır.
+
+**Bağlam.** T-09…T-13 bir metnin *içinde ne olduğunu* çıkarıyordu: bir tarih, birkaç il, birkaç olay tipi, birkaç sayı. Hiçbiri henüz bir kayıt değil — çünkü kayıt, hangi sayının hangi ilin hangi olayına ait hangi metriği olduğunu söylüyor, ve metin bunu yalnızca **yakınlık** üzerinden söylüyor. Kaynak dokümanın üçüncü örneği bu soruyu tek başına dört ayrı yerden zorluyor.
+
+**Gerekçe.**
+- **İleri yön anlamı taşır.** Türkçe sayılan şeyi sayıdan sonra koyar: "15 yeni vaka", "dokuz kişi enkazdan sağ olarak kurtarıldı". Geriye bakış yalnızca devrik kullanımları ("yaralı sayısı 12") yakalamak için var.
+- **Bulunma hâli sayılan şey değildir.** "2 kişi **kazalarda** hayatını kaybetti" iki ölüdür, iki kaza değil — ama "kazalarda" sayıya "hayatını kaybetti"den daha yakın. Salt yakınlık bu cümleyi yanlış okur; ekin kendisi doğru okumayı veriyor.
+- **İl ataması sıradan bağımsız olmak zorunda (FR-04).** İlk yazdığım kural "metinde en son geçen il"di ve sıralı üç örnekte de doğru çalışıyordu. Cümleler karıştırıldığında çöktü: örnek 1'in ili son cümleye taşındığında ilk iki figür ilsiz kalıyordu. Bu yüzden kural şu oldu: cümlenin kendi ili, o yoksa **metnin tek ili**. Birden fazla il varken ve cümle hiçbirini anmıyorken tahmin edilmiyor — `UNKNOWN` kalıyor. Sıralamaya bakan bir kural bu örneklerde çalışıp gerçek metinlerde sessizce kayar.
+- **Paylaşılan toplam bölüştürülmüyor, düşürülmüyor.** "Her iki ilde toplam 10 kişi yaralı" ne beşer beşer dağıtılıyor ne de atılıyor; ayrı bir `SHARED` kayıt oluyor (ADR-019).
+- **İşaretçinin kendi sayısı da metrik değil.** "Her **iki** ilde toplam **10**" ifadesindeki iki, ili sayar. İlk sürümde `INJURED` 12 çıkıyordu — tarih rakamlarını dışlamakla aynı sınıftan bir hata.
+- **Bir sayı bir kayda.** Anahtar kelimelerin çoğu (ör. `hayatını kaybet`) birden çok olay tipinde ortak; sayı en güçlü sınıflanmış tipe gider, aksi hâlde aynı figür iki kayıtta birden sayılırdı.
+- **Türkçe morfolojisi iki ek daha istedi.** `hayatını kaybet` gövdesi metinde "kaybed**erken**" olarak geçiyor: hem ulaç eki (`-erken`) hem de son ses yumuşaması (t→d). Bunlar kurala bağlandı; kataloğun her fiili iki yazımla listelemesi gerekmiyor.
+
+**Alternatifler.**
+- *Bire bir atama (her sayıya bir anahtar kelime, en küçük toplam mesafe):* "1 ve 2 kişi … hayatını kaybetti" cümlesinde ikisini farklı metriklere dağıtırdı; oysa ikisi de ölü.
+- *Cümlenin son metrik anahtar kelimesini yüklem saymak:* Örnek 3'te doğru, örnek 2'de yanlış — orada iki figür iki ayrı metriğe gidiyor.
+- *Paylaşılan toplamı illere bölüştürmek:* Metnin vermediği bir dağılım uydurur (ADR-019).
+- *Paylaşılan toplamı atmak:* İl toplamları ile genel toplam bir daha uzlaşmazdı.
+- *"En son geçen il" kuralını korumak:* Kod daha kısaydı ve üç örnekte de geçiyordu; FR-04'ü ihlal ediyordu ve bunu ancak karıştırma testi gösterdi.
+
+**Sonuçlar.** `CatalogIncidentExtractor` boru hattının tek girişi oldu ve `UnclassifiedIncidentExtractor` **kaldırıldı** — aynı arayüzü uygulayan ikinci bir bean, sonraki okuyucuya "hangisi çalışıyor" sorusunu sordururdu; uyarı metinleri `ExtractionWarnings` altında toplandı. `KeywordMatcher` artık hem ham hem normalize konumu taşıyor: kullanıcıya gösterilen konum ham metinde (C-3), akıl yürütme ise normalize metinde yapılıyor ve boşluk sadeleşmesi yüzünden biri diğerinden **türetilemiyor**. Kaynak dokümandaki üç örneğin tamamı, çalışan sistemde PRD §11 tablosuyla birebir eşleşiyor. `analysis.extraction` %99 kapsamda.
+
+**İleride.** Metrik anahtar kelimelerine kataloğun kendisinde bir **birim** alanı (kişi / bina / olay) eklenirse, "kazalarda" ayrımı ek tahmininden çıkıp doğrudan veriye dayanır. Türkçe ek listesi büyüdükçe bir morfoloji kütüphanesi (Zemberek) değerlendirilebilir; bugünkü liste sınırlı ve her maddesi gerçek bir metinden geliyor. Cümle başına ayrı tarih çözümü (bugün rapor düzeyinde tek tarih) granülariteyi bozmadan eklenebilir — `ResolvedDate` zaten konum taşıyor.
