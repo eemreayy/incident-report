@@ -787,3 +787,29 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `AnalysisService` metni **bir kez** normalize ediyor ve extractor'lar artık ham `String` değil `NormalizedText` alıyor (ADR-027, ADR-028'de kayıtlı niyet) — offset haritası her extractor için yeniden hesaplanmıyor. Sınıflandırılamayan kayıtlar da artık metinden tarihleniyor: olay tipinin tanınmaması, metnin tarih söyleyip söylemediğinden bağımsız. Buna bağlı olarak "tarih bulunamadı" uyarısı yalnızca gerçekten bulunamadığında veriliyor; tarihi açıkça yazan bir metne bu uyarıyı vermek okuyucuyu uyarıları göz ardı etmeye alıştırırdı. Türkçe ek desenleri **sayılı** tutuldu: serbest bir ek (`ay\p{L}*`) "son iki **ayrı** olayda" ifadesini iki aylık bir pencere, `dün\p{L}*` ise "**dünya**"yı dün sanıyordu — ikisi de sıradan cümleleri sessizce yanlış okuyordu.
 
 **İleride.** Aralık semantiği gerektiğinde `ResolvedDate` bir bitiş günü kazanabilir; bugün kaynağı ve offset'i taşıyor olması bu evrimin ön koşulunu karşılıyor. Zaman dilimi tek bir yapılandırma anahtarında toplandığı için çok ülkeli bir kuruluma geçiş tek noktadan yapılır. Göreli ifade sözlüğü (`dün`, `geçen hafta`, …) büyürse kataloğun yanında YAML'a taşınabilir — ADR-007'nin olay tipleri için kurduğu düzenin aynısı.
+
+---
+
+## ADR-030 — İl Tanıma: Referans Veriden Beslenme, Sayılı Ekler ve İlçe Ayrımı
+
+**Karar.** İl tanıma, 81 ili tohumlayan **Flyway migration'ından** beslenir; kodda ikinci bir liste tutulmaz. Liste açılışta bir kez okunur ve tablo boşsa uygulama ayağa kalkmaz. Türkçe ekler — apostroflu ve apostrofsuz — **sayılı** bir listeyle karşılanır. Bir il adının ardından ilçe/semt/mahalle/köy belirteci geliyorsa o eşleşme il sayılmaz. Her anımsatma offset'iyle birlikte, tekrarlar korunarak döndürülür. TC-7 böylece karara bağlanır.
+
+**Bağlam.** Metinlerdeki iller ekli geliyor (`Ankara'da`, `Kocaeli'nde`, `İzmir'de`) ve apostrof pratikte sık sık düşürülüyor (`Ankarada`). Aynı zamanda 81 adın bir kısmı sıradan Türkçe kelimelerle çakışıyor: **Ordu** (askerî birlik), **Van** (araç), **Muş** (geçmiş zaman eki), **Hatay** ("hata"nın çekimi), **Rize**, **Mersin** (bitki). Ayrıca **Aksaray** hem bir il hem de İstanbul'un bir semti.
+
+**Gerekçe.**
+- **Tek doğruluk kaynağı.** Migration hem depolamayı hem tanımayı besliyor; bir il tanınabilir olup saklanamaz (ya da tersi) duruma düşemiyor. Kodda ikinci bir liste, kaçınılmaz olarak birinciyle ayrışırdı.
+- **Boş tablo sessiz kalmamalı.** Liste yüklenmemişse her bildirim "il bulunamadı" ile döner ve bu, veri kaybı olarak aylarca fark edilmeyebilirdi. Açılışta patlamak dürüst olan.
+- **Serbest ek, sıradan cümleleri ile çevirir.** T-11'de aynı hata tarih ifadelerinde yakalanmıştı (ADR-029): `ay\p{L}*` "son iki **ayrı** olayda" ifadesini pencere sanıyordu. Burada `van\p{L}*` "**vanilya**"yı, `ordu\p{L}*` "**ordular**"ı il yapardı. Ekleri saymak, listeyi biraz uzatıp yanlış okumayı ortadan kaldırıyor.
+- **İlçe belirteci ucuz ve kesin bir ayrım.** "İstanbul'un **Aksaray semtinde**" cümlesi tek bir il adlandırıyor; belirteç olmasa 200 km ötedeki bir şehre kayıt açılırdı. Tam bir ilçe sözlüğü taşımak yerine, ilçe olduğunu **metnin kendisinin söylediği** durumları eliyoruz.
+- **Tekrarlar korunuyor.** "Bursa'da 8 kaza … Bursa'da 1 kişi" Bursa'yı iki kez, iki farklı şey için anıyor; ikisini tek anımsatmaya indirmek ikinci figürün çapasını almak olurdu.
+
+**Alternatifler.**
+- *81 ili koda gömmek:* Migration'la ayrışma riski; ayrıca il eklemek iki yerde değişiklik gerektirirdi.
+- *Her analizde veritabanından okumak:* İl listesi yalnızca migration ile değişiyor, migration ise zaten yeniden dağıtım demek. Her bildirimde sorgu atmanın karşılığı yok.
+- *Eki serbest bırakmak (`\p{L}*`):* Kod kısalırdı; sıradan cümleler sessizce il üretirdi.
+- *Tam ilçe sözlüğü taşımak (973 ilçe):* İlçe/il çakışmasını daha geniş çözerdi, ama bakım yükü ve yeni bir referans veri kümesi getirir; kazanç bugünkü isterlerin ötesinde.
+- *Bulanık eşleşme (Levenshtein):* Yazım hatalarını yakalardı, ama "Ordu"/"Bolu" gibi kısa adlarda yanlış eşleşmeyi patlatırdı.
+
+**Sonuçlar.** `ProvinceExtractor` bir Spring bileşeni değil, `AnalysisConfiguration` içinde referans veriden kurulan bir bean; testler onu düz bir isim listesiyle kurabiliyor, veritabanı gerekmiyor. İl adları da metinle **aynı normalizasyondan** geçiriliyor (ADR-027) — iki benzer ama ayrı kural yerine tek kural. Kabul edilen sınırlar: kısa/halk arasındaki kullanımlar (`Urfa`, `Antep`, `Maraş`) tanınmıyor, çünkü referans listede yoklar; belirtme hâli (`Hatay'ı`) bilerek eşleşmiyor, zira aynı ek "hatayı" kelimesini il yapardı — kaçırmak, uydurmaktan iyi. İlin metinde **hangi kapsamla** (SINGLE / SHARED / UNKNOWN) yer aldığına burada karar verilmiyor; o T-14'ün işi (ADR-019).
+
+**İleride.** Halk arasındaki kısa adlar ve yaygın yazım hataları, referans veriye bir **eş ad (alias)** tablosu eklenerek karşılanabilir — migration yine tek kaynak olarak kalır. İlçe çakışması büyürse ilçe listesi de referans veriye alınıp "ilçe adı + farklı il bağlamı" kuralı güçlendirilebilir. Ek listesi büyürse kataloğun yanında YAML'a taşınabilir (ADR-007 düzeni).

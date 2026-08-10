@@ -1,10 +1,16 @@
 package com.emreay.incidentreport.analysis.config;
 
 import java.time.ZoneId;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import com.emreay.incidentreport.analysis.domain.Province;
+import com.emreay.incidentreport.analysis.extraction.ProvinceExtractor;
+import com.emreay.incidentreport.analysis.repository.ProvinceRepository;
+import com.emreay.incidentreport.analysis.text.TurkishTextNormalizer;
 
 /** Module-wide beans for {@code analysis}. */
 @Configuration
@@ -24,5 +30,18 @@ public class AnalysisConfiguration {
     @Bean
     ZoneId reportingZone(@Value("${incident-report.analysis.reporting-zone:Europe/Istanbul}") String zone) {
         return ZoneId.of(zone);
+    }
+
+    /**
+     * The province recogniser, built from the reference data rather than from a list in the code.
+     *
+     * <p>Read once at startup: the 81 provinces only change through a migration, which means a
+     * deployment anyway. Building it here also means an empty province table stops the application
+     * immediately, instead of every report quietly coming back with no province at all.
+     */
+    @Bean
+    ProvinceExtractor provinceExtractor(ProvinceRepository provinces, TurkishTextNormalizer normalizer) {
+        List<String> names = provinces.findAll().stream().map(Province::getName).toList();
+        return new ProvinceExtractor(names, normalizer);
     }
 }

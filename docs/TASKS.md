@@ -458,12 +458,33 @@ Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (
   dün sanıyordu. Ekler sayılı hâle getirildi. Ayrıca desenler `UNICODE_CHARACTER_CLASS` olmadan
   "geçen" kelimesinin **içinde** sınır buluyordu.
 
-### ☐ T-12 · İl çıkarımı
+### ☑ T-12 · İl çıkarımı
 81 il sözlüğü; ek ve apostrof toleransı (`Ankara'da`, `Kocaeli'nde`, `İzmir'de`, apostrofsuz yazımlar);
 çok kelimeli il isimleri (Afyonkarahisar, Kahramanmaraş); ilçe adlarının il sanılmaması. Konum offset'i korunur.
 - **Bağımlılık:** T-09
-- **Çözer:** TC-7
+- **Çözer:** TC-7 · **İlgili karar:** ADR-030
 - **DoD:** Üç örnekteki iller doğru; yaygın ilçe adları yanlış eşleşme üretmiyor.
+- **Sonuç:** 363 test geçiyor, `analysis` coverage **%98**; `analysis.extraction` ve `analysis.config`
+  **%100**. `ProvinceExtractor` + `ProvinceMention`; 35 birim + 26 entegrasyon testi.
+- **DoD fiilen doğrulandı:** Üç örnekteki iller doğru çıkıyor — Ankara; İzmir; Bursa, Kocaeli, Bursa,
+  Kocaeli (sırasıyla, tekrarlar korunarak). `İstanbul'un Aksaray semtinde` yalnızca İstanbul üretiyor.
+- **Liste koda gömülmedi.** 81 ili tohumlayan Flyway migration'ı hem depolamanın hem tanımanın tek
+  kaynağı; kodda ikinci bir liste kaçınılmaz olarak onunla ayrışırdı. Açılışta bir kez okunuyor,
+  tablo boşsa uygulama ayağa kalkmıyor — aksi halde her bildirim sessizce "il bulunamadı" dönerdi.
+- **Ekler sayılı — T-11'in dersi burada birebir geçerli.** Serbest bırakılan bir ek
+  (`van\p{L}*`) "**vanilya**"yı, (`ordu\p{L}*`) "**ordular**"ı il yapardı. 81 adın bir kısmı sıradan
+  Türkçe kelime: Ordu (askerî birlik), Van (araç), Muş (geçmiş zaman eki), Hatay ("hata"nın çekimi),
+  Rize, Mersin (bitki).
+- **Alt küme testi yetmez, gerçek veriye karşı ayrı test var.** Birim testi 17 ilin seçilmiş bir
+  dilimiyle çalışıyor — akıl yürütmesi kolay ama düşünülmemiş bir ad orada görünemez.
+  `ProvinceReferenceDataTest` Testcontainers ile **81 ilin tamamını** Flyway'den yüklüyor ve içinde
+  il geçmeyen 14 sıradan olay cümlesinde hiçbir eşleşme çıkmadığını doğruluyor.
+- **Testim yanlıştı, kod değil:** `rizeli` / `adanalı` ifadelerini olumsuz vakaya koymuştum; oysa
+  `-lı/-li` eki "oralı" demek ve bunlar gerçek il anımsatmaları. Test gerçeğe göre düzeltildi.
+- **Kabul edilen sınırlar:** kısa/halk kullanımları (`Urfa`, `Antep`, `Maraş`) tanınmıyor — referans
+  listede yoklar. Belirtme hâli (`Hatay'ı`) bilerek eşleşmiyor: aynı ek "hatayı" kelimesini il
+  yapardı, kaçırmak uydurmaktan iyi.
+- **Kapsam (SINGLE / SHARED / UNKNOWN) burada belirlenmiyor** — o T-14'ün işi (ADR-019).
 
 ### ☐ T-13 · Olay tipi sınıflandırma ve UNCLASSIFIED davranışı
 Katalog anahtar kelimelerinden skorlama; eşik ve güven değeri; birden fazla tip tetiklendiğinde çözüm.
@@ -831,7 +852,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-4 | Türkçe bileşik sayı sözcükleri | **Karara bağlandı → ADR-028** · uygulaması T-10 |
 | TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
 | TC-6 | Tarih ayrıştırma ve göreli ifadeler | **Karara bağlandı → ADR-029** · uygulaması T-11 |
-| TC-7 | İl tanıma | T-12 |
+| TC-7 | İl tanıma | **Karara bağlandı → ADR-030** · uygulaması T-12 |
 | TC-8 | Sınıflandırma skorlaması ve eşik | T-13 |
 | TC-9 | Mükerrer gönderim | T-19 |
 | TC-10 | SSE bağlantı yönetimi (sunucu) | T-18 |
