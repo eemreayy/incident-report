@@ -1208,3 +1208,41 @@ Bunun etrafındaki beş karar:
 - **Doğrulama sırasında bir ölçüm hatası yakalandı ve tekrarlandı:** on gönderimin dokuzu aynı geçici dosyayı paylaştığı için mükerrer sayılmıştı (ADR-035 doğru davrandı); ölçüm ancak on **ayrı** metinle anlamlı oldu.
 
 **İleride.** Pencere bugün sabit 1 saniye; gerçek kullanımda gürültülü bulunursa değeri ayarlanabilir ya da yük altında büyüyen uyarlamalı bir pencereye dönüşebilir — birleştirme noktası tek yerde. Yeniden bağlanma sabit 5 saniye; uzun kesintilerde artan bekleme (exponential backoff) aynı yere girer. `Last-Event-ID` ile tekrar oynatma sunucuya eklenirse (ADR-034'ün "İleride"si) bağlantı geri geldiğinde tazeleme yerine kaçan sinyaller işlenebilir; bugünkü tasarımda tazeleme zaten doğru cevap. Sekme arka plandayken tazelemeyi durdurup öne gelince bir kez tazelemek, çok sekmeli kullanımda istek sayısını düşürür — TanStack'in `focusManager`'ı zaten bu bilgiyi taşıyor.
+
+---
+
+## ADR-041 — İzlenebilirlik Ekranları: Sunucudan Gelen Offset'lerle Vurgulama, Metne Hiçbir Şey Eklememe ve Reprocess'in Yerinde Tazelenmesi
+
+**Karar.** İki adreslenebilir ekran eklendi: `/incidents/:id` (olay kaydı) ve `/reports/:id` (ham bildirim). Vurgulama şu beş kararla çalışır:
+
+1. **Konum sunucudan gelir, metinde arama yapılmaz.** Anahtar kelimeler `charStart`/`charEnd` ile işaretlenir. Offset'ler Java'da da JavaScript'te de **UTF-16 kod birimi** sayar; bu yüzden `ğ`, `ı`, `İ`, `ş` tek konum tutar ve vurgulama kaymaz. TC-18 böylece kapanır.
+2. **Metne hiçbir şey eklenmez.** Vurgulanan parçanın içine ne etiket, ne işaret, ne de yalnızca ekran okuyucunun göreceği gizli bir açıklama konur. Bu ekranın varlık sebebi metnin **saklandığı gibi** görünmesi (FR-02); seçilip kopyalanan metin, gönderilen metin olmak zorunda. Rol bilgisi metnin **dışında** taşınır: üstte bir gösterge listesi, vurgunun `title`'ı ve rol başına farklı bir alt çizgi biçimi (düz/kesikli/noktalı/çift) — yani anlam yalnızca dört soluk tona bakarak ayırt edilmeye bırakılmaz (NFR-16).
+3. **Çakışan aralıklar tek vurguya indirgenir.** Aralıklar gerçekten çakışıyor: bir metin birden fazla kayıt üretiyor ve her kayıt aynı metin üzerindeki kendi eşleşmelerini taşıyor; sınıflandırıcı hem `trafik kazası` hem `kazası` eşleştiriyor; aynı aralık iki rolle birden gelebiliyor. Her aralığı tek tek sarmak iç içe etiketler üretir, aynı kelimeyi iki kez boyar ve ikinci rolü kaybeder. Bunun yerine metin, **rol kümesinin değiştiği sınırlardan** bölünüyor; komşu parçalar aynı rol kümesine sahipse birleşiyor.
+4. **Ham bildirim ekranı iki istek atar.** Ham metin ucundan metin, kayıt ucundan (`?rawReportId=`) türeyen kayıtlar ve analiz sonucu gelir — çünkü ikincisi `analysis`'in verisidir (ADR-021). Vurgulanan kelimeler **tüm** türeyen kayıtlardan toplanır.
+5. **Reprocess yerinde tazeler, metni yeniden okumaz.** Makbuz dönen uç çağrıldıktan sonra kayıtlardan türeyen sorgular geçersizleştirilir; ham metin sorgusu `staleTime: Infinity` ile duruyor, çünkü ham kayıt write-once (ADR-005) — cevabı değişemeyecek bir soruyu tekrar sormanın anlamı yok.
+
+**Bağlam.** FR-26 iki yönlü gezinmeyi ve "kelimelerin metin üzerinde vurgulanması"nı istiyor; kaynak dokümandaki "bold ile işaretlenmiş kelimeler" ipucunun görünür karşılığı bu. FR-17 offset'lerin saklanmasını ve dönülmesini T-14'te sözleşmeye eklemişti (C-3), gerekçesi de buradaki 1. madde: istemci kelimeyi yeniden ararsa Türkçe ek ve apostrof toleransı yüzünden yanlış yeri işaretler. TC-18 ise offset'lerin Unicode'da kaymaması sorusuydu.
+
+**Gerekçe.**
+- **Aramak neden yanlış:** il adları ekle geliyor (`Bursa'da`), aynı kelime metinde birden fazla kez geçebiliyor (üçüncü örnekte `Bursa'da` iki kez), ve normalize edilmiş eşleşme ham metindeki yazımla birebir aynı olmayabiliyor. Sunucunun verdiği konum bu üç sorunun da cevabı.
+- **UTF-16 hizası bir tesadüf değil, iki platformun aynı sayması.** Java `String` ve JavaScript `string` aynı birimi sayar; dolayısıyla `text.slice(start, end)` tam olarak çıkarıcının eşleştirdiği karakterleri verir. Bir test bunu çalışan sistemden alınmış offset'lerle sabitliyor: saklanan konumdan dilimlenen metin, saklanan kelimenin kendisi.
+- **Gizli açıklama kopyalamayı bozar.** Vurgunun içine konan "(il)" gibi bir metin ekran okuyucuda iyi okunur ama kopyalanan metne sızar — bu ekranda kabul edilemez. Rolü dışarıda taşımak hem metni temiz bırakıyor hem de bilgiyi görünür kılıyor.
+- **Rol başına alt çizgi biçimi, renk körlüğüne karşı bedava sigorta.** Dört pastel ton birbirine yakın; biçim farkı ayrımı renge bağımlı olmaktan çıkarıyor.
+- **Kayıt ekranı sonuçları değil kararları anlatıyor:** tarihin nereden geldiği, tipin tanınıp tanınmadığı, figürün illerle ilişkisi, hangi kelimenin hangi çıkarımı tetiklediği. İzlenebilirlik ekranının işi bu.
+- **Adresteki kimlik kullanıcıdan gelir.** `/incidents/abc` için sunucuya `/incidents/NaN` sormak, yanlış bir adresi sunucu hatasına çevirirdi; sorgu böyle bir kimlikte hiç çalışmıyor. (Testle yakalandı — ilk sürüm isteği atıyordu.)
+
+**Alternatifler.**
+- *Kelimeyi metinde arayıp işaretlemek:* Offset'lere gerek kalmazdı. Ekli/apostroflu biçimlerde yanlış yeri işaretler, tekrar eden kelimelerde yalnızca ilkini bulur; C-3 tam olarak bunu önlemek için var.
+- *Her anahtar kelimeyi kendi etiketiyle sarmak:* Basit döngü. Çakışan aralıklarda iç içe etiket ve çift boyama; ikinci rol kaybolur.
+- *Vurgu içine ekran-okuyucu metni koymak:* Erişilebilirlik açısından en doğrudan yol. Kopyalanan metni bozar — bu ekranda metin ürünün kendisi.
+- *`dangerouslySetInnerHTML` ile işaretlenmiş HTML üretmek:* Tek geçişte biterdi. Ham metni HTML'e gömmek, kullanıcı metnini işaretlemeye açar; React'in kaçışını bilerek devre dışı bırakmak için hiçbir sebep yok.
+- *Ham bildirim ucunun türeyen kayıtları da döndürmesi:* Tek istek. `ingestion`'ın `analysis`'in verisini temsil etmesi demek (ADR-021).
+- *Reprocess sonrası ham metni yeniden okumak:* "Her şeyi tazele" refleksi. Değişemeyecek bir cevabı yeniden istemek; ADR-005 write-once diyor.
+
+**Sonuçlar.**
+- `traceability/highlight.ts` saf ve DOM'suz test ediliyor; `HighlightedText`, `IncidentDetailPage`, `RawReportPage` görünüm katmanı.
+- Kayıt listesine ve gönderim sonucuna "Aç" bağlantıları girdi; iki yön de artık arayüzden gezinilebiliyor (FR-08).
+- **Çalışan sistemde doğrulandı:** ekrandaki metin, saklanan metinle **birebir aynı** (`identical: true`); `Bursa'da`, `Kocaeli'nde`, `kazası`, `hayatını kaybetti`, `yaralı` doğru yerlerde işaretli; `trafik kazası` tek vurgu ve `title` olarak "olay tipi, metrik" taşıyor; reprocess sonrası kayıtlar 26/27/28 → 49/50/51 oldu, **sayı üç kaldı**.
+- `useIncident` yalnızca tam sayı kimlikte çalışıyor; `SubmissionResult` testleri artık router içinde render ediliyor, çünkü kart bir bağlantı taşıyor.
+
+**İleride.** Vurgulama bugün tek bir `<p>` içinde; çok uzun metinlerde parça sayısı arttıkça sanallaştırma gerekebilir, ama bölme kuralı değişmez. Rol başına filtre ("yalnızca metrik tetikleyicilerini göster") aynı segment modelinin üzerine oturur. Ham bildirim listesi ucu (`GET /incident-reports`) bugün arayüzde kullanılmıyor; bir "son bildirimler" ekranı istenirse hazır. Reprocess bugün tek kayıt için; toplu reprocess ADR-035'in "İleride"sindeki analiz sürüm bilgisiyle birlikte anlamlı olur.

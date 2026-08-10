@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubmissionResult } from './SubmissionResult';
@@ -64,7 +65,11 @@ function renderResult() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <SubmissionResult rawReportId="raw-1" />
+      {/* Each result now links to the record's own screen (FR-26), so the card
+          needs a router around it. */}
+      <MemoryRouter>
+        <SubmissionResult rawReportId="raw-1" />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

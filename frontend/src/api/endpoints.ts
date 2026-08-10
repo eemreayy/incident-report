@@ -1,5 +1,6 @@
 import { request } from './client';
 import type {
+  Incident,
   IncidentPage,
   Metadata,
   Page,
@@ -26,6 +27,29 @@ export function getMetadata(signal?: AbortSignal): Promise<Metadata> {
  */
 export function submitIncidentReport(text: string): Promise<RawReportReceipt> {
   return request<RawReportReceipt>('/incident-reports', { method: 'POST', body: { text } });
+}
+
+/**
+ * One record, with the words that produced it and where they sat in the text
+ * (FR-17). The offsets are what the raw report screen highlights with - without
+ * them the client would have to search the text again and would mark the wrong
+ * occurrence (C-3).
+ */
+export function getIncident(id: number, signal?: AbortSignal): Promise<Incident> {
+  return request<Incident>(`/incidents/${id}`, signal ? { signal } : {});
+}
+
+/**
+ * Runs the current rules over a stored text again (FR-15).
+ *
+ * Answers with a receipt, exactly as submission does (ADR-021): what the rules
+ * made of it this time is read back through the records, not returned here.
+ * The previous records are replaced rather than added to, so nothing doubles.
+ */
+export function reprocessIncidentReport(id: string): Promise<RawReportReceipt> {
+  return request<RawReportReceipt>(`/incident-reports/${encodeURIComponent(id)}/reprocess`, {
+    method: 'POST',
+  });
 }
 
 export function getIncidentReport(id: string, signal?: AbortSignal): Promise<RawReport> {

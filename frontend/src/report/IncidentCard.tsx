@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { eventTypeLabel, metricLabel } from '../i18n/catalogLabels';
 import { provinceLine } from '../incidents/provinceLabel';
 import { strings } from '../i18n/strings';
@@ -49,6 +50,8 @@ export function IncidentCard({
       {incident.classification === 'UNCLASSIFIED' && (
         <p className="muted">{strings.incident.unclassifiedNote}</p>
       )}
+
+      <Link to={`/incidents/${incident.id}`}>{strings.list.detail}</Link>
     </li>
   );
 }
