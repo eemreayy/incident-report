@@ -260,6 +260,54 @@ button.secondary {
   display: block;
 }
 
+.summary-block {
+  margin-top: calc(var(--space) * 1.25);
+}
+
+.summary-block h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.summary-table th,
+.summary-table td {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.summary-table thead th {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.summary-table tbody th,
+.summary-table tfoot th {
+  font-weight: 600;
+}
+
+/* Shading behind the rows that belong to no single province - an addition to
+   their label, never the only thing carrying it (NFR-16). */
+.summary-table tbody tr[data-scope='SHARED'] th,
+.summary-table tbody tr[data-scope='SHARED'] td,
+.summary-table tbody tr[data-scope='UNKNOWN'] th,
+.summary-table tbody tr[data-scope='UNKNOWN'] td {
+  background: var(--color-bg);
+}
+
+.summary-table tfoot td,
+.summary-table tfoot th {
+  border-top: 2px solid var(--color-border);
+  border-bottom: none;
+}
+
 .pagination {
   display: flex;
   align-items: center;

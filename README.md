@@ -229,6 +229,7 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | İl, harita yerine grafik kırılımı | Kaynak "grafiksel" diyor, "haritasal" demiyor; `SHARED` sayılar haritada tanımsız — boyanamaz, bölüştürülemez | [ADR-023](docs/DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) |
 | Frontend'de de %80 coverage kapısı | Kaynak dokümandaki ister backend'e daraltılmamış; iki farklı standart, düşük olanın standart olması demek | [ADR-024](docs/DECISIONS.md#adr-024--frontend-coverage-kapısı) |
 | Filtre durumu yalnızca adres çubuğunda | Tek kopya olunca senkronize edilecek iki şey kalmıyor; bağlantı paylaşılabilirliği ve geri düğmesi bedavaya geliyor. Aynı nesne sorgu önbelleğinin de anahtarı | [ADR-037](docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu) |
+| İle atanamayan figürler aynı tabloda, kendi satırında | Uzlaştırma ancak iki sayı yan yana dururken mümkün; toplamlar da sunucudan basılır, çünkü satırları toplayan bir arayüz paylaşılan figürü kaybeder ve tutarlı görünür | [ADR-038](docs/DECISIONS.md#adr-038--shared-ve-unknown-kapsamın-arayüzdeki-temsili-aynı-tabloda-kendi-satırında-adıyla) |
 
 ---
 

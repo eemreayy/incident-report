@@ -1078,3 +1078,44 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - **`CatalogPanel` kaldırıldı.** T-23'te "PRD'de olmayan, kuralı görünür kılan geçici panel" olarak eklenmişti; aynı kuralı artık gerçek bir ekran olan filtre çubuğu gösteriyor.
 
 **İleride.** Özet ve grafik (T-27, T-28) aynı hook'u çağıracak; filtre durumu için yapılacak yeni bir iş yok. Akış geldiğinde (T-29) yapılacak tek şey `['incidents']` önekini geçersizleştirmek — hangi görünümlerin açık olduğunu bilmesi gerekmeyecek. Filtre sayısı artarsa (ör. tarih kaynağı, kapsam) aynı çözümleme fonksiyonuna bir alan eklenir; kanoniklik kuralı gereği yeni alanın da varsayılanı URL'e yazılmamalı. Sayfa boyutu bugün sabit 20; kullanıcıya bırakılırsa o da URL'e girer ve aynı çözümlemeden geçer. Anahtar kelime bugün tek; çoklu anahtar kelime istenirse `eventType` gibi tekrarlanan bir parametre olur ve uçtaki `EXISTS` filtresi (ADR-036) zaten buna hazır.
+
+---
+
+## ADR-038 — `SHARED` ve `UNKNOWN` Kapsamın Arayüzdeki Temsili: Aynı Tabloda, Kendi Satırında, Adıyla
+
+**Karar.** Özet tablo, hiçbir ile atanamayan figürleri **il satırlarıyla aynı tabloda, kendi satırında ve kelimeyle etiketli** gösterir (`Ortak toplam`, `İl belirtilmemiş`). Bunun etrafındaki altı karar:
+
+1. **Hiçbir toplam tarayıcıda hesaplanmaz.** Kova satırları, tip toplamı ve genel toplam üçü de sunucudan geldiği gibi basılır. Satırları toplayan bir arayüz, paylaşılan figür varken **farklı ve yanlış** bir sayı üretirdi — üstelik doğru görünen bir sayı.
+2. **Fark, dipnotla açıklanır.** Paylaşılan ya da ilsiz bir satır varsa tablonun altına tek cümle düşer: bu satırlar hiçbir ile eklenmez, bu yüzden il satırlarının toplamı tip toplamına eşit değildir. Yalnızca böyle bir satır varken görünür.
+3. **Olay tipi başına ayrı tablo.** Metrikler olay tipine ait; tek geniş tablo, katalogdaki her metrik için bir sütun taşır ve çoğu hücreyi boş bırakırdı — bu da "veri eksik" gibi okunur.
+4. **Sütunlar katalog sırasında**, hiçbir satırın taşımadığı metrik sütun olmaz, ve bir kovanın figürü yoksa hücre **`—`**'dir, `0` değil. Sunucu anahtarı hiç göndermiyor; oraya sıfır yazmak metnin söylemediği bir şeyi söylemek olurdu.
+5. **Genel toplam yalnızca birden fazla olay tipi varken.** Tek tiple genel toplam, tip toplamının rakamı rakamına tekrarı olurdu; iki kez basılan bir sayı okuyucuyu aralarındaki farkı aramaya davet eder.
+6. **Gölgelendirme etiketin yanına eklenir, yerine geçmez** (NFR-16). Satırı ayıran şey `Ortak toplam` yazısı; arka plan rengi yalnızca ona eşlik ediyor.
+
+**Bağlam.** TC-14, ADR-019'un veri modelindeki kuralının (bölüştürme, düşürme, çift sayma yok) arayüzdeki karşılığını soruyordu: tabloda ve grafikte nasıl gösterilecek, ve okuyucu il toplamlarıyla genel toplamı nasıl uzlaştıracak? ADR-036 uç tarafını çözmüştü: üç seviye tek sorgudan, `SHARED` tek kova, kapsam yalnızca il bir boyut olduğunda ayrı. Bu ADR onun ekrandaki hâli; grafik tarafı (T-28) aynı kuralı seri düzeyinde uygulayacak.
+
+**Gerekçe.**
+- **Uzlaştırma ancak her iki sayı da görünürken mümkün.** Örnek 3'te Bursa 8, Kocaeli 6 kaza; yaralı sütununda ikisi de boş, tip toplamı ise 10 yaralı diyor. Aradaki fark ortak satırın kendisi. Ortak satır gizlenseydi on yaralı hiçbir yerde görünmezdi; illere bölüştürülseydi metinde olmayan bir veri uydurulmuş olurdu; ayrı bir tabloya alınsaydı okuyucu farkı iki tablo arasında kendi kurmak zorunda kalırdı.
+- **Toplamı istemcide hesaplamak, tam da bu ADR'nin göstermek istediği şeyi silerdi.** Satırlar toplandığında tip toplamı 4 yaralı yerine 0 çıkardı ve tablo kendi içinde "tutarlı" görünürdü. Sunucunun sayısını basmak bir tembellik değil; toplamın tanımının tek yerde durması (NFR-13) ve tutarsızlığın **görünür** kalması.
+- **Bir test bunu bilerek tutarsız veriyle doğruluyor** — satırlarla toplamın kasten uyuşmadığı bir cevapta ekran sunucunun sayısını gösteriyor. Modül aritmetik yapsaydı "düzeltirdi". Backend tarafında `AnalyticsService` için yazılan testin birebir aynısı.
+- **Dipnot olmadan fark, hata gibi okunur.** Toplamayı yapan bir okuyucu haklı olarak bir uyuşmazlık bulur; sistemin güvenilirliği hakkındaki yargısı o an oluşur. Cümlenin yalnızca ilgili tabloda çıkması, her tabloya konan bir uyarının görünmez hâle gelmesini önlüyor.
+- **`—` ile `0` farkı veri dürüstlüğü.** "Bu kovada yaralı figürü çıkarılmadı" ile "yaralı sayısı sıfır" farklı iddialar; sunucu birincisini anahtarı hiç göndermeyerek söylüyor.
+- **Bilinmeyen olay tipi ve metrik gizlenmiyor.** `OTHER` katalogda yok, kodun ürettiği bir değer (ADR-006); katalogda olmayan bir anahtarı atlamak, "her şeyi topluyorum" diyen bir tablodan kayıt düşürmek olurdu.
+
+**Alternatifler.**
+- *Paylaşılan figürü illere bölüştürmek:* Tablo sade görünürdü. ADR-019'un açıkça yasakladığı şey: metinde olmayan veriyi uydurmak.
+- *Paylaşılan satırı gizleyip yalnızca toplamda tutmak:* İl satırları temiz olurdu. On yaralı hiçbir yerde görünmez, fark açıklanamaz hâle gelirdi.
+- *Ayrı bir "ilsiz figürler" tablosu:* Kavramsal olarak düzenli. Uzlaştırmayı okuyucuya iki tablo arasında yaptırır; oysa mesele tam olarak bu iki sayının yan yana durması.
+- *Satırları istemcide toplayıp tip toplamı üretmek:* Bir uç çağrısı azalırdı — ama sunucu zaten üç seviyeyi tek sorguda döndürüyor (ADR-036) ve hesaplanan toplam paylaşılan figürü kaybederdi.
+- *Tek geniş tablo (tüm metrikler sütun):* Karşılaştırma kolaylaşırdı. Katalog büyüdükçe çoğu hücre boşalır ve boş hücre "eksik veri" gibi okunur.
+- *Satırı yalnızca renkle ayırmak:* Görsel olarak yeterli görünür. Durumun yalnızca renkle taşınmaması isteri (NFR-16) bunu zaten dışlıyor.
+- *Genel toplamı her zaman göstermek:* Tutarlı bir düzen. Tek olay tipinde aynı sayıyı iki kez basmak demek.
+
+**Sonuçlar.**
+- `analytics/summaryModel.ts` saf ve DOM'suz test edilebilir: yalnızca **düzen** kararı veriyor (blok, sütun, sıra), tek bir toplama işlemi içermiyor.
+- Sunucudan gelen satır sırası korunuyor (iller ada göre, sonra paylaşılan, sonra ilsiz) — sıralamayı ekranda yeniden kurmak, uçtaki kararı ikinci kez vermek olurdu.
+- **Tarayıcıda yakalanan hata:** genel toplam sütunları tekrarlanıyordu. Sıralama, her olay tipinin metriklerinin uç uca eklenmesinden geliyor ve `DEATH` ile `INJURED` birden fazla tipte tanımlı (PRD §7) — aynı toplam, onu tanımlayan her tip için bir kez basılıyordu. Testler bunu göremezdi çünkü test verisinde çakışan anahtar yoktu; tekilleştirme eklendi ve **çalışan sistemde görülen** hâliyle testle sabitlendi.
+- Özet paneli filtreleri adres çubuğundan okuyor (ADR-037); liste ile arasında hiçbir bağlantı yok, dolayısıyla ikisinin farklı bir soruyu cevaplaması mümkün değil.
+- Sorgu anahtarları `['analytics', …]` altında; `incidentDerivedKeys` artık kayıtlardan türeyen her şeyi tek yerde adlandırıyor, T-29 bunu geçersizleştirecek.
+
+**İleride.** T-28'de grafik aynı soruyu seri düzeyinde soracak: `SHARED` ve `UNKNOWN` ayrı ve etiketli birer seri olacak, il serilerine eklenmeyecek — kural aynı, taşıyıcı farklı. `SHARED` kovasının kapsadığı il kombinasyonuna göre ayrıştırılması istenirse (ADR-036'nın "İleride"si) tablo yapısı değişmez, yalnızca satır sayısı artar. Metrik sayısı büyürse sütunlar yerine metrik başına satır düzenine geçmek gerekebilir; bugünkü katalogda en fazla dört metrik var ve sütun düzeni okunaklı.

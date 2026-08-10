@@ -62,8 +62,11 @@ Bunlar tercih değil, karar:
 3. **Katalog sabit yazılmaz.** Olay tipi, metrik ve il seçenekleri yalnızca metadata ucundan gelir.
    YAML'a eklenen bir tip, frontend derlemesi değişmeden seçeneklerde görünmelidir.
 4. **`SHARED` kapsam.** Birden fazla ile ait, ayrıştırılamayan toplamlar hiçbir ile eklenmez,
-   düşürülmez ve çift sayılmaz; ayrı ve **etiketli** bir satır/seri olarak gösterilir
-   ([ADR-019](../docs/DECISIONS.md#adr-019--kayıt-granülaritesi)).
+   düşürülmez ve çift sayılmaz; il satırlarıyla **aynı tabloda**, kendi satırında ve kelimeyle
+   etiketli gösterilir ([ADR-019](../docs/DECISIONS.md#adr-019--kayıt-granülaritesi),
+   [ADR-038](../docs/DECISIONS.md#adr-038--shared-ve-unknown-kapsamın-arayüzdeki-temsili-aynı-tabloda-kendi-satırında-adıyla)).
+   Toplamlar da sunucudan geldiği gibi basılır: satırları toplayan bir arayüz, paylaşılan figür
+   varken farklı ve yanlış — ama tutarlı görünen — bir sayı üretir.
 5. **Coverage kapısı %80**, build'i kırar — backend'dekiyle simetrik
    ([ADR-024](../docs/DECISIONS.md#adr-024--frontend-coverage-kapısı)). Snapshot testi sayıyı
    ucuza şişirir; ölçülen şey davranış olmalı.

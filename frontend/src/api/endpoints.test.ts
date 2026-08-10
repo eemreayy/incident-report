@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getIncidentReport,
   getMetadata,
+  getSummary,
   listIncidentReports,
   listIncidents,
   listIncidentsByRawReport,
@@ -166,5 +167,67 @@ describe('listIncidents', () => {
     // C-5: with submission answering only with an id (ADR-021), this filter is
     // the only way to find out what a report produced.
     expect(calledUrl()).toBe('/api/v1/incidents?rawReportId=6a78b031f6fe3fa987f9ffc9');
+  });
+});
+
+describe('getSummary', () => {
+  const EMPTY_SUMMARY = {
+    rows: [],
+    eventTypeTotals: [],
+    total: { incidentCount: 0, metrics: {} },
+  };
+
+  it('takes the filters, and only the filters', async () => {
+    respondWith(EMPTY_SUMMARY);
+
+    await getSummary({
+      eventTypes: ['TRAFFIC_ACCIDENT'],
+      provinces: [16, 41],
+      from: '2020-06-01',
+      to: '2020-06-30',
+      keyword: 'kaza',
+    });
+
+    const url = new URL(calledUrl(), 'http://test');
+    expect(url.pathname).toBe('/api/v1/analytics/summary');
+    expect(url.searchParams.getAll('province')).toEqual(['16', '41']);
+    expect(url.searchParams.get('keyword')).toBe('kaza');
+    // An aggregate has no pages and no order of its own; asking for either would
+    // total a different set than the table beside it shows.
+    expect(url.searchParams.has('page')).toBe(false);
+    expect(url.searchParams.has('sort')).toBe(false);
+  });
+
+  it('asks for the whole picture when nothing is filtered', async () => {
+    respondWith(EMPTY_SUMMARY);
+
+    await getSummary();
+
+    expect(calledUrl()).toBe('/api/v1/analytics/summary');
+  });
+
+  it('keeps the three levels apart, as the endpoint sends them', async () => {
+    respondWith({
+      rows: [
+        {
+          eventType: 'TRAFFIC_ACCIDENT',
+          provinceScope: 'SHARED',
+          incidentCount: 1,
+          metrics: { INJURED: 10 },
+        },
+      ],
+      eventTypeTotals: [
+        { eventType: 'TRAFFIC_ACCIDENT', incidentCount: 3, metrics: { INJURED: 10 } },
+      ],
+      total: { incidentCount: 3, metrics: { INJURED: 10 } },
+    });
+
+    const summary = await getSummary();
+
+    // A SHARED row names no province at all - one bucket per event type
+    // (ADR-036), so the key is simply absent rather than null.
+    expect(summary.rows[0]?.province).toBeUndefined();
+    expect(summary.eventTypeTotals[0]?.provinceScope).toBeUndefined();
+    expect(summary.total.eventType).toBeUndefined();
   });
 });

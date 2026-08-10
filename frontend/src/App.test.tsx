@@ -10,11 +10,12 @@ const CATALOG = {
 };
 
 const EMPTY_PAGE = { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
+const EMPTY_SUMMARY = { rows: [], eventTypeTotals: [], total: { incidentCount: 0, metrics: {} } };
 
 /**
- * The shell makes three independent calls - the health probe, the catalog and
- * the record list - so the stub answers by URL. A single blanket response would
- * hand the catalog a health payload and pass for the wrong reason.
+ * The shell makes four independent calls - the health probe, the catalog, the
+ * summary and the record list - so the stub answers by URL. A single blanket
+ * response would hand the catalog a health payload and pass for the wrong reason.
  */
 function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
@@ -24,9 +25,11 @@ function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
     }
     const body = url.includes('/actuator/health')
       ? { status: 'UP' }
-      : url.includes('/incidents')
-        ? EMPTY_PAGE
-        : CATALOG;
+      : url.includes('/analytics/summary')
+        ? EMPTY_SUMMARY
+        : url.includes('/incidents')
+          ? EMPTY_PAGE
+          : CATALOG;
     return Promise.resolve({ ok: true, status: 200, json: async () => body } as Response);
   });
 }
@@ -70,7 +73,9 @@ describe('App', () => {
     // heading is still there next to the failure notice.
     expect(await screen.findByText(new RegExp(strings.backendStatus.down))).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    // Every panel that fetches states its own failure, so there is one alert per
+    // panel rather than one for the page - each also carries its own retry.
+    expect(await screen.findAllByRole('alert')).not.toHaveLength(0);
   });
 
   it('carries the status in text, not only in colour', async () => {

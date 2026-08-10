@@ -1061,7 +1061,7 @@ filtre kaynağı.
   sıralama yalnızca tarih; il seçimi 81 elemanlı çoklu liste — arama kutulu bir bileşen T-31'in
   erişilebilirlik turunda değerlendirilebilir; kayıt detayına bağlantı T-30'da geliyor.
 
-### ☐ T-27 · Özet tablo ve il kırılımı
+### ☑ T-27 · Özet tablo ve il kırılımı
 Olay tipi / il / metrik kırılımında agrega görünüm; agregasyon ucundan gelir, istemcide toplanmaz.
 `SHARED` ve `UNKNOWN` kapsamlı toplamlar ayrı ve **etiketli** satır olarak gösterilir.
 - **Bağımlılık:** T-26, T-17
@@ -1069,6 +1069,37 @@ Olay tipi / il / metrik kırılımında agrega görünüm; agregasyon ucundan ge
 - **DoD:** Örnek 3 girildiğinde Bursa ve Kocaeli ayrı satırlarda; 10 yaralı hiçbir ile eklenmemiş,
   "her iki ilde toplam" olarak ayrı satırda; iki il birlikte seçildiğinde bir kez sayılıyor;
   il toplamları ile genel toplam okuyucu tarafından uzlaştırılabiliyor.
+- **Sonuç:** 135 test geçiyor, frontend coverage **%98** (273/277 satır). `analytics/summaryModel.ts`
+  (saf, DOM'suz), `analytics/SummaryTable` · `SummaryPanel`; API katmanına `getSummary` ve
+  `useSummary`. Kararlar [ADR-038](DECISIONS.md#adr-038--shared-ve-unknown-kapsamın-arayüzdeki-temsili-aynı-tabloda-kendi-satırında-adıyla)'de.
+- **TC-14 karara bağlandı: aynı tabloda, kendi satırında, adıyla.** Ne bölüştürülüyor, ne
+  düşürülüyor, ne de ayrı bir tabloya sürülüyor — çünkü uzlaştırma ancak iki sayı yan yana
+  dururken mümkün. Örnek 3'te Bursa ve Kocaeli'nin yaralı sütunu boş (`—`), tip toplamı 10 diyor,
+  aradaki fark ortak satırın kendisi.
+- **Hiçbir toplam tarayıcıda hesaplanmıyor.** Kova satırı, tip toplamı ve genel toplam üçü de
+  sunucudan geldiği gibi basılıyor. Satırları toplayan bir arayüz paylaşılan figür varken **farklı
+  ve yanlış** bir sayı üretirdi — üstelik tutarlı görünen bir sayı. Bir test bunu bilerek tutarsız
+  veriyle doğruluyor (backend'deki `AnalyticsService` testinin birebir aynısı): modül aritmetik
+  yapsaydı "düzeltirdi".
+- **Fark dipnotla açıklanıyor**, yalnızca böyle bir satır varken. Toplamayı yapan okuyucu haklı
+  olarak bir uyuşmazlık bulur; açıklanmayan fark hata gibi okunur.
+- **`—` ile `0` farkı korundu.** Sunucu figür yoksa anahtarı hiç göndermiyor; oraya sıfır yazmak
+  metnin söylemediği bir şeyi söylemek olurdu.
+- **Tarayıcıda yakalanan hata:** genel toplamda sütunlar tekrarlanıyordu (`Can kaybı` üç kez, aynı
+  sayıyla). Sıralama her olay tipinin metriklerinin uç uca eklenmesinden geliyor ve `DEATH` ile
+  `INJURED` birden fazla tipte tanımlı (PRD §7). Testler göremezdi — test kataloğunda çakışan anahtar
+  yoktu. Tekilleştirme eklendi, **çalışan sistemde görülen hâliyle** testle sabitlendi.
+- **DoD fiilen doğrulandı (çalışan sistemde, tarayıcıdan):**
+  - `?eventType=TRAFFIC_ACCIDENT` → `Bursa 1 | 8 | 1 | —` · `Kocaeli 1 | 6 | 2 | —` ·
+    `Ortak toplam 1 | — | — | 10` · `Tip toplamı 3 | 14 | 3 | 10` + uzlaştırma cümlesi.
+  - `?province=16&province=41` → aynı tablo; paylaşılan figür **bir kez** (20 değil 10).
+  - Filtresiz → beş olay tipi bloğu, `Sel` bloğunda `İl belirtilmemiş` satırı kendi cümlesiyle,
+    ve `Genel toplam` 26 kayıt.
+  - Tek olay tipi seçiliyken `Genel toplam` bloğu görünmüyor: tip toplamının rakamı rakamına
+    tekrarı olurdu ve iki kez basılan sayı okuyucuyu aralarındaki farkı aramaya davet eder.
+- **Bilinçli boşluklar:** metrik başına sütun düzeni bugünkü katalog (en fazla dört metrik) için
+  seçildi; `SHARED` kovası kapsadığı il kombinasyonuna göre ayrıştırılmıyor (ADR-036) — özet satırı
+  hangi illeri kapsadığını söylemiyor, o bilgi kayıt listesinde duruyor.
 
 ### ☐ T-28 · Grafik: olay tipi serileri, il kırılımı ve kümülatif
 Olay tipi seçimine bağlı metrik serileri; il kırılımı; kümülatif anahtarı. Kümülatif dönüşüm ve
@@ -1176,7 +1207,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-11 | Anlamlı %80 kapsam (backend) | T-03 (altyapı) + her task'ın kendi testleri |
 | TC-12 | Gönderim sonrası sonucun getirilmesi | **Karara bağlandı → ADR-021** · uygulaması T-22 |
 | TC-13 | Canlı akışta agregasyon tazeleme | T-29 |
-| TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | T-27 |
+| TC-14 | `SHARED`/`UNKNOWN` kapsamın arayüzde temsili | **Karara bağlandı → ADR-038** · uygulaması T-27 |
 | TC-15 | İstemci durumu ile sunucu durumunun ayrımı | **Karara bağlandı → ADR-037** · uygulaması T-26 |
 | TC-16 | Anlamlı %80 kapsam (frontend) | T-23 (kapı) + T-31 (doğrulama) + her task'ın testleri |
 | TC-17 | Frontend dağıtımı ve çalışma zamanı yapılandırması | **Karara bağlandı → ADR-025** (T-23) |
