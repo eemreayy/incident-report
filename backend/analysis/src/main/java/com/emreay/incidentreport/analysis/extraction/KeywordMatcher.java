@@ -36,7 +36,7 @@ final class KeywordMatcher {
      * hands its figure to the next keyword along instead.
      */
     private static final String INFLECTION = "(?:l[ae]r|l[ıiuü]k?|d[aeıiuü]n?|t[aeıiuü]n?"
-            + "|[ae]rken|[ae]r[ae]k|[ıiuü]nc[ae]|n[ıiuü]n|n[ıiuü]|s[ıiuü]|[ıiuü]yor|m[ae]k"
+            + "|[ae]rken|[ae]r[ae]k|[ıiuü]nc[ae]|n[ıiuü]n|nd[ae]n?|n[ıiuü]|s[ıiuü]|[ıiuü]yor|m[ae]k"
             + "|m[ıiuü]ş|[ae]n|y[ae]|[ıiuü]p|[ıiuü]n|[aeıiuü]){0,3}";
 
     private final Pattern pattern;
