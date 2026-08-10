@@ -26,9 +26,53 @@ export const strings = {
     empty: 'Katalogda tanımlı olay tipi yok.',
     retry: 'Tekrar dene',
   },
-  placeholder: {
-    heading: 'Arayüz kuruluyor',
-    body: 'Bildirim girişi, kayıt listesi, özet tablo ve grafik sonraki adımlarda geliyor.',
+  form: {
+    heading: 'Yeni olay bildirimi',
+    label: 'Açık kaynaktan aldığınız metni buraya girin',
+    hint: 'Tarih, il, olay tipi ve sayılar metinden otomatik çıkarılır. Cümlelerin sırası önemli değildir.',
+    placeholder:
+      'Örnek: 20.04.2020 tarihinde Ankara’da salgın kapsamında yapılan testlerde 15 yeni vaka tespit edildi.',
+    submit: 'Gönder',
+    submitting: 'Gönderiliyor…',
+    charCount: (count: number) => `${count} karakter`,
+    emptyHint: 'Göndermek için metin girin.',
+  },
+  result: {
+    heading: 'Bu bildirimden çıkarılanlar',
+    loading: 'Sonuç getiriliyor…',
+    retry: 'Tekrar dene',
+    recordCount: (count: number) => `${count} kayıt üretildi`,
+    // FR-19: zero records is a legitimate answer, so the screen says so rather
+    // than showing an empty box.
+    none: 'Bu metinden yapılandırılmış kayıt üretilemedi. Ham metin saklandı ve kurallar geliştikçe yeniden işlenebilir.',
+    failed: 'Analiz başarısız oldu. Ham metin saklandı; sorun giderildiğinde yeniden işlenebilir.',
+    missing: 'Bu bildirime ait bir analiz kaydı bulunamadı.',
+  },
+  incident: {
+    unknownProvince: 'İl belirtilmemiş',
+    sharedProvinces: 'Ortak toplam',
+    // ADR-019: the figure belongs to none of them alone, so the wording must not
+    // suggest it can be attributed to one.
+    sharedNote: (names: string) => `${names} illerine ait, ayrıştırılamayan toplam`,
+    metricsHeading: 'Metrikler',
+    noMetrics: 'Sayısal metrik çıkarılamadı',
+    unclassified: 'Olay tipi tanınamadı',
+    /**
+     * `OTHER` is not a catalog entry - it is what the code produces when nothing
+     * matched (ADR-006), so it never appears in /metadata. ADR-007's addendum
+     * draws exactly this line: data that grows on its own comes from the
+     * catalog, structural values that change only with code belong to the typed
+     * client contract. This is one of those, so labelling it here is not the
+     * hardcoding NFR-14 forbids.
+     */
+    otherEventType: 'Diğer / Belirsiz',
+    dateSource: {
+      EXPLICIT: 'tarih metinde açıkça yazıyor',
+      RELATIVE: 'tarih göreli bir ifadeden çözüldü',
+      DEFAULTED: 'metinde tarih yok, gönderim tarihi kullanıldı',
+    },
+    unclassifiedNote:
+      'Katalogda eşleşen bir olay tipi yok. Kayıt reddedilmedi; çıkarılabilen bilgiler saklandı.',
   },
   /**
    * Keyed by the error contract's `code`, which is the half of an RFC 7807

@@ -59,3 +59,66 @@ export interface Page<T> {
   totalElements: number;
   totalPages: number;
 }
+
+/** How the record's date was arrived at. A relative phrase is an extraction, not a fallback (ADR-014). */
+export type DateSource = 'EXPLICIT' | 'RELATIVE' | 'DEFAULTED';
+
+/** Whether the catalog recognised the event type at all (ADR-006). */
+export type Classification = 'CLASSIFIED' | 'UNCLASSIFIED';
+
+/** How the record relates to a province (ADR-019). */
+export type ProvinceScope = 'SINGLE' | 'SHARED' | 'UNKNOWN';
+
+export type KeywordRole = 'DATE' | 'PROVINCE' | 'EVENT_TYPE' | 'METRIC';
+
+export interface IncidentMetric {
+  metricType: string;
+  value: number;
+}
+
+/** Where in the raw text the word sat, so it can be highlighted without searching (C-3). */
+export interface ExtractedKeyword {
+  keyword: string;
+  role: KeywordRole;
+  charStart: number;
+  charEnd: number;
+}
+
+export interface Incident {
+  id: number;
+  rawReportId: string;
+  occurredOn: string;
+  dateSource: DateSource;
+  /** A catalog key. Its label comes from /metadata, never from here (NFR-14). */
+  eventType: string;
+  classification: Classification;
+  provinceScope: ProvinceScope;
+  /**
+   * Absent - not null - unless the scope is SINGLE. Captured from the running
+   * system: the key is simply not serialised for SHARED and UNKNOWN records.
+   */
+  province?: Province;
+  /** The provinces a SHARED figure covers. Never split across them (ADR-019). */
+  sharedAcross: Province[];
+  metrics: IncidentMetric[];
+  keywords: ExtractedKeyword[];
+}
+
+export type AnalysisStatus = 'ANALYZED' | 'FAILED';
+
+/**
+ * The analysis side's own account of a report (ADR-021). It rides on the
+ * envelope only when the query is filtered by rawReportId, and is null when no
+ * such report exists.
+ */
+export interface AnalysisOutcome {
+  status: AnalysisStatus;
+  analyzedAt: string;
+  incidentCount: number;
+  /** Free text, in English, with no code to translate. See C-9 in PRD 8.2. */
+  warnings: string[];
+}
+
+export interface IncidentPage extends Page<Incident> {
+  analysis?: AnalysisOutcome | null;
+}

@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { Metadata, Page, RawReport, RawReportReceipt } from './types';
+import type { IncidentPage, Metadata, Page, RawReport, RawReportReceipt } from './types';
 
 /**
  * The endpoints the backend serves today. Each one is a thin named call - the
@@ -36,4 +36,17 @@ export function listIncidentReports(
   if (params.size !== undefined) query.set('size', String(params.size));
   const suffix = query.size > 0 ? `?${query.toString()}` : '';
   return request<Page<RawReport>>(`/incident-reports${suffix}`, signal ? { signal } : {});
+}
+
+/**
+ * What a submission produced. The only way to answer "what was extracted",
+ * because the receipt does not say (ADR-021, FR-19); the envelope also carries
+ * the analysis outcome for this report.
+ */
+export function listIncidentsByRawReport(
+  rawReportId: string,
+  signal?: AbortSignal,
+): Promise<IncidentPage> {
+  const query = new URLSearchParams({ rawReportId });
+  return request<IncidentPage>(`/incidents?${query.toString()}`, signal ? { signal } : {});
 }

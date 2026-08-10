@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { getMetadata } from './endpoints';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { getMetadata, listIncidentsByRawReport, submitIncidentReport } from './endpoints';
 import { probeBackendHealth } from './health';
 
 /**
@@ -10,6 +10,7 @@ import { probeBackendHealth } from './health';
 export const queryKeys = {
   metadata: ['metadata'] as const,
   backendHealth: ['backend-health'] as const,
+  incidentsByRawReport: (rawReportId: string) => ['incidents', { rawReportId }] as const,
 };
 
 /**
@@ -30,4 +31,25 @@ export function useBackendHealth() {
     queryKey: queryKeys.backendHealth,
     queryFn: probeBackendHealth,
   });
+}
+
+/**
+ * What a submission produced. Enabled only once there is an id to ask about, so
+ * the hook can sit in the tree before anything has been submitted.
+ *
+ * Analysis runs inside the submit request today (ADR-003), so by the time the
+ * receipt arrives this query has something to find. If analysis ever moves off
+ * the request, the same query answers "not analysed yet" and the stream fills it
+ * in - the component above does not change (FR-19).
+ */
+export function useIncidentsByRawReport(rawReportId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.incidentsByRawReport(rawReportId ?? ''),
+    queryFn: ({ signal }) => listIncidentsByRawReport(rawReportId as string, signal),
+    enabled: rawReportId !== null,
+  });
+}
+
+export function useSubmitReport() {
+  return useMutation({ mutationFn: (text: string) => submitIncidentReport(text) });
 }
