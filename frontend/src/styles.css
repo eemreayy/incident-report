@@ -170,3 +170,99 @@ button:disabled {
 .badge-warn {
   color: #8a5a00;
 }
+
+button.secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.filter-group {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75rem var(--space);
+  margin: 0 0 var(--space);
+}
+
+.filter-group legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
+
+.checkbox-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 400;
+  margin: 0;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space);
+}
+
+.filter-field {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.filter-field + .filter-field label:first-child,
+.filter-field label:not(:first-child) {
+  margin-top: 0.75rem;
+}
+
+.filter-field select,
+.filter-field input {
+  font: inherit;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: inherit;
+}
+
+.filter-field .muted {
+  margin: 0.25rem 0 0;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.incident-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.incident-table th,
+.incident-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.incident-table th {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.incident-table .metric-list {
+  display: block;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: var(--space);
+}

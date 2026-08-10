@@ -228,6 +228,7 @@ kullanıcıya gösterilir, sessizce yutulmaz.
 | Toplam alırken filtre `JOIN` değil `EXISTS` | İki il birden seçildiğinde paylaşılan kayıt join'de iki kez eşleşir ve `SUM` iki katına çıkar; `DISTINCT` bir toplamı düzeltmez. 20 yaralı, 10 kadar makul görünür | [ADR-036](docs/DECISIONS.md#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye) |
 | İl, harita yerine grafik kırılımı | Kaynak "grafiksel" diyor, "haritasal" demiyor; `SHARED` sayılar haritada tanımsız — boyanamaz, bölüştürülemez | [ADR-023](docs/DECISIONS.md#adr-023--coğrafi-izlenebilirlik-harita-yerine-il-kırılımı) |
 | Frontend'de de %80 coverage kapısı | Kaynak dokümandaki ister backend'e daraltılmamış; iki farklı standart, düşük olanın standart olması demek | [ADR-024](docs/DECISIONS.md#adr-024--frontend-coverage-kapısı) |
+| Filtre durumu yalnızca adres çubuğunda | Tek kopya olunca senkronize edilecek iki şey kalmıyor; bağlantı paylaşılabilirliği ve geri düğmesi bedavaya geliyor. Aynı nesne sorgu önbelleğinin de anahtarı | [ADR-037](docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu) |
 
 ---
 

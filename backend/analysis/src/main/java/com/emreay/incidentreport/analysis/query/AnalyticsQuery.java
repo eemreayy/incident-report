@@ -42,9 +42,7 @@ public record AnalyticsQuery(Set<String> eventTypes,
         provinces = provinces == null ? Set.of() : Set.copyOf(provinces);
         keyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
         groupBy = groupBy == null ? ProvinceGrouping.NONE : groupBy;
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new IllegalArgumentException("'from' is after 'to': " + from + " > " + to);
-        }
+        InvalidDateRange.reject(from, to);
     }
 
     public static AnalyticsQuery of(List<String> eventTypes, List<Short> provinces,

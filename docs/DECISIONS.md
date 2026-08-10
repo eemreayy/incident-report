@@ -1036,3 +1036,45 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - Postman koleksiyonuna dört yeni istek girdi; SSE dışındaki tüm uçlar artık koleksiyonda.
 
 **İleride.** Veri büyürse `(event_type, occurred_on)` ve `(province_code, occurred_on)` üzerine bileşik indeksler ilk adım; ondan sonrası önceden hesaplanmış bir özet tablo ya da materialized view olur ve tazeleme stratejisi ayrı bir karar gerektirir. `SHARED` kovasının kapsadığı il kombinasyonuna göre ayrıştırılması istenirse seri anahtarına kombinasyon eklenir — sözleşme değişmez, yalnızca seri sayısı artar. Gün yerine hafta/ay bazında gruplama gerekirse `date_trunc` ile bir `interval` parametresi aynı yapıya oturur; bugün bilinçli olarak yok, çünkü kaynak dokümanın isteri günlük seyir.
+
+---
+
+## ADR-037 — Filtre Durumunun Tek Kaynağı: Adres Çubuğu
+
+**Karar.** Filtre durumu **yalnızca adres çubuğunda** yaşar. React tarafında ikinci bir kopya yoktur: store yok, context yok, `useState` yok. Sorgu dizisi tek bir saf modül tarafından tipli bir `IncidentFilters` nesnesine çözülür (`filters/incidentFilters.ts`) ve tek bir hook (`useIncidentFilters`) üzerinden okunup yazılır. Bunun beş sonucu karar olarak sabitlenir:
+
+1. **Sorgu anahtarı, filtrenin kendisidir.** TanStack Query önbelleği çözülmüş filtre nesnesiyle anahtarlanır; bu yüzden çözümleme **kanoniktir** — çoklu değerler sıralanır ve tekilleştirilir, varsayılanlar URL'e yazılmaz. Aynı görünümün iki yazılışı olamaz, dolayısıyla iki önbellek girdisi ve iki istek de olamaz.
+2. **Okunamayan parametre düşürülür, reddedilmez.** URL elle yazılan, kesilen, yapıştırılan bir şeydir; bozuk bir karakter hata ekranını hak etmez. **Ama tanınmayan olay tipi ya da il kodu düşürülmez** — katalog sunucudadır (NFR-14) ve burada doğrulamak, YAML'a eklenen bir tipe bağlantı verilememesi demek olurdu.
+3. **Sayfa numarası URL'de, ve insanın saydığı gibi.** Adres `page=2` dediğinde ikinci sayfa açılır; sunucunun sıfırdan sayan numarasına çeviren tek yer `toApiQuery`. Sayfa URL'de olmasaydı paylaşılan bir bağlantı hep ilk sayfayı açardı.
+4. **Filtre değişince ilk sayfaya dönülür**, sayfa değişince dönülmez.
+5. **Filtre çubuğu ile liste birbirine bağlı değildir.** Aralarında prop geçmez; ikisi de aynı URL'i okur. Özet tablo ve grafik (T-27, T-28) aynı şekilde bağlanacak.
+
+**Bağlam.** TC-15 üç soruyu birlikte soruyordu: filtre durumunun adres çubuğuyla senkronizasyonu, sunucu verisi önbelleğinin canlı akış geldiğinde geçersizleştirilmesi, ve grafik/özet/liste arasında **tek** filtre kaynağı. FR-21 ayrıca bağlantının paylaşılabilir olmasını kabul kriteri yapıyor. ADR-026, filtre durumu tasarlanırken önbellek anahtarlarının filtreyle birebir eşleşmesi gerektiğini not düşmüştü.
+
+**Gerekçe.**
+- **"Senkronizasyon" sorusunun en iyi cevabı, senkronize edilecek iki şeyin olmaması.** Durumu React'te tutup URL'e yansıtmak iki yönlü bir eşleme demek: yazma yolu, okuma yolu, ve geri düğmesiyle gelen dış değişikliği dinleyen üçüncü bir yol. Üçü de ayrı ayrı yanlış yapılabilir ve aralarındaki fark ancak kullanıcı bağlantıyı paylaştığında görülür. Tek kopyada bu hata sınıfı yok.
+- **Paylaşılabilirlik bir yan etki değil, tanım.** FR-21'in kabul kriteri (adres kopyalanıp yeni sekmede açıldığında aynı görünüm) URL tek kaynak olduğunda kanıtlanacak bir şey olmaktan çıkıyor; başka türlü davranması için fazladan kod gerekirdi.
+- **Geri düğmesi bedavaya geliyor.** Router zaten geçmişi tutuyor; filtre değişikliği bir gezinme olduğu için geri alınabiliyor. Bir store ile aynı davranış elle yazılırdı.
+- **Kanoniklik bir süs değil, önbellek doğruluğu.** `province=41&province=16` ile `province=16&province=41` aynı görünüm; sıralanmasaydı iki ayrı anahtar, iki ayrı istek ve iki ayrı önbellek girdisi olurlardı — ve T-29'da geçersizleştirme bunlardan yalnızca birini tazelerdi.
+- **Akışın geçersizleştireceği tek bir anahtar öneki var.** `/incidents`'tan okunan her şey `['incidents', …]` altında duruyor. Sinyal "kayıtlar değişti" der, "hangi görünüm değişti" demez (ADR-021); dolayısıyla geçersizleştirmenin hepsini tek seferde adlandırabilmesi gerekiyor.
+- **`keepPreviousData` tazelemenin görünümü boşaltmamasının yolu.** FR-25'in isteri bu; sayfa çevirmede de aynı davranış görülüyor, yani T-29 gelmeden önce test edilebiliyor.
+- **Seçim bir karardır, yarım yazılmış kelime değildir.** Onay kutusu, il, tarih ve sıralama anında uygulanır; anahtar kelime forma gönderilince. Debounce bilinçli olarak yok: her duraklamada bir istek demek olurdu ve bu ekranın her testini saate bağlardı (TC-16).
+- **Aralık doğrulaması istemcide tekrarlanmıyor.** Ters tarih aralığını sunucu reddediyor; arayüz cevabı Türkçeye çeviriyor. Kuralın ikinci bir kopyası olmuyor (NFR-13).
+
+**Alternatifler.**
+- *Durumu React'te tutup URL'e yansıtmak:* En yaygın kalıp. İki kopya ve aralarındaki üç yönlü senkronizasyon; ayrıca ilk yüklemede URL'i okumayı unutmak sessiz ve yaygın bir hata.
+- *Global store (Redux/Zustand):* Grafik ve özet eklendiğinde "daha ölçekli" görünürdü. Paylaşılabilirliği kendiliğinden vermez, geri düğmesini hiç vermez ve ADR-026'nın bu ölçekte fazla tören dediği şeyi geri getirir.
+- *Filtreleri en üstte tutup prop olarak geçmek:* Bugün üç bileşen için işler. Dördüncü ekranda prop zinciri uzar ve iki görünümün farklı veri göstermesi yine mümkün kalır.
+- *Sayfa numarasını URL dışında tutmak:* URL sadeleşirdi. Paylaşılan bağlantı hep ilk sayfayı açardı — kabul kriterinin yarısı.
+- *Sayfa numarasını sıfırdan saymak (sunucuyla aynı):* Çeviri kodu olmazdı. Adres çubuğu insanın okuduğu bir yer; `page=1` ikinci sayfa demek olurdu.
+- *Anahtar kelimeyi debounce ile uygulamak:* Daha "canlı" hissettirir. Zamana bağlı testler ve tuş başına istek; ayrıca yarım yazılmış bir kelime paylaşılabilir bir görünüm değil.
+- *Filtreleri istemcide uygulamak (tümünü çek, tarayıcıda süz):* İlk gün daha hızlı görünür. FR-21 bunu açıkça yasaklıyor ve veri bir sayfayı aştığı gün sessizce yanlış cevap verir.
+
+**Sonuçlar.**
+- Üç yeni modül: `filters/incidentFilters.ts` (saf, DOM'suz test edilir), `filters/useIncidentFilters.ts`, ve `incidents/` altındaki üç görünüm.
+- `queryKeys` yeniden düzenlendi: `['incidents', 'list', filtreler]` ve `['incidents', 'by-raw-report', id]`. Ortak önek T-29'un geçersizleştireceği yüzey.
+- **Ters tarih aralığı 500 dönüyordu.** `IncidentQuery`/`AnalyticsQuery` bunu `IllegalArgumentException` ile reddediyordu; bu, genel hata yakalayıcıya düşüp "sunucuda beklenmeyen bir hata" oluyordu — oysa hata isteği yapanındı. Tarih seçicileri bunu bir tık uzağa getirdiği için bu task'ta düzeltildi: artık `DomainValidationException` ve `query.date-range.invalid` koduyla **400**. Uçlar T-16/T-17'den beri böyleydi; görünür kılan arayüz oldu.
+- Filtre çubuğundaki hiçbir seçenek kaynak kodda yazılı değil; olay tipleri ve iller `/metadata`'dan geliyor (NFR-14).
+- **`CatalogPanel` kaldırıldı.** T-23'te "PRD'de olmayan, kuralı görünür kılan geçici panel" olarak eklenmişti; aynı kuralı artık gerçek bir ekran olan filtre çubuğu gösteriyor.
+
+**İleride.** Özet ve grafik (T-27, T-28) aynı hook'u çağıracak; filtre durumu için yapılacak yeni bir iş yok. Akış geldiğinde (T-29) yapılacak tek şey `['incidents']` önekini geçersizleştirmek — hangi görünümlerin açık olduğunu bilmesi gerekmeyecek. Filtre sayısı artarsa (ör. tarih kaynağı, kapsam) aynı çözümleme fonksiyonuna bir alan eklenir; kanoniklik kuralı gereği yeni alanın da varsayılanı URL'e yazılmamalı. Sayfa boyutu bugün sabit 20; kullanıcıya bırakılırsa o da URL'e girer ve aynı çözümlemeden geçer. Anahtar kelime bugün tek; çoklu anahtar kelime istenirse `eventType` gibi tekrarlanan bir parametre olur ve uçtaki `EXISTS` filtresi (ADR-036) zaten buna hazır.

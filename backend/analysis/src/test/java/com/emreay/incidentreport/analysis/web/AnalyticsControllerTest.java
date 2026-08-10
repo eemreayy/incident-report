@@ -124,7 +124,11 @@ class AnalyticsControllerTest {
         assertThatThrownBy(() -> mvc.perform(get("/api/v1/analytics/time-series")
                 .param("from", "2020-05-01").param("to", "2020-04-01")))
                 .rootCause()
-                .isInstanceOf(IllegalArgumentException.class);
+                // The caller's mistake, not the server's: as a plain IllegalArgumentException this
+                // came back as a 500, which tells the caller to report a bug instead of fixing
+                // their dates. Same treatment as an unknown groupBy, just above.
+                .isInstanceOf(DomainValidationException.class)
+                .hasMessageContaining("is after the end date");
 
         verifyNoInteractions(analytics);
     }

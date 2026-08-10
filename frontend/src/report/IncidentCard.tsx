@@ -1,4 +1,5 @@
 import { eventTypeLabel, metricLabel } from '../i18n/catalogLabels';
+import { provinceLine } from '../incidents/provinceLabel';
 import { strings } from '../i18n/strings';
 import type { Incident, Metadata } from '../api/types';
 
@@ -50,19 +51,4 @@ export function IncidentCard({
       )}
     </li>
   );
-}
-
-function provinceLine(incident: Incident): string {
-  switch (incident.provinceScope) {
-    case 'SINGLE':
-      // The province key is absent rather than null for other scopes, so this
-      // branch is the only one that may read it.
-      return incident.province?.name ?? strings.incident.unknownProvince;
-    case 'SHARED':
-      return `${strings.incident.sharedProvinces} — ${strings.incident.sharedNote(
-        incident.sharedAcross.map((province) => province.name).join(', '),
-      )}`;
-    case 'UNKNOWN':
-      return strings.incident.unknownProvince;
-  }
 }

@@ -4,7 +4,7 @@ Backend API'sini frontend olmadan denemek için hazırlanmış koleksiyon.
 
 | Dosya | İçerik |
 |---|---|
-| `incident-report.postman_collection.json` | 26 istek, 6 klasör, her istekte örnek cevap ve assertion |
+| `incident-report.postman_collection.json` | 27 istek, 6 klasör, her istekte örnek cevap ve assertion |
 
 Koleksiyondaki **her örnek cevap çalışan sistemden yakalanmıştır**, elle yazılmamıştır.
 
@@ -135,7 +135,7 @@ Spring'in kendisinden gelsin.
 npx newman run docs/postman/incident-report.postman_collection.json
 ```
 
-Beklenen: **26 istek, 107 assertion, 0 hata.**
+Beklenen: **27 istek, 111 assertion, 0 hata.**
 
 ---
 

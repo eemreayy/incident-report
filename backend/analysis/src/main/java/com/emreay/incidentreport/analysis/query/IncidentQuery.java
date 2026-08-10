@@ -30,9 +30,7 @@ public record IncidentQuery(Set<String> eventTypes,
         provinces = provinces == null ? Set.of() : Set.copyOf(provinces);
         keyword = blankToNull(keyword);
         rawReportId = blankToNull(rawReportId);
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new IllegalArgumentException("'from' is after 'to': " + from + " > " + to);
-        }
+        InvalidDateRange.reject(from, to);
     }
 
     public static IncidentQuery of(List<String> eventTypes, List<Short> provinces,
