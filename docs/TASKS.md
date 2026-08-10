@@ -1101,7 +1101,7 @@ Olay tipi / il / metrik kırılımında agrega görünüm; agregasyon ucundan ge
   seçildi; `SHARED` kovası kapsadığı il kombinasyonuna göre ayrıştırılmıyor (ADR-036) — özet satırı
   hangi illeri kapsadığını söylemiyor, o bilgi kayıt listesinde duruyor.
 
-### ☐ T-28 · Grafik: olay tipi serileri, il kırılımı ve kümülatif
+### ☑ T-28 · Grafik: olay tipi serileri, il kırılımı ve kümülatif
 Olay tipi seçimine bağlı metrik serileri; il kırılımı; kümülatif anahtarı. Kümülatif dönüşüm ve
 agregasyon **sunucudan** istenir. Seri gizle/göster; çok il seçildiğinde okunabilirlik.
 - **Bağımlılık:** T-27
@@ -1109,6 +1109,49 @@ agregasyon **sunucudan** istenir. Seri gizle/göster; çok il seçildiğinde oku
 - **DoD:** Seçilen tipin metrikleri ayrı seriler olarak çiziliyor; kümülatif modda her nokta kendisi
   ve öncekilerin toplamı; grafik ile tablo aynı filtre durumunu gösteriyor — ikisi farklı veri
   gösteremiyor.
+- **Sonuç:** 180 test geçiyor, frontend coverage **%98** (359/365 satır). `analytics/chartOptions.ts`
+  (saf çözümleme + çözümleme kuralları), `analytics/chartModel.ts` (seri → satır çevrimi),
+  `analytics/ChartPanel.tsx`; API katmanına `getTimeSeries` ve `useTimeSeries`. Kararlar
+  [ADR-039](DECISIONS.md#adr-039--grafiğin-iki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi)'da.
+  Recharts ilk kez kullanılıyor — ADR-026 onu tam da bu task için seçmişti.
+- **Grafiğin iki modu var, çünkü grafik yalnızca benzeri benzerle karşılaştırabilir.** Kırılımsız
+  modda bir çizgi bir **metrik**; il kırılımında bir çizgi bir **yer** ve tek bir metrik çizilir.
+  Trafik kazasında üç metrik × üç kova dokuz çizgi eder ve "kaza sayısı" ile "can kaybı" aynı
+  eksende hiçbir soruyu cevaplamaz — task'ın "çok il seçildiğinde okunabilirlik" maddesi bu.
+  Metrik kısıtı **hiçbir sayıyı değiştirmiyor**: her seri kendi başına duruyor ve kısıt asla bir
+  serinin içindeki noktalara uygulanmıyor.
+- **Grafik ayarları adres çubuğunda, filtrelerin yanındaki ayrı anahtarlarda** (`chart`, `metric`,
+  `breakdown`, `cumulative`). Filtre değiller: hangi kayıtların sayıldığını değil, hangi serilerin
+  çizildiğini belirliyorlar — özet ve liste onlardan etkilenmiyor. ADR-037 böylece netleşti: sorgu
+  dizisi **tüm görünümün** durumu, filtreler onun bir parçası; her modül yalnızca kendi
+  anahtarlarını yeniden yazıyor. "Filtreleri temizle" de yalnızca filtreleri temizliyor.
+- **Grafik, filtrenin dışladığı bir tipi asla çizmiyor.** Adreste kalmış geçersiz bir seçim
+  yok sayılıp ilk izin verilen tipe düşülüyor; aksi hâlde grafik ile tablo iki farklı soruyu
+  cevaplardı ve ekranda hangisine inanılacağını söyleyen bir şey olmazdı.
+- **Kümülatif sunucudan isteniyor, etiketi cevaptan okunuyor.** `keepPreviousData` ile eski veri
+  ekranda kalırken anahtar yeni durumu gösterir; etiket anahtardan okunsaydı henüz gelmemiş bir
+  cevabı anlatırdı.
+- **Seri gizle/göster bileşen durumunda**, URL'de değil: ne istendiğini ne de sayılanı değiştiriyor,
+  ve URL'de olsaydı her gösterge tıklaması tarayıcı geçmişine bir adım eklerdi.
+- **jsdom'un iki eksiği test kurulumunda kapatıldı.** `ResizeObserver` yok ve her öğe sıfır boyutlu;
+  bunlar olmadan grafik yalnızca çizilmiyor değil, **hata fırlatıyor** ve grafiği barındıran her
+  ekran boş sayfa oluyor (App testinde tam olarak bu görüldü). Konan şey tarayıcının yerleşimi;
+  grafik gerçek SVG çiziyor ve testler göstergeyi ve çizgi sayısını **ekrandan** okuyor.
+- **Gösterge sırası kütüphaneye bırakılmadı:** Recharts varsayılan olarak alfabetik sıralıyor;
+  çizgi sırası kataloğun sırası, gösterge onu izliyor — özet tablo da aynı sırayı kullanıyor.
+- **DoD fiilen doğrulandı (çalışan sistemde, tarayıcıdan):**
+  - `?chart=TRAFFIC_ACCIDENT` → `Kaza sayısı`, `Can kaybı`, `Yaralı` ayrı çizgiler.
+  - `?chart=FIRE&cumulative=true` → 20 günlük seri 1 · 3 · 6 · … · 210 olarak tırmanıyor,
+    altında *"Her nokta kendisi ve kendinden öncekilerin toplamıdır."*
+  - `?breakdown=province&metric=ACCIDENT_COUNT` → `Bursa` ve `Kocaeli` çizgileri;
+    `metric=INJURED` → yalnızca **`Ortak toplam`** çizgisi, çünkü o figür hiçbir ile ait değil
+    (ADR-019 grafikte de aynı).
+  - `?eventType=FIRE&chart=TRAFFIC_ACCIDENT` → seçim kutusunda yalnızca `Yangın`; adreste kalmış
+    tip yok sayılıyor.
+  - Göstergeye tıklayınca çizgi gizleniyor, adı listede kalıyor, tekrar tıklayınca geri geliyor.
+- **Bilinçli boşluklar:** X ekseni kategorik — yalnızca veri olan günler eşit aralıklarla diziliyor,
+  takvimdeki boşluklar orantılı değil; hafta/ay bazında gruplama ucun `date_trunc` ile genişlemesini
+  bekliyor; birden fazla olay tipi tek eksende çizilmiyor (doğru yolu tip başına küçük çoklu grafik).
 
 ### ☐ T-29 · Canlı akış: SSE aboneliği ve tazeleme
 `EventSource` ile akışa abonelik; sinyal geldiğinde liste, özet ve grafiğin tazelenmesi. Bağlantı

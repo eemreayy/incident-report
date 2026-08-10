@@ -3,6 +3,7 @@ import {
   getIncidentReport,
   getMetadata,
   getSummary,
+  getTimeSeries,
   listIncidentReports,
   listIncidents,
   listIncidentsByRawReport,
@@ -229,5 +230,55 @@ describe('getSummary', () => {
     expect(summary.rows[0]?.province).toBeUndefined();
     expect(summary.eventTypeTotals[0]?.provinceScope).toBeUndefined();
     expect(summary.total.eventType).toBeUndefined();
+  });
+});
+
+describe('getTimeSeries', () => {
+  const EMPTY_SERIES = { cumulative: false, groupBy: 'NONE', series: [] };
+
+  it('asks for the running total rather than computing one', async () => {
+    respondWith(EMPTY_SERIES);
+
+    await getTimeSeries({ eventTypes: ['FIRE'], cumulative: true, groupBy: 'province' });
+
+    const url = new URL(calledUrl(), 'http://test');
+    expect(url.pathname).toBe('/api/v1/analytics/time-series');
+    expect(url.searchParams.get('cumulative')).toBe('true');
+    expect(url.searchParams.get('groupBy')).toBe('province');
+    expect(url.searchParams.getAll('eventType')).toEqual(['FIRE']);
+  });
+
+  it('leaves both switches out when they are off', async () => {
+    respondWith(EMPTY_SERIES);
+
+    await getTimeSeries({ eventTypes: ['FIRE'] });
+
+    // `cumulative=false` and no grouping are the endpoint's own defaults; naming
+    // them would only make two spellings of one request, and two cache entries.
+    expect(calledUrl()).toBe('/api/v1/analytics/time-series?eventType=FIRE');
+  });
+
+  it('reads back which chart this is', async () => {
+    respondWith({
+      cumulative: true,
+      groupBy: 'PROVINCE',
+      series: [
+        {
+          eventType: 'TRAFFIC_ACCIDENT',
+          metric: 'INJURED',
+          provinceScope: 'SHARED',
+          points: [{ date: '2020-06-01', value: 10 }],
+        },
+      ],
+    });
+
+    const series = await getTimeSeries({ cumulative: true });
+
+    // The answer says what it is, so the chart never labels itself from what it
+    // asked for while a request is still in flight.
+    expect(series.cumulative).toBe(true);
+    expect(series.groupBy).toBe('PROVINCE');
+    // A SHARED series names no province - it belongs to none of them (ADR-019).
+    expect(series.series[0]?.province).toBeUndefined();
   });
 });

@@ -6,6 +6,7 @@ import type {
   RawReport,
   RawReportReceipt,
   Summary,
+  TimeSeries,
 } from './types';
 
 /**
@@ -117,6 +118,32 @@ export function listIncidentsByRawReport(
   signal?: AbortSignal,
 ): Promise<IncidentPage> {
   return listIncidents({ rawReportId }, signal);
+}
+
+/** What the chart adds to the filters: a dimension, and a running total (FR-12, FR-24). */
+export interface TimeSeriesQuery extends IncidentFilterQuery {
+  groupBy?: 'province';
+  cumulative?: boolean;
+}
+
+/**
+ * The chart's series (FR-23).
+ *
+ * `cumulative` is a request, not a transformation to apply on arrival: what "the
+ * total so far" means is a rule, and a second copy of it here would drift from
+ * the server's (NFR-13). The same goes for the province dimension - the server
+ * decides which points belong to which line.
+ */
+export function getTimeSeries(
+  query: TimeSeriesQuery = {},
+  signal?: AbortSignal,
+): Promise<TimeSeries> {
+  const params = filterParams(query);
+  if (query.groupBy) params.set('groupBy', query.groupBy);
+  if (query.cumulative) params.set('cumulative', 'true');
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  return request<TimeSeries>(`/analytics/time-series${suffix}`, signal ? { signal } : {});
 }
 
 /**

@@ -314,3 +314,30 @@ button.secondary {
   gap: 0.75rem;
   margin-top: var(--space);
 }
+
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space);
+  margin-bottom: 0.75rem;
+}
+
+.chart-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-self: center;
+  padding-top: 1.25rem;
+}
+
+.chart-area {
+  margin: var(--space) 0 0.5rem;
+}
+
+/* Recharts renders its legend as text, so the series names are readable and
+   selectable rather than being carried by the line colours alone (NFR-16). */
+.chart-area .recharts-legend-item text,
+.chart-area .recharts-legend-item {
+  cursor: pointer;
+}

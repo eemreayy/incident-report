@@ -74,10 +74,13 @@ Bunlar tercih değil, karar:
    mesajları İngilizce. Türkçe metinler tek yerde toplanır, bileşenlerin içine serpiştirilmez.
 7. **Tazeleme sırasında görünüm boşaltılmaz.** Yeni veri gelene kadar eski veri ekranda kalır;
    aksi halde her sinyalde tablo bir an boşalır ve bu, kullanıcı gözünde sayfa yenilenmesidir.
-8. **Filtre durumunun tek kopyası adres çubuğudur** — store, context ya da `useState` kopyası yok
+8. **Görünüm durumunun tek kopyası adres çubuğudur** — store, context ya da `useState` kopyası yok
    ([ADR-037](../docs/DECISIONS.md#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu)). Filtreye
    bakan her görünüm `useIncidentFilters`'ı çağırır; birbirlerine prop geçmezler. Çözümleme
-   kanoniktir, çünkü sorgu önbelleğinin anahtarı da odur.
+   kanoniktir, çünkü sorgu önbelleğinin anahtarı da odur. Grafik kendi ayarlarını (`chart`,
+   `metric`, `breakdown`, `cumulative`) aynı adres çubuğunda **ayrı anahtarlarda** tutar
+   ([ADR-039](../docs/DECISIONS.md#adr-039--grafiğin-iki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi));
+   her modül yalnızca kendi anahtarlarını yeniden yazar, yoksa biri diğerini sıfırlar.
 
 ## Çalıştırma ve API erişimi
 

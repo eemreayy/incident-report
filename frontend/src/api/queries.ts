@@ -2,9 +2,11 @@ import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import {
   getMetadata,
   getSummary,
+  getTimeSeries,
   listIncidents,
   listIncidentsByRawReport,
   submitIncidentReport,
+  type TimeSeriesQuery,
 } from './endpoints';
 import { probeBackendHealth } from './health';
 import { toApiQuery, toFilterQuery, type IncidentFilters } from '../filters/incidentFilters';
@@ -27,6 +29,7 @@ export const queryKeys = {
     ['incidents', 'by-raw-report', rawReportId] as const,
   analytics: ['analytics'] as const,
   summary: (filters: IncidentFilters) => ['analytics', 'summary', filters] as const,
+  timeSeries: (query: TimeSeriesQuery) => ['analytics', 'time-series', query] as const,
 };
 
 /**
@@ -101,6 +104,24 @@ export function useSummary(filters: IncidentFilters) {
     queryKey: queryKeys.summary(filters),
     queryFn: ({ signal }) => getSummary(toFilterQuery(filters), signal),
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The chart's series (FR-23). The whole query is the key - the filters and what
+ * the chart asked of them - so switching back to a view already seen is instant
+ * and switching the cumulative toggle is a different question, not a mutation of
+ * this one's answer.
+ *
+ * `enabled` because there is nothing to plot until an event type is settled on:
+ * a request with no type would draw every metric of every type on one axis.
+ */
+export function useTimeSeries(query: TimeSeriesQuery, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.timeSeries(query),
+    queryFn: ({ signal }) => getTimeSeries(query, signal),
+    placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

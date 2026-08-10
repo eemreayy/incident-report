@@ -58,6 +58,30 @@ export const strings = {
     loading: 'Filtre seçenekleri yükleniyor…',
     note: 'Seçtiğiniz filtreler adres çubuğuna yansır; bağlantıyı paylaştığınızda aynı görünüm açılır.',
   },
+  chart: {
+    heading: 'Zaman serisi',
+    loading: 'Grafik getiriliyor…',
+    refreshing: 'Güncelleniyor…',
+    retry: 'Tekrar dene',
+    eventType: 'Grafikteki olay tipi',
+    metric: 'Karşılaştırılan metrik',
+    breakdown: 'İl kırılımı',
+    cumulative: 'Kümülatif',
+    // FR-12: the two look alike and read completely differently, so the chart
+    // says which one it is - and says it from the answer, not from the switch.
+    cumulativeOn: 'Her nokta kendisi ve kendinden öncekilerin toplamıdır.',
+    plain: 'Her nokta o güne ait değerdir.',
+    breakdownHint: 'İl kırılımında yalnızca tek bir metrik çizilir; iller ancak aynı sayı üzerinden karşılaştırılabilir.',
+    legendHint: 'Bir seriyi gizlemek veya göstermek için göstergedeki adına tıklayın.',
+    empty: 'Grafiğe çizilecek veri yok. Yukarıdaki formdan bir bildirim girebilirsiniz.',
+    emptyFiltered: 'Seçtiğiniz filtrelere ve olay tipine uyan veri yok.',
+    noEventTypes: 'Katalogda çizilebilecek bir olay tipi yok.',
+    // The chart's own settings never change which records are counted; saying so
+    // keeps a reader from reading the chart as a narrower table.
+    scopeNote:
+      'Grafik, aşağıdaki tablolarla aynı filtreleri kullanır; olay tipi ve metrik seçimi yalnızca hangi serilerin çizildiğini belirler.',
+    dateAxis: 'Tarih',
+  },
   summary: {
     heading: 'Özet',
     loading: 'Özet getiriliyor…',

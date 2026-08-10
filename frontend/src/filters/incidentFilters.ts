@@ -48,6 +48,9 @@ export const DEFAULT_FILTERS: IncidentFilters = {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** The query-string keys this module owns. Everything else in the URL is someone else's. */
+const FILTER_PARAMS = ['eventType', 'province', 'from', 'to', 'keyword', 'sort', 'page'] as const;
+
 /**
  * Reads the address bar.
  *
@@ -74,13 +77,24 @@ export function parseFilters(params: URLSearchParams): IncidentFilters {
 }
 
 /**
- * Writes the address bar, leaving out everything that is at its default. The
- * unfiltered view therefore has a clean URL, and two ways of arriving at the
- * same view produce the same string - which matters because this string is also
- * what the query cache is keyed by.
+ * Writes the filters into the address bar, leaving out everything that is at its
+ * default. The unfiltered view therefore has a clean URL, and two ways of
+ * arriving at the same view produce the same string - which matters because this
+ * string is also what the query cache is keyed by.
+ *
+ * Only the filter parameters are touched. The address bar carries the whole
+ * view, and the chart keeps its own settings there (`chart`, `metric`,
+ * `breakdown`, `cumulative`); rebuilding the query string from scratch here
+ * would silently reset them every time a filter changed.
  */
-export function toSearchParams(filters: IncidentFilters): URLSearchParams {
-  const params = new URLSearchParams();
+export function toSearchParams(
+  filters: IncidentFilters,
+  base: URLSearchParams = new URLSearchParams(),
+): URLSearchParams {
+  const params = new URLSearchParams(base);
+  for (const key of FILTER_PARAMS) {
+    params.delete(key);
+  }
   for (const key of [...filters.eventTypes].sort()) {
     params.append('eventType', key);
   }

@@ -11,11 +11,13 @@ const CATALOG = {
 
 const EMPTY_PAGE = { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 };
 const EMPTY_SUMMARY = { rows: [], eventTypeTotals: [], total: { incidentCount: 0, metrics: {} } };
+const EMPTY_SERIES = { cumulative: false, groupBy: 'NONE', series: [] };
 
 /**
- * The shell makes four independent calls - the health probe, the catalog, the
- * summary and the record list - so the stub answers by URL. A single blanket
- * response would hand the catalog a health payload and pass for the wrong reason.
+ * The shell makes five independent calls - the health probe, the catalog, the
+ * chart's series, the summary and the record list - so the stub answers by URL.
+ * A single blanket response would hand the catalog a health payload and pass for
+ * the wrong reason.
  */
 function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
   vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
@@ -27,9 +29,11 @@ function stubBackend({ healthy = true }: { healthy?: boolean } = {}) {
       ? { status: 'UP' }
       : url.includes('/analytics/summary')
         ? EMPTY_SUMMARY
-        : url.includes('/incidents')
-          ? EMPTY_PAGE
-          : CATALOG;
+        : url.includes('/analytics/time-series')
+          ? EMPTY_SERIES
+          : url.includes('/incidents')
+            ? EMPTY_PAGE
+            : CATALOG;
     return Promise.resolve({ ok: true, status: 200, json: async () => body } as Response);
   });
 }
@@ -61,7 +65,9 @@ describe('App', () => {
     renderApp();
 
     // NFR-14 end to end: the label comes from the response, not from the source.
-    expect(await screen.findByText('Salgın')).toBeInTheDocument();
+    // It appears twice now - as a filter and as the chart's subject - so this
+    // is findAll: a single-match query would fail for the wrong reason.
+    expect(await screen.findAllByText('Salgın')).not.toHaveLength(0);
   });
 
   it('says the backend is unreachable instead of failing to render', async () => {
