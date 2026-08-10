@@ -18,14 +18,19 @@ import com.emreay.incidentreport.analysis.domain.AnalysisStatus;
 import com.emreay.incidentreport.analysis.repository.AnalysisResultRepository;
 import com.emreay.incidentreport.analysis.repository.IncidentRepository;
 import com.emreay.incidentreport.analysis.repository.ProvinceRepository;
+import com.emreay.incidentreport.shared.event.IncidentRecordsProducedEvent;
+import com.emreay.incidentreport.shared.event.IncidentSignal;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import com.emreay.incidentreport.analysis.text.NormalizedText;
 import com.emreay.incidentreport.analysis.text.SentenceSplitter;
 import com.emreay.incidentreport.analysis.text.TurkishTextNormalizer;
 import org.mockito.ArgumentCaptor;
+import org.mockito.invocation.InvocationOnMock;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -39,6 +44,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -63,6 +69,7 @@ class AnalysisServiceTest {
     private IncidentRepository incidents;
     private ProvinceRepository provinces;
     private AnalysisResultRepository results;
+    private ApplicationEventPublisher events;
     private AnalysisService service;
 
     @BeforeEach
@@ -71,11 +78,27 @@ class AnalysisServiceTest {
         incidents = mock(IncidentRepository.class);
         provinces = mock(ProvinceRepository.class);
         results = mock(AnalysisResultRepository.class);
+        events = mock(ApplicationEventPublisher.class);
         when(results.findByRawReportId(any())).thenReturn(Optional.empty());
-        service = new AnalysisService(extractor, incidents, provinces, results,
+        when(incidents.saveAll(any())).thenAnswer(AnalysisServiceTest::assignIds);
+        service = new AnalysisService(extractor, incidents, provinces, results, events,
                 Clock.fixed(ANALYSED_AT, ZoneOffset.UTC),
                 new TurkishTextNormalizer(new SentenceSplitter()),
                 REPORTING_ZONE);
+    }
+
+    /**
+     * Stands in for the one thing saving actually adds: an identity. A stub that handed back
+     * id-less records would be modelling a repository that does not work, and the announcement
+     * below has nothing to name without them.
+     */
+    private static List<Incident> assignIds(InvocationOnMock invocation) {
+        List<Incident> saved = invocation.getArgument(0);
+        long id = 1;
+        for (Incident incident : saved) {
+            ReflectionTestUtils.setField(incident, "id", id++);
+        }
+        return saved;
     }
 
     /**
@@ -304,6 +327,92 @@ class AnalysisServiceTest {
         assertThat(existing.getStatus()).isEqualTo(AnalysisStatus.ANALYZED);
         assertThat(existing.getFailureReason()).isNull();
         assertThat(existing.getIncidentCount()).isEqualTo(1);
+    }
+
+    /**
+     * The stream is told what now stands, in enough detail to judge relevance and no more (C-8).
+     * The province codes are the interesting part: a filtered view has to be able to tell whether
+     * the new record would show up in it.
+     */
+    @Test
+    @DisplayName("what was stored is announced, by identity and dimension only")
+    void announcesTheRecordsItProduced() {
+        Province bursa = province(16, "Bursa");
+        Province kocaeli = province(41, "Kocaeli");
+        when(provinces.findById((short) 16)).thenReturn(Optional.of(bursa));
+        when(provinces.findAllById(any())).thenReturn(List.of(bursa, kocaeli));
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
+                List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SINGLE,
+                                (short) 16, null, "TRAFFIC_ACCIDENT", ClassificationStatus.CLASSIFIED,
+                                Map.of("INJURED", 8), List.of()),
+                        new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SHARED,
+                                null, Set.of((short) 16, (short) 41), "TRAFFIC_ACCIDENT",
+                                ClassificationStatus.CLASSIFIED, Map.of("INJURED", 10), List.of()),
+                        unclassified()),
+                List.of()));
+
+        service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
+
+        IncidentRecordsProducedEvent announced = captureAnnouncement();
+        assertThat(announced.rawReportId()).isEqualTo(REPORT_ID);
+        assertThat(announced.analyzedAt()).isEqualTo(ANALYSED_AT);
+        assertThat(announced.incidents())
+                .extracting(IncidentSignal::incidentId, IncidentSignal::occurredOn,
+                        IncidentSignal::eventType, IncidentSignal::provinceCodes)
+                .containsExactly(
+                        tuple(1L, REFERENCE_DATE, "TRAFFIC_ACCIDENT", Set.of((short) 16)),
+                        tuple(2L, REFERENCE_DATE, "TRAFFIC_ACCIDENT", Set.of((short) 16, (short) 41)),
+                        tuple(3L, REFERENCE_DATE, "OTHER", Set.of()));
+    }
+
+    /**
+     * A reprocess that now finds nothing still changed what every query answers. A client showing
+     * the rows it deleted has no other way to learn they are gone.
+     */
+    @Test
+    @DisplayName("a run that produced nothing is still announced")
+    void announcesEvenWhenNothingWasExtracted() {
+        when(incidents.deleteByRawReportId(REPORT_ID)).thenReturn(3L);
+        when(extractor.extract(any(), any()))
+                .thenReturn(new ExtractionResult(List.of(), List.of("nothing recognised")));
+
+        service.analyze(REPORT_ID, "metin", SUBMITTED_AT);
+
+        assertThat(captureAnnouncement().incidents()).isEmpty();
+    }
+
+    /**
+     * Nothing was written, so there is nothing to look at again. The submitter learns what happened
+     * from the analysis outcome, which is a query, not a broadcast (ADR-021).
+     */
+    @Test
+    @DisplayName("a run that failed announces nothing")
+    void announcesNothingWhenTheRunFailed() {
+        when(provinces.findById((short) 99)).thenReturn(Optional.empty());
+        when(extractor.extract(any(), any())).thenReturn(new ExtractionResult(
+                List.of(new ExtractedIncident(REFERENCE_DATE, DateSource.EXPLICIT, ProvinceScope.SINGLE,
+                        (short) 99, null, "EPIDEMIC", ClassificationStatus.CLASSIFIED, Map.of(), List.of())),
+                List.of()));
+
+        assertThatThrownBy(() -> service.analyze(REPORT_ID, "metin", SUBMITTED_AT))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("recording a failure announces nothing either")
+    void recordingAFailureIsNotAnnounced() {
+        service.recordFailure(REPORT_ID, "java.lang.IllegalStateException: boom");
+
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    private IncidentRecordsProducedEvent captureAnnouncement() {
+        ArgumentCaptor<IncidentRecordsProducedEvent> announced =
+                ArgumentCaptor.forClass(IncidentRecordsProducedEvent.class);
+        verify(events).publishEvent(announced.capture());
+        return announced.getValue();
     }
 
     @SuppressWarnings("unchecked")

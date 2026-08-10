@@ -124,23 +124,35 @@ Bedeli bir ek istek. Karşılığında analiz ileride istek thread'inden çıkar
 taşınsa **hiçbir istemci sözleşmesi değişmiyor**: sorgu bir süre "henüz analiz edilmedi" der, canlı
 akış da ne zaman değiştiğini söyler.
 
-Metin çıkarımının kendisi henüz yazılmadı (T-08…T-14); her bildirim şu an `OTHER` / `UNCLASSIFIED`
-olarak kaydediliyor ve nedenini söyleyen uyarılar üretiliyor. Bu bir yer tutucu değil, sistemin
-**tanımadığı metin için gerçek davranışı** (ADR-006). Ancak bunların hiçbiri bu cevaplarda
-görünmüyor — onları sunacak uç henüz yok.
+Tanınmayan bir metin de aynı yolu izler: kaydedilir, `OTHER` / `UNCLASSIFIED` olarak saklanır ve
+nedenini söyleyen uyarılar üretilir. Bu bir yer tutucu değil, sistemin **tanımadığı metin için
+gerçek davranışı** (ADR-006) — ve hiçbiri bu cevapta görünmez; durumu da uyarıları da
+`?rawReportId=` sorgusu verir.
 
 ---
 
-## Koleksiyonda henüz olmayan uçlar
+## Koleksiyonda olmayan uçlar
 
-Tasarlandı ama yazılmadı; eklenseler 404 dönerlerdi:
-
-| Uç | Ne yapacak | Task |
+| Uç | Neden yok | Task |
 |---|---|---|
-| `GET /api/v1/incidents` | Yapılandırılmış kayıtlar, filtreli ve sayfalı | T-16 |
-| `GET /api/v1/analytics/time-series` · `/summary` | Grafik verisi, kümülatif dahil | T-17 |
-| `GET /api/v1/stream/incidents` | SSE akışı | T-18 |
-| `POST /api/v1/incident-reports/{id}/reprocess` | Yeniden analiz | T-19 |
+| `GET /api/v1/analytics/time-series` · `/summary` | Henüz yazılmadı; eklenseler 404 dönerlerdi | T-17 |
+| `GET /api/v1/stream/incidents` | **Yazıldı, ama koleksiyona bilerek alınmadı** | T-18 |
+
+**SSE ucu neden dışarıda?** Bu istek bitmez — bağlantı açık kalır. `npx newman run` sırasında koşu
+o istekte askıda kalır, yani koleksiyonun duman testi olma özelliğini kaybeder. Uç, canlı sistemde
+`curl -N` ile doğrulanıyor:
+
+```bash
+curl -N http://localhost:8080/api/v1/stream/incidents
+```
+
+Başka bir terminalden bir Submit isteği gönderin; açık terminalde `event:incidents` satırı ve
+üretilen kayıtların kimlikleri görünür. Aradaki sessizlikte periyodik olarak `:heartbeat` yorumları
+akar — bağlantıyı açık tutan ve kopmuş istemciyi sunucuya fark ettiren şey odur
+([ADR-034](../DECISIONS.md#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik)).
+
+Akış **veri kaynağı değil, tazeleme tetikleyicisidir**: mesaj yalnızca hangi kayıtların oluştuğunu
+söyler, ne içerdiklerini değil. Veriyi yine `GET /incidents?rawReportId=...` verir.
 
 Ayrıntı için [`docs/TASKS.md`](../TASKS.md).
 

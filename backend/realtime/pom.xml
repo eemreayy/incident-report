@@ -28,24 +28,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <!--
+          For @TransactionalEventListener only: the broadcast waits for the analysing module's
+          commit, so it never tells a client to look at rows that are not visible yet. No
+          transaction is started here and none can be - this module has no database (ADR-002).
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <!--
-              The parent fails a module that runs no tests, which is what keeps the coverage gate
-              from being skipped (ADR-018). This module has no production code yet - the SSE
-              broadcast lands in T-18 - so there is nothing to test and nothing to skip past.
-
-              REMOVE THIS OVERRIDE IN T-18, together with the first class that arrives here.
-            -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <failIfNoTests>false</failIfNoTests>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>

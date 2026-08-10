@@ -60,6 +60,20 @@ class ArchitectureRulesTest {
                     .should().dependOnClassesThat().resideInAPackage(INGESTION)
                     .because("the two modules communicate through domain events in shared, never directly (ADR-003)");
 
+    /**
+     * The transport layer must not learn to ask.
+     *
+     * <p>Its whole value is that a broadcast costs the modules it announces nothing and can be lost
+     * without consequence. A call into {@code analysis} to enrich a signal would put a query on the
+     * submitting request's path and turn the stream into a data source — the two things
+     * ADR-004 and ADR-021 spend their reasoning avoiding.
+     */
+    @ArchTest
+    static final ArchRule realtimeMustOnlyKnowSharedEvents =
+            noClasses().that().resideInAPackage(REALTIME)
+                    .should().dependOnClassesThat().resideInAnyPackage(INGESTION, ANALYSIS)
+                    .because("the stream is told what happened through events in shared; it never asks (ADR-021)");
+
     @ArchTest
     static final ArchRule sharedMustNotDependOnAnyModule =
             noClasses().that().resideInAPackage(SHARED)

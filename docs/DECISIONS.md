@@ -34,6 +34,14 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-024](#adr-024--frontend-coverage-kapısı) | Frontend coverage kapısı | Kabul edildi |
 | [ADR-025](#adr-025--aynı-köken-nginx-reverse-proxy-cors-yerine) | Aynı köken: nginx reverse proxy (CORS yerine) | Kabul edildi · **TC-17 çözüldü** |
 | [ADR-026](#adr-026--frontend-kütüphane-seti) | Frontend kütüphane seti | Kabul edildi |
+| [ADR-027](#adr-027--türkçe-normalizasyon-konum-koruyan-metin-ve-elle-yazılmış-cümle-bölücü) | Türkçe normalizasyon: konum koruyan metin, elle yazılmış cümle bölücü | Kabul edildi · **TC-5 çözüldü** |
+| [ADR-028](#adr-028--sayı-ayrıştırma-bileşik-sözcükler-tarihlerin-dışlanması-ve-okunamayan-figürler) | Sayı ayrıştırma: bileşik sözcükler, tarihlerin dışlanması | Kabul edildi · **TC-4 çözüldü** |
+| [ADR-029](#adr-029--zaman-dilimi-gün-sınırı-ve-göreli-aralıkların-tek-güne-indirgenmesi) | Zaman dilimi, gün sınırı ve göreli aralıklar | Kabul edildi · **TC-6 çözüldü** |
+| [ADR-030](#adr-030--i̇l-tanıma-referans-veriden-beslenme-sayılı-ekler-ve-ilçe-ayrımı) | İl tanıma: referans veriden beslenme, ek ve ilçe ayrımı | Kabul edildi · **TC-7 çözüldü** |
+| [ADR-031](#adr-031--sınıflandırma-tek-anahtar-kelime-eşiği-sayısal-güven-yerine-kanıt-çoklu-tip) | Sınıflandırma: tek anahtar kelime eşiği, kanıt, çoklu tip | Kabul edildi · **TC-8 çözüldü** |
+| [ADR-032](#adr-032--sayı--metrik-eşleştirme-ve-il-kapsamının-belirlenmesi) | Sayı ↔ metrik eşleştirme ve il kapsamının belirlenmesi | Kabul edildi · **TC-3 çözüldü** |
+| [ADR-033](#adr-033--okuma-ucunun-şekli-kapsam-filtresi-uç-seviyesinde-analiz-sonucu-ve-dto-döndüren-okuma-servisi) | Okuma ucunun şekli: kapsam filtresi, uç seviyesinde analiz sonucu | Kabul edildi |
+| [ADR-034](#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik) | Canlı akışın yaşam döngüsü: rapor başına sinyal, commit sonrası yayın | Kabul edildi · **TC-10 çözüldü** |
 
 ---
 
@@ -894,3 +902,48 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 **Sonuçlar.** `IncidentQueryService` okuma modelinin sahibi: sorguyu çalıştırıyor ve cevabı **transaction içinde** kuruyor. Cevap `IncidentPageResponse`, `PageResponse`'un alan adlarını tekrarlıyor ama nesting yapmıyor; istemci her yerde aynı alan adlarını okuyor, artı bir `analysis` alanı. FR-08'in "ham bildirimden türeyen kayıtlara ulaşma" yönü böylece kapandı — T-11'de açık bıraktığım boşluk.
 
 **İleride.** Anahtar kelime araması bugün `LIKE` ile ve veritabanının küçültme kurallarıyla çalışıyor; Türkçe'ye tam duyarlı arama için PostgreSQL'de bir dil yapılandırması veya normalize edilmiş bir arama kolonu gerekir. Sayfalama offset tabanlı; veri büyürse anahtar tabanlı (keyset) sayfalamaya geçmek sıralama sözleşmesini korur. `IncidentPageResponse`'un `PageResponse` ile alan tekrarı, generic bir zarf tipi gerekirse tek noktada toplanabilir.
+
+---
+
+## ADR-034 — Canlı Akışın Yaşam Döngüsü: Rapor Başına Sinyal, Commit Sonrası Yayın, Heartbeat ile Temizlik
+
+**Karar.** `GET /api/v1/stream/incidents` tek yönlü bir SSE akışıdır ve şu beş kararla çalışır:
+
+1. **Sinyalin birimi kayıt değil, rapordur.** Analizi biten her ham bildirim için **bir** mesaj yayınlanır; mesaj o raporun ürettiği kayıtları listeler: `{ rawReportId, analyzedAt, incidents: [{ incidentId, occurredOn, eventType, provinceCodes[] }] }`. SSE olay adı `incidents`.
+2. **Yayını, kayıtların sahibi tetikler; `realtime` yalnızca taşır.** `analysis` işini bitirince `shared`'daki `IncidentRecordsProducedEvent`'i yayınlar, `realtime` onu `@TransactionalEventListener(AFTER_COMMIT)` ile dinler. Yayın **commit'ten sonra**dır.
+3. **Başarılı her analiz yayınlanır — sıfır kayıt üretse bile.** Başarısız analiz **hiçbir şey yayınlamaz**.
+4. **Bağlantı yaşam döngüsü:** abonelikte anında bir yorum satırı yazılır; her `20s`'de bir yorum (heartbeat) gider; bir abonelik `30m` sonra sunucu tarafından kapatılır; abonelik dört kapıdan birinden çıkar — istemci kapattı, süre doldu, konteyner hata bildirdi, ya da yazma denemesi patladı. İkisi de yapılandırılabilir (`incident-report.realtime.*`).
+5. **Akış durumsuzdur:** `Last-Event-ID` ile tekrar oynatma yoktur, istemci bazlı filtre yoktur, mesaj kuyruğa alınmaz. Kaçan bir mesaj veri kaybı değil, gecikmiş tazelemedir.
+
+**Bağlam.** ADR-004 taşıma katmanını (SSE) ve ADR-021 sözleşmeyi (veri değil, sinyal) seçmişti; PRD §10'da TC-10 olarak duran kısım bağlantı yönetiminin kendisiydi: timeout, kopma, çok istemcili yayın. Bunlar arayüzden görünmeyen ama bedeli sunucuda ödenen sorulardır — uzun ömürlü HTTP bağlantıları ADR-004'ün "Sonuçlar" bölümünde açıkça bir risk olarak bırakılmıştı. Frontend tarafı (T-29) bu ucun ne söylediğini varsayarak yazılacağı için sözleşme bu task'ta sabitlenmek zorundaydı.
+
+**Gerekçe.**
+
+- **Rapor başına tek mesaj, istemciyi debounce yazmaktan kurtarır.** Bir metin rutin olarak birden fazla kayıt üretiyor (üçüncü örnek metin üç kayıt). Kayıt başına mesaj, tek bir gönderim için üç tazeleme demekti; istemci ya üç kez sorgu atacak ya da sunucunun bildiği bir gerçeği (bunlar aynı gönderimden geldi) kendi tarafında yeniden kurmak zorunda kalacaktı. Değişimin birimi rapordur, çünkü analiz raporu bir bütün olarak yeniden inşa eder.
+- **`provinceCodes` bir liste, kapsam adı değil.** Sinyalin tek işi "bu bana göre mi?" sorusunu cevaplatmak. İl filtresi hem o ile ait kayıtları hem figürü o ili kapsayan `SHARED` kayıtları döndürdüğü için (ADR-033), istemcinin ihtiyacı olan şey kapsamın **adı** değil, kaydın hangi illere cevap vereceğidir. Kod listesi bu soruyu üç kapsam için de tek bir kesişim testiyle cevaplıyor; `SINGLE` bir kod, `SHARED` birkaç kod, `UNKNOWN` sıfır kod taşır.
+- **Commit'ten önce yayın, sessiz bir tazelik hatasıdır.** `analysis` event'i kendi transaction'ının içinden yayınlıyor. Düz `@EventListener` ile mesaj, PostgreSQL commit etmeden istemciye ulaşırdı; istemci hemen sorgulayınca **önceki** durumu görür, ve akış hiçbir şeyi iki kez göndermediği için o istemci bir sonraki alakasız gönderime kadar eski veride kalırdı. Hata mesajsızdır — en pahalı türü. `AFTER_COMMIT` ayrıca geri alınan bir analizin hiç duyurulmamasını da sağlıyor: doğru cevap zaten "hiçbir şey değişmedi".
+- **Sıfır kayıt da bir değişimdir.** Reprocess önce siler sonra yazar; kuralların daraldığı bir durumda sonuç boş olabilir. Silinen satırları gösteren istemcinin bunu öğrenmesinin başka yolu yok. Buna karşılık **başarısız** analiz hiçbir şey yazmadığı için yayınlanacak bir değişim de üretmez; gönderen sonucu zaten sorgudan okur (ADR-021).
+- **Heartbeat, istemci için değil sunucu için de var.** Sekmesini aniden kapatan bir istemci arkasında **yazılana kadar sağlıklı görünen** bir soket bırakır. Periyodik yorum, bağlantıyı boşta kapatacak proxy'leri engellemenin yanı sıra ölü aboneliği ortaya çıkaran şeydir — TC-10'daki "kopma/temizlik" maddesinin gerçek cevabı budur. Yorum (`:`) seçildi, olay değil: `EventSource` yorumu hiçbir dinleyiciye iletmez, dolayısıyla heartbeat hiçbir zaman "bir şey oldu" diye okunamaz.
+- **Abonelikte anında yazmak, sessiz sistemi bozuk sistemden ayırır.** İlk bayt yazılmadan yanıt commit edilmez; tarayıcı `onopen`'ı görmez, araya giren proxy bağlantıyı kurulmuş saymaz. Olaysız geçen ilk on dakika, kopuk bir bağlantıyla birebir aynı görünürdü.
+- **Süreli abonelik, sızıntının tavanıdır.** Timeout istemciye bir şey kaybettirmez (`EventSource` kendisi yeniden bağlanır, akış veri taşımaz), ama sunucunun temizlemeyi kaçırdığı bir bağlantının ne kadar yaşayabileceğini sınırlar.
+- **Durumsuzluk, ADR-021'in doğal sonucu.** Akış veri kaynağı olmadığı için tekrar oynatma da gerekmez: yeniden bağlanan istemci sorgu uçlarından doğru duruma yakınsar. Tampon tutmak, kaçırılmış mesajı "kurtarılması gereken veri" haline getirir — yani akışa tam da vermemeye karar verdiğimiz rolü geri verir.
+- **İstemci bazlı filtre yok.** Kimlik doğrulama olmadığı için (ADR-011) kişiye özel görünüm de yok; ayrıca ilgiyi istemci zaten sinyalden belirliyor ve **gösterdiği** filtrelerle yeniden sorguluyor. Sunucuda filtre tutmak, aynı kuralın ikinci bir kopyasını akış tarafında büyütürdü.
+
+**Alternatifler.**
+
+- *Kayıt başına olay:* Sözleşme daha basit görünür. Tek gönderim için N tazeleme; ilişkiyi istemcide yeniden kurmak gerekir.
+- *Düz `@EventListener` (commit'ten önce):* Bir anotasyon daha az. Yukarıdaki yarış koşulunu üretir; testte de görünmez, çünkü test transaction'ı iddiaların etrafında açık kalır — ADR-033'te aynı sınıftan bir hata fiilen yaşandı.
+- *`realtime`'ın olayı zenginleştirmek için `analysis`'e sorması:* Mesaj daha dolu olurdu. Modül grafiğine yeni bir kenar, gönderim isteğinin içine fazladan bir sorgu ve akışa "veri kaynağı" rolü ekler; ArchUnit kuralı bunu artık derleme zamanında değil, test zamanında da kapatıyor.
+- *Kuyruk + `Last-Event-ID` ile tekrar oynatma:* Kaçan mesaj telafi edilirdi. Sunucuda durum, bellekte sınırsız büyüme riski ve çok örnekli dağıtımda paylaşılan bir kuyruk gerektirir — akışın veri taşımadığı bir tasarımda karşılığı olmayan bir maliyet.
+- *Heartbeat yerine yalnızca uzun timeout:* Daha az yazma. Ölü bağlantı timeout'a kadar (yani yarım saate kadar) kaynakta durur ve boştaki proxy'ler bağlantıyı kendileri keser.
+- *Heartbeat'i olay olarak göndermek:* Bağlantı canlılığı istemciye de görünürdü. Her dinleyici bunu ayıklamak zorunda kalır; ayıklamayı unutan istemci 20 saniyede bir boşuna sorgu atar.
+
+**Sonuçlar.**
+- `realtime` modülü artık kodlu: `pom.xml`'deki `failIfNoTests` override'ı (T-03'ten beri duran istisna) kaldırıldı, modül genel kapıya tabi. Modül `spring-tx`'e bağlandı — yalnızca `@TransactionalEventListener` için; veri tabanı bağımlılığı yok ve ArchUnit bunu doğruluyor.
+- Zamanlama (`@EnableScheduling`) uygulamada ilk kez bu modül için açıldı. Başka hiçbir yerde zamanlanmış iş yok.
+- **Yayın gönderim isteğinin thread'inde kalıyor** (ADR-003). Sonucu: istemcinin kendi gönderimine ait sinyal, POST cevabından **önce** ulaşabilir. Doğru davranış — istemci zaten yeniden sorguluyor — ama frontend tarafında "önce kimliği bilirim" varsayımı yapılamaz.
+- **Çok örnekli dağıtımda yayın örnek başına kalır:** bir örneğe bağlı istemci, başka bir örnekte işlenen gönderimi duymaz. Bugün tek örnek çalıştığı için (ADR-010) sorun değil; ölçeklenirse çözüm ADR-004'te yazılı fan-out katmanıdır.
+- **Postman koleksiyonu bu ucu kapsamıyor.** Hiç bitmeyen bir istek otomatik koşuya (`newman`) girdiğinde koşuyu askıda bırakır. Uç, `curl -N` ile canlı doğrulandı; koleksiyonun `README`'sine bu not düşüldü.
+- nginx tarafında `proxy_buffering off` zaten T-23'te yazılmıştı (ADR-025); bu karar onu bir gereklilik olarak sabitliyor — tamponlama açıkken akış çalışır görünüp sessiz kalır.
+
+**İleride.** Kaçan mesajın da telafi edilmesi istenirse doğal adım `Last-Event-ID` + kısa bir halka tampondur; sinyal zaten kimlik taşıdığı için mesaj şekli değişmez. Gönderimi yapan istemciye özel bir akış (yalnızca kendi bildirimleri) gerekirse korelasyon anahtarı `rawReportId` sinyalde hazır. Analiz asenkrona taşınırsa bu karar aynen geçerli kalır: `AFTER_COMMIT` o zaman istek thread'i yerine dinleyicinin thread'inde çalışır, istemci sözleşmesi değişmez. Çok örnekli dağıtımda `IncidentStream` arayüzü değişmeden altına Redis Pub/Sub gibi bir fan-out konabilir.

@@ -297,7 +297,7 @@ Uygulamayı IDE'den veya Maven'dan çalıştırıp yalnızca veri tabanlarını 
 
 ```bash
 docker compose up -d postgres mongodb
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 cd backend && ./mvnw -pl app spring-boot:run
 ```
 
@@ -376,7 +376,7 @@ Backend testleri **çalışan bir Docker daemon'ı ister** — veri tabanına do
 Testcontainers ile gerçek MongoDB ve PostgreSQL başlatır.
 
 ```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home   # JDK 21
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # JDK 21
 cd backend
 ./mvnw verify                    # tüm modüller: derleme + testler + kapsam kapısı
 ./mvnw -pl analysis -am verify   # tek modül ve bağımlılıkları
@@ -410,9 +410,9 @@ edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/
 | `ingestion` | %98 |
 | `analysis` | %99 |
 | `app` | %100 |
-| `realtime` | henüz kod yok (T-18) |
+| `realtime` | %96 |
 
-Şu anki durum: **476 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
+Şu anki durum: **501 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
 şişiren değil, gerçek davranışı ölçen testler yazılıyor.
 
 - Birim test kapsamı **en az %80**; eşik build'de zorunludur ve altına düşüldüğünde build kırılır.
