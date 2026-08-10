@@ -689,6 +689,29 @@ raporu. Gerçek JaCoCo oranı ölçülür ve %80 eşiği doğrulanır.
 - **Karşılar:** NFR-07, NFR-10, NFR-02
 - **DoD:** README'de `TODO` kalmadı; temiz makinede talimatlar birebir izlenerek **frontend dahil**
   sistem ayağa kalkıyor; backend ve frontend coverage ≥ %80.
+- **Kısmen yapıldı — task açık.** T-17, T-19 ve T-31 bitmeden tamamlanamaz: README'nin API tablosu
+  henüz var olmayan analitik ve SSE uçlarını listeliyor, frontend kapsamı da T-31'e ait. Bugün
+  yapılan, bunlara bağlı olmayan ve **hâlihazırda yanlış duran** kısım:
+  - **springdoc-openapi devreye alındı** (`2.8.9`, `app` modülünde — her controller'ı gören tek
+    modül orası). `GET /swagger-ui` ve `GET /v3/api-docs`. Doküman controller'lardan üretiliyor;
+    elle yazılan tek şey kapsayıcı açıklama metni, dolayısıyla koddan sapamıyor.
+  - **Üretildiği teste bağlandı.** `OpenApiDocumentTest`, dokümanın sunulduğunu ve beklenen
+    yolları/parametreleri/şemaları taşıdığını doğruluyor. Gerekçesi: doküman üretilemezse springdoc
+    sessiz kalıp 404 döner — yanlış URL'den ayırt edilemez. Artık springdoc'un tarif edemediği bir
+    controller build'i kırıyor, dokümandan sessizce düşmüyor.
+  - **README'deki iki `TODO` dolduruldu:** OpenAPI adresleri; test komutları, kapsam raporlarının
+    konumu ve **ölçülen** oranlar.
+  - **Eskimiş bilgi düzeltildi:** README Postman koleksiyonunu "12 istek, 51 assertion" diyordu;
+    gerçek 18 / 76.
+- **Ölçülen kapsam (backend):** `shared` %100 · `ingestion` %98 · `analysis` %99 · `app` %100 ·
+  `realtime` henüz kodsuz. Proje geneli **%99 satır** (1141/1154), **481 test**. Eşik %80 ve
+  modül başına.
+- **Canlı doğrulama:** imaj yeniden derlendi, `/v3/api-docs` ve `/swagger-ui` **200**, dokümanda
+  6 uç ve 15 şema. *(Not: `docker compose up --build` bu makinede takılan bir
+  `docker-credential-desktop` süreci yüzünden derlemeyi sessizce atlıyordu; ayrı `docker compose
+  build` + `--force-recreate` ile çözüldü.)*
+- **Kalan:** T-17/T-19 uçları geldiğinde API tablosu ve örnekler; T-31 sonrası frontend kurulum,
+  test ve kapsam bölümleri; temiz makinede uçtan uca kurulum provası.
 
 ### ☑ T-21 · Git deposu ve GitHub'a ilk push  *(T-01 sonrasına alındı)*
 `git init`, ilk commit, GitHub deposu ve push.
@@ -820,7 +843,7 @@ tek kaynağı hâline gelmesi.
   tasarımı böyle; ayarın çalışmaması değil. Otomasyon tarayıcısı `visibilityState: hidden`
   raporladığı için doğrulama sırasında bu davranış uzunca bir süre asıl hatayı maskeledi.
 
-### ☐ T-25 · Bildirim girişi ve sonucun gösterilmesi *(dikey dilim)*
+### ☑ T-25 · Bildirim girişi ve sonucun gösterilmesi *(dikey dilim)*
 Tek metin alanı, gönderim, ardından **kimlikle sorgu** ile sonucun aynı ekranda gösterilmesi.
 Uyarılar, `UNCLASSIFIED` etiketi ve tarih kaynağı (`EXPLICIT`/`RELATIVE`/`DEFAULTED`) görünür.
 Gönderim sırasında düğme kilidi, boş/uzun metin kontrolü, karakter sayacı.
@@ -828,6 +851,42 @@ Gönderim sırasında düğme kilidi, boş/uzun metin kontrolü, karakter sayac�
 - **Karşılar:** FR-18, FR-19, FR-20
 - **DoD:** Üç örnek metin arayüzden girildiğinde sonuç anında görünüyor; SSE hiç bağlı değilken de
   çalışıyor (sonuç sorgudan geliyor); sıfır kayıt üreten metinde ekran boş kalmıyor, nedeni yazıyor.
+- **Sonuç:** 60 test geçiyor, coverage %98. `report/ReportForm`, `report/SubmissionResult`,
+  `report/IncidentCard`; veri katmanına `useSubmitReport` ve `useIncidentsByRawReport`;
+  `i18n/catalogLabels` katalog anahtarlarını etikete çeviriyor.
+- **T-16 ile açıldı.** `GET /incidents?rawReportId=` (C-5) geldiği için FR-19 tam karşılanabildi;
+  bu filtre olmadan kullanıcı gönderdiği metnin sonucunu göremezdi.
+- **Üç örnek metin arayüzden girilerek, gerçek sistemde doğrulandı** (PRD §11 beklentileriyle birebir):
+  - **Örnek 1** → Salgın · 2020-04-20 *(tarih metinde açıkça yazıyor)* · Ankara ·
+    Yeni vaka 15, Can kaybı 1, Taburcu 5.
+  - **Örnek 2** → Deprem · 2020-05-03 · İzmir · Hasarlı bina **12** (metinde "on iki"),
+    Can kaybı 2, Yaralı 40, Kurtarılan 9.
+  - **Örnek 3** → 3 kayıt: Bursa 8/1, Kocaeli 6/2, ve 10 yaralı **hiçbir ile yazılmadan**
+    *"Ortak toplam — Bursa, Kocaeli illerine ait, ayrıştırılamayan toplam"* olarak. Tarih
+    `RELATIVE` ("tarih göreli bir ifadeden çözüldü"), `DEFAULTED` değil.
+  - **Tanınmayan metin** → "Diğer / Belirsiz" + "Olay tipi tanınamadı" etiketi, il belirtilmemiş,
+    metrik yok, ve reddedilmediğini söyleyen açıklama (FR-09).
+  - **Sunucu reddi** → 11.200 karakterlik metin *"Bildirim metni izin verilen uzunluğu aşıyor."*
+    ile geri çevrildi; **kullanıcının metni korundu**.
+- **Etiketler katalogdan.** Olay tipi ve metrik adları `/metadata`'dan çözülüyor; kayıt yalnızca
+  anahtar taşıyor. Katalogda olmayan anahtar için Türkçe bir kelime uydurulmuyor — anahtarın kendisi
+  gösteriliyor, çünkü uydurmak NFR-14'ün yasakladığı sabit yazmanın ta kendisi olurdu.
+- **Bir istisna, gerekçesiyle:** `OTHER` katalogda yok, çünkü onu YAML değil kod üretiyor (ADR-006).
+  Ekranda ham "OTHER" görünüyordu. ADR-007'nin T-08 ekinde çizilen sınıra göre (*kendi kendine büyüyen
+  veri katalogdan, yalnızca kod değişince değişen yapısal değerler istemci sözleşmesinden*) yapısal
+  bir değer olduğu için arayüzde etiketlendi: "Diğer / Belirsiz".
+- **Uyarılar basılmıyor, bilinçli.** `analysis.warnings` İngilizce serbest metin ve `code` taşımıyor
+  (PRD §8.2 / **C-9**). Kullanıcıya görünen açıklama makine tarafından okunan alanlardan türetiliyor:
+  `classification`, `dateSource`, `status`. FR-20'nin istediği görünürlük sağlanıyor, İngilizce
+  cümle ekrana basılmıyor; testle sabitlendi.
+- **Karakter sayacı sınırsız, bilinçli.** `max-text-length` sunucu ayarı ve metadata'da yayınlanmıyor
+  (**C-10**). Arayüze 10000 yazmak, ayar değiştiğinde sessizce kayan bir sayı olurdu; sayaç yalnızca
+  uzunluğu gösteriyor ve sunucunun reddi Türkçe olarak aktarılıyor. FR-18'in "göndermeden önce
+  bildir" maddesi C-10 gelene kadar kısmen karşılanıyor — kaydedilen bir eksik.
+- **Metin, gönderim başarılı olana kadar temizlenmiyor.** Sunucu reddettiğinde kullanıcının yazdığı
+  kaybolmuyor; gönderim sırasında düğme kilitli, aynı metin iki kez gidemiyor. İkisi de testle sabit.
+- **SSE'siz çalışıyor.** Sonuç makbuzdaki kimlikle yapılan sorgudan geliyor; akış henüz yok (T-18)
+  ve olduğunda da gönderenin sonuç kanalı olmayacak (ADR-021).
 
 ### ☐ T-26 · Kayıt listesi, filtreler ve adres çubuğu durumu
 Sayfalanmış tablo; olay tipi, il, tarih aralığı ve anahtar kelime filtreleri. Filtreleme, sıralama

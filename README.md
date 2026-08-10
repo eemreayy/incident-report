@@ -333,7 +333,17 @@ docker compose down -v    # veri hacimlerini de siler (sıfırdan başlamak içi
 
 ## API
 
-<!-- TODO: OpenAPI arayüz adresi ve örnek istek/cevaplar eklenecek. -->
+Sistem ayaktayken API dokümantasyonu şu adreslerde:
+
+| Adres | İçerik |
+|---|---|
+| **http://localhost:8080/swagger-ui** | Tarayıcıda gezilebilir arayüz; istekler buradan denenebilir |
+| http://localhost:8080/v3/api-docs | OpenAPI 3 dokümanı (JSON) |
+
+Doküman **controller'lardan üretilir**, elle yazılmaz: yollar, parametreler ve şemalar kodun
+kendisinden gelir, dolayısıyla koddan sapamaz. Elle yazılan tek şey kapsayıcı açıklama metni.
+
+Uçları frontend olmadan denemek için hazır bir Postman koleksiyonu da var — aşağıya bakın.
 
 Uçlar `/api/v1` altındadır:
 
@@ -353,14 +363,57 @@ Uçlar `/api/v1` altındadır:
 Hatalar RFC 7807 (`application/problem+json`) formatında döner.
 
 API'yi frontend olmadan denemek için [`docs/postman/`](docs/postman/) altında hazır bir Postman
-koleksiyonu var: 12 istek, gerçek örnek cevaplar ve `npx newman run` ile çalıştırılabilen 51
-assertion.
+koleksiyonu var: 18 istek, **çalışan sistemden yakalanmış** örnek cevaplar ve `npx newman run`
+ile çalıştırılabilen 76 assertion.
 
 ---
 
 ## Testler ve Kapsam
 
-<!-- TODO: test çalıştırma komutları ve kapsam raporunun konumu eklenecek. -->
+### Çalıştırma
+
+Backend testleri **çalışan bir Docker daemon'ı ister** — veri tabanına dokunan testler
+Testcontainers ile gerçek MongoDB ve PostgreSQL başlatır.
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home   # JDK 21
+cd backend
+./mvnw verify                    # tüm modüller: derleme + testler + kapsam kapısı
+./mvnw -pl analysis -am verify   # tek modül ve bağımlılıkları
+```
+
+Frontend için `frontend/` altında:
+
+```bash
+npm run verify                   # lint + tip kontrolü + build + kapsam kapısı
+npm test
+```
+
+### Kapsam raporu
+
+`verify` sonrası, tarayıcıda açılabilir HTML raporlar:
+
+| Rapor | Konum |
+|---|---|
+| Modül bazlı | `backend/<modül>/target/site/jacoco/index.html` |
+| Proje geneli (birleşik) | `backend/app/target/site/jacoco-aggregate/index.html` |
+| Frontend | `frontend/coverage/index.html` |
+
+### Ölçülen kapsam
+
+Eşik **%80** ve **modül başına** uygulanıyor — proje geneli tek bir ortalama olsaydı, iyi test
+edilmiş bir modül test edilmemiş bir modülü gizleyebilirdi ([ADR-018](docs/DECISIONS.md#adr-018)).
+
+| Modül | Satır kapsamı |
+|---|---|
+| `shared` | %100 |
+| `ingestion` | %98 |
+| `analysis` | %99 |
+| `app` | %100 |
+| `realtime` | henüz kod yok (T-18) |
+
+Şu anki durum: **476 test, proje geneli %99 satır kapsamı.** Kapı bir taban, hedef değil: sayıyı
+şişiren değil, gerçek davranışı ölçen testler yazılıyor.
 
 - Birim test kapsamı **en az %80**; eşik build'de zorunludur ve altına düşüldüğünde build kırılır.
   Aynı kapı **backend ve frontend için ayrı ayrı** geçerlidir (ADR-018, ADR-024).

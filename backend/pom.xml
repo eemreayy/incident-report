@@ -56,6 +56,10 @@
         <surefire.failIfNoTests>true</surefire.failIfNoTests>
         <archunit.version>1.5.0</archunit.version>
 
+        <!-- Not managed by the Boot parent, so the version is pinned here. The 2.8 line is the one
+             that tracks Boot 3.5; older lines predate its request-mapping changes. -->
+        <springdoc.version>2.8.9</springdoc.version>
+
         <!-- NFR-02: unit test coverage must be at least 80%. This is a floor the
              build enforces, not a target to aim at. -->
         <coverage.minimum.line>0.80</coverage.minimum.line>

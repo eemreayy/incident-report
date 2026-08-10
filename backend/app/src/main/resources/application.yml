@@ -22,6 +22,18 @@ spring:
     # Migrations live in the analysis module, which owns PostgreSQL (ADR-002).
     locations: classpath:db/migration
 
+# Generated from the controllers, not written by hand (NFR-07). The UI is served at a short path
+# so it is memorable; the JSON document keeps springdoc's conventional address so tooling finds it.
+springdoc:
+  swagger-ui:
+    path: /swagger-ui
+    # Alphabetical rather than declaration order, so the list does not reshuffle when a controller
+    # is edited.
+    tagsSorter: alpha
+    operationsSorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
 server:
   port: 8080
   error:
