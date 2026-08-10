@@ -120,12 +120,16 @@ export function IncidentDetailPage() {
 function DetailShell({ children, busy = false }: { children: React.ReactNode; busy?: boolean }) {
   return (
     <div className="app-shell">
-      <p>
+      {/* The same landmarks as the panel screen: a reader jumping by landmark
+          should not find one page shaped differently from the others. */}
+      <nav>
         <Link to="/">{strings.detail.backToPanel}</Link>
-      </p>
-      <section className="panel" aria-busy={busy}>
-        {children}
-      </section>
+      </nav>
+      <main>
+        <section className="panel" aria-busy={busy}>
+          {children}
+        </section>
+      </main>
     </div>
   );
 }

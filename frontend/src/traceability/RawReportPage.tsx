@@ -102,6 +102,17 @@ export function RawReportPage() {
       <h2>{strings.detail.derived}</h2>
       {derived.isPending ? (
         <p className="muted">{strings.detail.loading}</p>
+      ) : derived.isError ? (
+        // Saying "this text produced nothing" when the question was never
+        // answered would be reporting a failure as a fact (FR-28).
+        <>
+          <p className="error" role="alert">
+            {messageForError(derived.error)}
+          </p>
+          <button type="button" onClick={() => void derived.refetch()}>
+            {strings.detail.retry}
+          </button>
+        </>
       ) : records.length === 0 ? (
         <p>{strings.detail.derivedEmpty}</p>
       ) : (
@@ -141,12 +152,16 @@ function DerivedRecord({ incident, label }: { incident: Incident; label: string 
 function ReportShell({ children, busy = false }: { children: React.ReactNode; busy?: boolean }) {
   return (
     <div className="app-shell">
-      <p>
+      {/* The same landmarks as the panel screen: a reader jumping by landmark
+          should not find one page shaped differently from the others. */}
+      <nav>
         <Link to="/">{strings.detail.backToPanel}</Link>
-      </p>
-      <section className="panel" aria-busy={busy}>
-        {children}
-      </section>
+      </nav>
+      <main>
+        <section className="panel" aria-busy={busy}>
+          {children}
+        </section>
+      </main>
     </div>
   );
 }

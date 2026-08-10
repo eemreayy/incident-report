@@ -461,3 +461,37 @@ button.secondary {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.chart-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.75rem;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.chart-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  padding: 0.25rem 0.625rem;
+}
+
+/* A hidden series is struck through as well as dimmed: the state is not left
+   to a difference in shade alone (NFR-16), and aria-pressed carries it for
+   anyone not looking at the screen at all. */
+.chart-legend button[data-shown='false'] {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+
+.chart-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  display: inline-block;
+}

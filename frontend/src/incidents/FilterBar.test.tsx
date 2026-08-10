@@ -150,6 +150,22 @@ describe('FilterBar', () => {
     expect(await screen.findByRole('checkbox', { name: 'Salgın' })).not.toBeChecked();
   });
 
+  it('says the catalog failed rather than loading forever', async () => {
+    // FR-28. A pending message left on screen after the request failed is the
+    // interface telling the user to keep waiting for something that is not
+    // coming; the filters that do not need the catalog keep working.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+    renderBar();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      strings.errors.byCode['network.unreachable'] as string,
+    );
+    expect(screen.queryByText(strings.filters.loading)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: strings.filters.retry })).toBeInTheDocument();
+    expect(screen.getByLabelText(strings.filters.keyword)).toBeEnabled();
+  });
+
   it('still lets the analyst filter while the catalog is on its way', async () => {
     // FR-28: a pending query says so instead of leaving an unexplained gap, and
     // the controls that do not depend on it keep working.

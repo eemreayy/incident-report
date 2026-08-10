@@ -66,6 +66,7 @@ export const strings = {
       'date-asc': 'Tarih: eskiden yeniye',
     },
     loading: 'Filtre seçenekleri yükleniyor…',
+    retry: 'Tekrar dene',
     note: 'Seçtiğiniz filtreler adres çubuğuna yansır; bağlantıyı paylaştığınızda aynı görünüm açılır.',
   },
   detail: {
@@ -124,7 +125,7 @@ export const strings = {
     cumulativeOn: 'Her nokta kendisi ve kendinden öncekilerin toplamıdır.',
     plain: 'Her nokta o güne ait değerdir.',
     breakdownHint: 'İl kırılımında yalnızca tek bir metrik çizilir; iller ancak aynı sayı üzerinden karşılaştırılabilir.',
-    legendHint: 'Bir seriyi gizlemek veya göstermek için göstergedeki adına tıklayın.',
+    legendHint: 'Bir seriyi gizlemek veya göstermek için göstergedeki adına tıklayın ya da klavyeyle seçip Enter’a basın.',
     empty: 'Grafiğe çizilecek veri yok. Yukarıdaki formdan bir bildirim girebilirsiniz.',
     emptyFiltered: 'Seçtiğiniz filtrelere ve olay tipine uyan veri yok.',
     noEventTypes: 'Katalogda çizilebilecek bir olay tipi yok.',
