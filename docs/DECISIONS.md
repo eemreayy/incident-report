@@ -43,6 +43,7 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-033](#adr-033--okuma-ucunun-şekli-kapsam-filtresi-uç-seviyesinde-analiz-sonucu-ve-dto-döndüren-okuma-servisi) | Okuma ucunun şekli: kapsam filtresi, uç seviyesinde analiz sonucu | Kabul edildi |
 | [ADR-034](#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik) | Canlı akışın yaşam döngüsü: rapor başına sinyal, commit sonrası yayın | Kabul edildi · **TC-10 çözüldü** |
 | [ADR-035](#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz) | Yeniden işleme ve mükerrer gönderim: aynı metin ikinci kayıt açmaz | Kabul edildi · **TC-9 çözüldü** |
+| [ADR-036](#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye) | Agregasyon uçlarının şekli: seri olarak cevap, `EXISTS` ile filtre, tek sorguda üç seviye | Kabul edildi |
 
 ---
 
@@ -991,3 +992,47 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 - Mongo tarafında ilk indeks kuruldu ve bunun kurulduğu yer artık modülün kendi kodu.
 
 **İleride.** Yakın-mükerrer (kopyala-yapıştır sırasında bir kelimesi değişmiş) metinler bugün iki ayrı kayıt; istenirse çözüm normalize edilmiş ikinci bir özet **ek** alan olarak eklenip kullanıcıya "buna benzer bir bildirim var, yine de kaydedeyim mi?" diye sormaktır — kararı sisteme değil kullanıcıya bırakan hâli. Toplu reprocess (katalog sürümü değişince tüm geçmişi yeniden işlemek) bu uç üzerinden bir döngüyle bugün de mümkün; anlamlı hâli, ADR-012'nin "İleride"sindeki analiz sürüm bilgisiyle birlikte gelir — o zaman yalnızca eski sürümle üretilmiş kayıtlar seçilebilir. `Idempotency-Key` gerekirse `textHash` yolunu bozmadan yanına eklenebilir.
+
+---
+
+## ADR-036 — Agregasyon Uçlarının Şekli: Seri Olarak Cevap, EXISTS ile Filtre, Tek Sorguda Üç Seviye
+
+**Karar.** İki agregasyon ucu (`GET /analytics/time-series`, `GET /analytics/summary`) şu beş kararla çalışır:
+
+1. **Cevap satır listesi değil, seri listesidir.** Zaman serisi `{cumulative, groupBy, series[{eventType, metric, provinceScope, province, points[{date, value}]}]}` döner. Hangi noktaların aynı çizgiye ait olduğunu sunucu söyler.
+2. **İl bir kırılım boyutudur ve yalnızca istendiğinde.** `groupBy=province` verilmezse seri anahtarı (olay tipi, metrik); verilirse il kapsamı da anahtarın parçası olur. **Kapsam ancak il bir boyut olduğunda görünür**: `SHARED` ve `UNKNOWN`, kırılımsız cevapta ayrı bir seri değildir çünkü uzlaştırılacak bir il toplamı yoktur.
+3. **`SHARED` tek bir kova.** Kırılımda paylaşılan figürler, kapsadıkları il kombinasyonuna göre değil, tek bir etiketli seri/satır olarak döner. Hiçbir ile eklenmez, bölüştürülmez, düşürülmez.
+4. **İl ve anahtar kelime filtreleri `EXISTS` ile yazılır, `JOIN` ile değil.** Sayfalı kayıt listesinde bağlantı tablosuna `JOIN` + `DISTINCT` doğrudur; **toplam alırken değildir**.
+5. **Özet üç seviyeyi tek sorguda döner** (`GROUPING SETS`): kova kırılımı, olay tipi toplamı, genel toplam. Kümülatif toplam da SQL'de, pencere fonksiyonuyla (`sum(sum(...)) over (partition by <seri> order by tarih)`) hesaplanır.
+
+**Bağlam.** T-16 okuma ucunu, ADR-033 de onun şeklini karara bağlamıştı; grafik ve özet tablo ise ADR-019'un `SHARED` kavramıyla ilk kez **aritmetik** düzeyde karşılaşıyor. Kaynak dokümanın isteri "zaman içinde ve coğrafi bölge bazında izlenebilirlik"; ADR-023 bunu harita yerine il kırılımı olarak karara bağladı, PRD v2.0 da C-1 ve C-2 maddeleriyle bu task'a yazdı.
+
+**Gerekçe.**
+
+- **Seri, kümülatifin anlamlı olduğu tek birimdir.** Kümülatif bir nokta "kendisi ve kendinden öncekiler" demek; hangi noktaların "öncekiler" olduğu ise seri tanımına bağlı. Bu tanımı istemciye bırakmak, kuralın ikinci bir kopyasını TypeScript'te büyütmek olurdu (NFR-13). Sunucu zaten grupluyor; grupladığını söylemesi bedavaya geliyor.
+- **`JOIN` altında `DISTINCT` bir toplamı düzeltmez.** İki il birden seçildiğinde, bağlantı tablosuna yapılan join paylaşılan kaydı iki kez getirir; `SUM` 10 yerine 20 der. `DISTINCT` satırları tekilleştirir ama toplamı düzeltmez — `SUM(DISTINCT value)` ise bambaşka (ve yine yanlış) bir sayıdır: aynı değere sahip iki gerçek kaydı tek sayar. `EXISTS` ise "bu kayıt uygun mu?" sorusunu satırı çoğaltmadan cevaplıyor. Aynı tuzak anahtar kelime filtresinde de var: iki anahtar kelimesi eşleşen bir kaydın figürleri iki katına çıkardı. **Bu, sessiz bir hata sınıfı** — 20 yaralı, 10 kadar makul görünür.
+- **Kapsamı yalnızca kırılımda göstermek, dürüstlüğün ta kendisi.** Kırılımsız cevapta tek bir toplam vardır ve `SINGLE + SHARED + UNKNOWN` onun içinde zaten doğru toplanır; kapsamı ayırmak okuyucuya uzlaştıracak bir şey vermeden gürültü eklerdi. İl bir boyut olduğu anda ise ayrım zorunlu: il satırları kendi başlarına genel toplama eşit **değildir**, ve bu bir hata değil, verinin kendisidir. Ayrı ve etiketli satır, okuyucunun bunu görebilmesinin tek yolu.
+- **`SHARED` kombinasyon başına değil, tek kova.** Kombinasyon başına ayırmak daha bilgilendirici olurdu ama seri anahtarları veri değiştikçe oynardı — grafiğin göstergesi her sorguda yeniden şekillenirdi. Uzlaştırma için tek kova yeterli: genel toplam = il satırları + paylaşılan + ilsiz. Hangi illeri kapsadığı zaten kayıt ucundan okunabiliyor.
+- **`GROUPING SETS`, üç ayrı sorgudan iyidir.** Üç seviye tek taramadan, **aynı** filtrelenmiş kümeden çıkıyor; "satırlar ile toplam tutmuyor" sınıfı bir tutarsızlık yapısal olarak imkânsız hale geliyor.
+- **Sayım ve metrik toplamı ayrı iki sorgu.** `incident_metric`'e join ederek kayıt saymak, iki metrikli bir kaydı iki kez sayar ve hiç metriği olmayan kaydı hiç saymaz — oysa tanınmayan metin de saklanıyor (ADR-006) ve tabloda görünmek zorunda. İki sorgu aynı şekilde gruplandığı için birleştirme bir hesap değil, bir eşleme.
+- **SQL elde kuruluyor, sabit metin değil.** Filtreler opsiyonel; boş bir `IN ()` geçersiz SQL'dir ve gruplama cümlenin şeklini değiştiriyor. Her değer isimli parametre olarak bağlanıyor, kullanıcıdan gelen hiçbir şey metne eklenmiyor.
+- **Kümülatif de SQL'de.** Java'da döngüyle toplamak aynı sonucu verirdi; ama o zaman "toplam" tanımının bir kısmı veritabanında, bir kısmı uygulamada olurdu. Pencere fonksiyonu seri sınırını `partition by` ile zaten biliyor.
+- **`groupBy` esnek okunuyor, tanınmayan değer reddediliyor.** Spring'in enum bağlaması büyük/küçük harfe duyarlı; `groupBy=province` — dokümandaki ve insanın yazdığı biçim — iç enum'dan bahseden bir tip hatası dönerdi. Tanınmayan bir değerde sessizce kırılımsız cevaba düşmek ise **farklı bir soruyu 200 ile cevaplamak** olurdu.
+
+**Alternatifler.**
+- *Düz satır listesi döndürüp gruplamayı istemciye bırakmak:* Cevap daha küçük. Seri tanımı ve dolayısıyla kümülatifin anlamı istemciye geçer; iki istemci iki farklı grafik çizebilir.
+- *`JOIN` + `DISTINCT` (kayıt listesindeki gibi):* Tek bir filtre kodu olurdu. Toplamları sessizce iki katına çıkarır — bu ADR'nin en pahalı maddesi.
+- *`SHARED` figürü illere bölüştürmek:* Grafik "daha doğru" görünürdü. Metinde olmayan veriyi uydurmak; ADR-019 bunu açıkça yasaklıyor.
+- *`SHARED` figürü kırılımda gizlemek:* Grafik sadeleşirdi. İl toplamları genel toplamla bir daha uzlaşmazdı ve on yaralı hiçbir yerde görünmezdi.
+- *Kümülatifi istemcide toplamak:* Sunucuya parametre eklemezdi. Kuralın ikinci kopyası; ayrıca sayfalı/filtrelenmiş veride istemci zaten tüm noktalara sahip olmayabilir.
+- *Özeti üç ayrı sorguyla üretmek:* Daha okunur SQL. Üç ayrı tarama ve seviyelerin birbirinden sapabilmesi.
+- *Materialized view / önceden hesaplanmış özet tablo:* Büyük veride hızlı. Tazelik yönetimi ve şema yükü getirir; bu ölçekte indeksli `GROUP BY` fazlasıyla yeterli.
+
+**Sonuçlar.**
+- `analysis` modülü ilk kez **native SQL** kullanıyor (`IncidentAggregationRepository`). Criteria API pencere fonksiyonlarını ve `GROUPING SETS`'i taşımıyor; karşılığında bu sorgular Postgres'e bağlı — modül zaten PostgreSQL'in sahibi olduğu için (ADR-002) bu yeni bir bağ değil.
+- Cevap DTO'ları `TimeSeriesResponse` ve `SummaryResponse`. Özetin üç seviyesi **aynı** satır tipini kullanıyor; boş alanlar JSON'da hiç görünmediği için (`non_null`) genel toplam ne olay tipi ne kova taşıyor.
+- `AnalyticsService` hiçbir sayı üretmiyor, yalnızca satırları gruplayıp seviyelere yerleştiriyor. Bir testi bunu bilerek tutarsız satırlarla doğruluyor: servis aritmetik yapsaydı "düzeltirdi".
+- Frontend tarafında T-27 ve T-28 bu şekle bağlanıyor; `SHARED`/`UNKNOWN` serilerinin arayüzde nasıl temsil edileceği hâlâ açık (TC-14).
+- Postman koleksiyonuna dört yeni istek girdi; SSE dışındaki tüm uçlar artık koleksiyonda.
+
+**İleride.** Veri büyürse `(event_type, occurred_on)` ve `(province_code, occurred_on)` üzerine bileşik indeksler ilk adım; ondan sonrası önceden hesaplanmış bir özet tablo ya da materialized view olur ve tazeleme stratejisi ayrı bir karar gerektirir. `SHARED` kovasının kapsadığı il kombinasyonuna göre ayrıştırılması istenirse seri anahtarına kombinasyon eklenir — sözleşme değişmez, yalnızca seri sayısı artar. Gün yerine hafta/ay bazında gruplama gerekirse `date_trunc` ile bir `interval` parametresi aynı yapıya oturur; bugün bilinçli olarak yok, çünkü kaynak dokümanın isteri günlük seyir.

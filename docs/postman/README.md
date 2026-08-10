@@ -4,7 +4,7 @@ Backend API'sini frontend olmadan denemek için hazırlanmış koleksiyon.
 
 | Dosya | İçerik |
 |---|---|
-| `incident-report.postman_collection.json` | 21 istek, 5 klasör, her istekte örnek cevap ve assertion |
+| `incident-report.postman_collection.json` | 26 istek, 6 klasör, her istekte örnek cevap ve assertion |
 
 Koleksiyondaki **her örnek cevap çalışan sistemden yakalanmıştır**, elle yazılmamıştır.
 
@@ -101,8 +101,27 @@ yaralı, ikisi de seçilince 20 görünürdü ([ADR-033](../DECISIONS.md#adr-033
 Anahtar kelime araması ham metinde değil, **çıkarımın kaydettiği** anahtar kelimelerde çalışır;
 ham metinde tam metin arama kapsam dışı (PRD §2.3).
 
+### Analytics
+Grafiğin ve özet tablonun verisi — **hepsi sunucuda toplanır**, istemcide değil.
+
+| İstek | Gösterdiği |
+|---|---|
+| **Time series — by province** | İl bir kırılım boyutu; paylaşılan figür **ayrı ve etiketli** bir seri |
+| **Time series — both provinces** | İki il birden seçilince paylaşılan figür **bir kez** |
+| **Time series — cumulative** | Her nokta kendisi ve öncekilerin toplamı (FR-12) |
+| **Summary** | Kova / olay tipi / genel toplam — üçü tek sorgudan |
+
+Özet isteğinin en önemli assertion'ı bir **uzlaştırma**: satırların (paylaşılan ve ilsiz olanlar
+dahil) toplamı, olay tipi toplamına birebir eşit olmak zorunda. Paylaşılan bir figür il başına
+sayılsaydı ya da düşürülseydi, hata tam burada görünürdü.
+
+İl satırlarını tek başına okuyunca üçüncü örnek metinde **hiç yaralı yok** — o on kişi `SHARED`
+satırında duruyor. Bu bir eksiklik değil, metnin söylediği şey: sayı iki ile ait, hiçbirine tek
+başına değil ([ADR-019](../DECISIONS.md#adr-019--kayıt-granülaritesi),
+[ADR-036](../DECISIONS.md#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye)).
+
 ### Error contract (RFC 7807)
-Sekiz hata senaryosu. Hepsi `application/problem+json` döner — hata ister domain'den, ister
+Dokuz hata senaryosu. Hepsi `application/problem+json` döner — hata ister domain'den, ister
 Spring'in kendisinden gelsin.
 
 İstemcinin dayanabileceği alan `code`; `detail` metni serbestçe değişebilir. Her istek ayrıca
@@ -116,7 +135,7 @@ Spring'in kendisinden gelsin.
 npx newman run docs/postman/incident-report.postman_collection.json
 ```
 
-Beklenen: **21 istek, 88 assertion, 0 hata.**
+Beklenen: **26 istek, 107 assertion, 0 hata.**
 
 ---
 
@@ -146,8 +165,9 @@ gerçek davranışı** (ADR-006) — ve hiçbiri bu cevapta görünmez; durumu d
 
 | Uç | Neden yok | Task |
 |---|---|---|
-| `GET /api/v1/analytics/time-series` · `/summary` | Henüz yazılmadı; eklenseler 404 dönerlerdi | T-17 |
 | `GET /api/v1/stream/incidents` | **Yazıldı, ama koleksiyona bilerek alınmadı** | T-18 |
+
+Bunun dışındaki her uç koleksiyonda.
 
 **SSE ucu neden dışarıda?** Bu istek bitmez — bağlantı açık kalır. `npx newman run` sırasında koşu
 o istekte askıda kalır, yani koleksiyonun duman testi olma özelliğini kaybeder. Uç, canlı sistemde
