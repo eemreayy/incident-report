@@ -217,7 +217,7 @@ Sistem kaydın tarihini üç kaynaktan çözer ve **hangi kaynaktan çözüldü�
 | Tarih kaynağı | Tanım | Örnek |
 |---|---|---|
 | `EXPLICIT` | Metinde açık takvim tarihi var; birden fazla format desteklenir | `20.04.2020`, `3 Mayıs 2020`, `2020-04-20` |
-| `RELATIVE` | Metinde göreli zaman ifadesi var; **referans tarihe** göre çözümlenir | `Son 24 saatte`, `dün`, `bugün`, `geçen hafta` |
+| `RELATIVE` | Metinde göreli zaman ifadesi var; **referans tarihe** göre çözümlenir | `Son 24 saatte`, `dün`, `bugün`, `geçen hafta`, `3 gün önce`, `iki hafta önce` |
 | `DEFAULTED` | Metinde hiçbir zaman ifadesi yok; referans tarih doğrudan kullanılır | — |
 
 **Referans tarih**, ham bildirimin **gönderim (kayıt) tarihidir**. Ham kayıt değişmez olduğu için (FR-02) bu referans sabittir; reprocess (FR-15) sırasında da orijinal gönderim tarihi kullanılır — yeniden işleme geçmiş kayıtların tarihini kaydırmaz.
@@ -228,6 +228,10 @@ Sistem kaydın tarihini üç kaynaktan çözer ve **hangi kaynaktan çözüldü�
   - Hiç zaman ifadesi olmayan metinde de kayıt üretilir; tarih kaynağı `DEFAULTED` olur.
   - Aynı bildirim reprocess edildiğinde çözülen tarih değişmez.
   - Tarih kaynağı sorgu sonuçlarında görünür; kullanıcı çıkarılmış ile varsayılmış tarihi ayırt edebilir.
+  - Mesafesini metnin söylediği geriye dönük ifadeler (`3 gün önce`, `iki hafta önce`) referans tarihten
+    geriye kaydırılır; kaynak `RELATIVE` olur ve **ifadedeki miktar metrik değeri olarak sayılmaz**.
+    Miktarı belirsiz olan ifade (`birkaç gün önce`) tarih üretmez — uydurulmuş bir sayıyla çözülmez
+    ([ADR-043](DECISIONS.md#adr-043--nicelenmiş-geriye-dönük-göreli-tarihler-miktarın-sayı-ayrıştırıcıdan-okunması-ve-geriye-bakış-sınırı)).
 - **Not:** v1'de göreli **aralık** ifadeleri ("son 24 saatte", "son 3 günde") tek bir referans güne indirgenir. Aralık semantiğinin modellenip modellenmeyeceği → **TC-6**.
 
 ### FR-07 — Tek metinde birden fazla il ve metrik seti

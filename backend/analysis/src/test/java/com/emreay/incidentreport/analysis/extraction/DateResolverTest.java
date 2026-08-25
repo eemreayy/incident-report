@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import com.emreay.incidentreport.analysis.domain.DateSource;
 import com.emreay.incidentreport.analysis.text.NormalizedText;
+import com.emreay.incidentreport.analysis.text.NumberExtractor;
 import com.emreay.incidentreport.analysis.text.SentenceSplitter;
 import com.emreay.incidentreport.analysis.text.TurkishTextNormalizer;
 
@@ -26,7 +27,7 @@ class DateResolverTest {
     private static final LocalDate REFERENCE = LocalDate.of(2020, 4, 20);
 
     private final TurkishTextNormalizer normalizer = new TurkishTextNormalizer(new SentenceSplitter());
-    private final DateResolver resolver = new DateResolver();
+    private final DateResolver resolver = new DateResolver(new NumberExtractor());
 
     private ResolvedDate resolve(String raw) {
         return resolve(raw, REFERENCE);
@@ -79,7 +80,26 @@ class DateResolverTest {
                 arguments("geçen hafta sel oldu", LocalDate.of(2020, 4, 13)),
                 arguments("geçtiğimiz hafta sel oldu", LocalDate.of(2020, 4, 13)),
                 arguments("geçen ay deprem oldu", LocalDate.of(2020, 3, 20)),
-                arguments("bu sabah yangın çıktı", LocalDate.of(2020, 4, 20))
+                arguments("bu sabah yangın çıktı", LocalDate.of(2020, 4, 20)),
+                // A distance the text states, rather than a fixed expression - the quantity is read
+                // by NumberExtractor, so digits, words and compounds all work the same way.
+                arguments("3 gün önce Ankara'da sel oldu", LocalDate.of(2020, 4, 17)),
+                arguments("iki gün önce sel oldu", LocalDate.of(2020, 4, 18)),
+                arguments("bir gün önce deprem oldu", LocalDate.of(2020, 4, 19)),
+                arguments("on iki gün önce sel oldu", LocalDate.of(2020, 4, 8)),
+                arguments("kırk beş gün önce sel oldu", LocalDate.of(2020, 3, 6)),
+                arguments("3 gün öncesinde sel oldu", LocalDate.of(2020, 4, 17)),
+                arguments("3 gün önceki kazada 2 kişi yaralandı", LocalDate.of(2020, 4, 17)),
+                arguments("iki gün evvel sel oldu", LocalDate.of(2020, 4, 18)),
+                arguments("sel oldu iki gün önce", LocalDate.of(2020, 4, 18)),
+                arguments("iki hafta önce yangın çıktı", LocalDate.of(2020, 4, 6)),
+                arguments("bir hafta kadar önce sel oldu", LocalDate.of(2020, 4, 13)),
+                arguments("2 ay önce deprem oldu", LocalDate.of(2020, 2, 20)),
+                arguments("5 yıl önce sel oldu", LocalDate.of(2015, 4, 20)),
+                arguments("3 sene önce sel oldu", LocalDate.of(2017, 4, 20)),
+                // Unusual phrasing, but a real day, and inside the bound. Rejecting it would make
+                // the bound a rule about how people write rather than about what is plausible.
+                arguments("on bin gün önce sel oldu", LocalDate.of(1992, 12, 3))
         );
     }
 
@@ -112,7 +132,35 @@ class DateResolverTest {
             "Ankara'da 15 vaka tespit edildi",
             "sel nedeniyle yollar kapandı",
             "",
-            "son günlerde artış var"
+            "son günlerde artış var",
+            // A backward expression whose distance the text never states. Reading "birkaç" as three
+            // would put a number in the record that nobody wrote (ADR-019), so it names no day.
+            "birkaç gün önce sel oldu",
+            "günler önce sel oldu",
+            "aylar önce deprem oldu",
+            // "a day or two ago" - NumberExtractor refuses to read "bir iki" as one number, and the
+            // same vagueness means there is no distance here either.
+            "bir iki gün önce sel oldu",
+            // Not a day but a boundary: "earlier than three days ago".
+            "3 günden önce başvuru yapılmalı",
+            // Forward-looking: three days' notice, not three days ago.
+            "3 gün önceden haber verildi",
+            "her iki gün sel tekrarlandı",
+            // A figure with a decimal part is not a count, so it is not a distance either.
+            "1,5 ay önce sel oldu",
+            "sıfır gün önce sel oldu",
+            // Each of these is refused by a different guard: the int range, and the overflow that
+            // the arithmetic raises before any date is computed. The century-wide bound has its own
+            // test, because a distance can be unusual without being implausible.
+            "on milyar gün önce sel oldu",
+            "bir milyar hafta önce sel oldu",
+            // Whitespace is required after the unit, so punctuation breaks the phrase.
+            "3 gün, önce sel oldu",
+            // The distance is the number written before the phrase. A number that comes after it
+            // belongs to whatever the sentence is counting, and must not be read as the distance.
+            "birkaç gün önce 2 kişi yaralandı",
+            // Punctuation between the number and the unit breaks the phrase just as surely.
+            "3, gün önce sel oldu"
     })
     @DisplayName("a text with no time expression falls back to the submission date")
     void defaultedWhenNothingIsSaid(String text) {
@@ -196,6 +244,89 @@ class DateResolverTest {
         // suffix on "ay" turns this ordinary sentence into a date, silently.
         assertThat(resolve("son iki ayrı olayda 3 kişi yaralandı").source()).isEqualTo(DateSource.DEFAULTED);
         assertThat(resolve("dünyada salgın sürüyor").source()).isEqualTo(DateSource.DEFAULTED);
+        // The two the "N <unit> önce" family adds. Neither needs an exception to the closed-suffix
+        // rule: the unit must be followed by a space, so an inflected unit cannot start the phrase.
+        assertThat(resolve("2020 yılında Ankara'da sel oldu").source()).isEqualTo(DateSource.DEFAULTED);
+        assertThat(resolve("3 gün öncelikli olarak değerlendirildi").source()).isEqualTo(DateSource.DEFAULTED);
+    }
+
+    @Test
+    @DisplayName("a stated distance moves the day, and its own number is part of the expression")
+    void offsetsCoverTheWholeQuantifiedPhrase() {
+        // The span has to reach back over the number, not just the unit: whoever holds the resolved
+        // spans drops the figures inside them, and the "3" is otherwise a metric value waiting to be
+        // added to the next keyword - "3 gün önce 2 kişi yaralandı" would report five injured.
+        NormalizedText text = normalizer.normalize("3 gün önce İZMİR'de sel oldu.");
+
+        ResolvedDate resolved = resolver.resolve(text, REFERENCE);
+
+        assertThat(resolved.date()).isEqualTo(LocalDate.of(2020, 4, 17));
+        assertThat(text.value().substring(resolved.start(), resolved.end())).isEqualTo("3 gün önce");
+        assertThat(text.originalTextIn(resolved.start(), resolved.end())).isEqualTo("3 gün önce");
+    }
+
+    @Test
+    @DisplayName("a window is not also a stated distance")
+    void aWindowIsNotAlsoAQuantifiedDistance() {
+        // "son 3 günde" must produce exactly one mention. Two would be harmless for the day but not
+        // for the numbers: overlapping spans are fine, a second reading of the same words is not.
+        NormalizedText text = normalizer.normalize("son 3 günde 8 kaza oldu");
+
+        assertThat(resolver.mentions(text, REFERENCE)).singleElement().satisfies(mention ->
+                assertThat(text.value().substring(mention.start(), mention.end())).isEqualTo("son 3 günde"));
+    }
+
+    @Test
+    @DisplayName("\"önceki gün\" is the day before yesterday, not a stated distance")
+    void theDayBeforeYesterdayIsNotQuantified() {
+        // Word order is the whole difference: "önceki gün" puts the direction first. If the new rule
+        // also matched here, "önceki gün 2 kişi" would date itself two days back off the "2".
+        NormalizedText text = normalizer.normalize("önceki gün 2 kişi yaralandı");
+
+        assertThat(resolver.mentions(text, REFERENCE)).singleElement().satisfies(mention -> {
+            assertThat(mention.date()).isEqualTo(LocalDate.of(2020, 4, 18));
+            assertThat(text.value().substring(mention.start(), mention.end())).isEqualTo("önceki gün");
+        });
+    }
+
+    @Test
+    @DisplayName("a month-long distance clamps to the shorter month")
+    void monthArithmeticClampsToTheShorterMonth() {
+        assertThat(resolve("1 ay önce sel oldu", LocalDate.of(2020, 3, 31)).date())
+                .isEqualTo(LocalDate.of(2020, 2, 29));
+    }
+
+    @Test
+    @DisplayName("an implausible distance is a historical aside, not the incident's date")
+    void anImplausibleDistanceIsNotTheDate() {
+        // Without the bound this would win: it is a relative expression and it comes first, and
+        // LocalDate refuses nothing - two billion days back is the year -5473794, not an error.
+        ResolvedDate resolved = resolve("500 yıl önce kurulan şehirde dün sel oldu");
+
+        assertThat(resolved.date()).isEqualTo(LocalDate.of(2020, 4, 19));
+        assertThat(resolved.source()).isEqualTo(DateSource.RELATIVE);
+    }
+
+    @Test
+    @DisplayName("an explicit date still wins over a stated distance from it")
+    void explicitBeatsAQuantifiedRelative() {
+        // "three days before that date" is not composed - the named day wins, as ADR-029 says it
+        // does. Recorded rather than left to be discovered.
+        ResolvedDate resolved = resolve("20.04.2020 tarihinden 3 gün önce sel oldu");
+
+        assertThat(resolved.date()).isEqualTo(LocalDate.of(2020, 4, 20));
+        assertThat(resolved.source()).isEqualTo(DateSource.EXPLICIT);
+    }
+
+    @Test
+    @DisplayName("among two stated distances the first in the text wins")
+    void theFirstQuantifiedMentionWins() {
+        NormalizedText text = normalizer.normalize("3 gün önce ve 5 gün önce sel oldu");
+
+        assertThat(resolver.resolve(text, REFERENCE).date()).isEqualTo(LocalDate.of(2020, 4, 17));
+        assertThat(resolver.mentions(text, REFERENCE))
+                .extracting(ResolvedDate::date)
+                .containsExactly(LocalDate.of(2020, 4, 17), LocalDate.of(2020, 4, 15));
     }
 
     @Test

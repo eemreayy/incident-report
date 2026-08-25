@@ -3,6 +3,7 @@ package com.emreay.incidentreport.analysis.extraction;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.Period;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAmount;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Component;
 
 import com.emreay.incidentreport.analysis.domain.DateSource;
 import com.emreay.incidentreport.analysis.text.NormalizedText;
+import com.emreay.incidentreport.analysis.text.NumberExtractor;
+import com.emreay.incidentreport.analysis.text.NumberToken;
 
 /**
  * Works out which day an incident belongs to (FR-06, TC-6).
@@ -86,6 +89,49 @@ public class DateResolver {
             new Displacement(Pattern.compile("\\bbu\\s+(?:hafta|sabah|akşam|gece)" + SUFFIX + "\\b", UNICODE), Period.ZERO));
 
     /**
+     * Suffixes "önce" and "evvel" take, closed for the same reason {@link #SUFFIX} is.
+     *
+     * <p>{@code önce\\p{L}*} also spells "öncelik" and "öncelikle" — ordinary words, and dating a
+     * sentence by one of them would be exactly the silent misreading ADR-029 was written about.
+     *
+     * <p>"önceden" is left out on purpose although it is a real suffix: it looks <em>forward</em>.
+     * "3 gün önceden haber verildi" is three days' notice, not three days ago, and it names no past
+     * day at all.
+     */
+    private static final String BACKWARD = "(?:önce|evvel)(?:ki|si|sinde)?";
+
+    /** Units a stated distance can be counted in, and the calendar field each one moves. */
+    private static final List<Quantified> QUANTIFIED = List.of(
+            new Quantified(backward("gün"), ChronoUnit.DAYS),
+            new Quantified(backward("hafta"), ChronoUnit.WEEKS),
+            new Quantified(backward("ay"), ChronoUnit.MONTHS),
+            new Quantified(backward("yıl|sene"), ChronoUnit.YEARS));
+
+    /**
+     * How far back a stated distance can reach and still be describing this report's own timeframe.
+     *
+     * <p>A bound is needed, not merely tidy: {@code LocalDate} happily accepts a shift of two
+     * billion days and answers with the year −5473794, so arithmetic alone refuses nothing. And the
+     * absurd reading would <em>win</em> — "500 yıl önce kurulan şehirde dün sel oldu" mentions the
+     * aside first, and among relative expressions the first in the text is taken. A century is wide
+     * enough that no report about a real event is turned away, and narrow enough that a historical
+     * aside cannot become the incident's date.
+     */
+    private static final Period MAX_LOOKBACK = Period.ofYears(100);
+
+    private final NumberExtractor numberExtractor;
+
+    /**
+     * @param numberExtractor reads the quantity of a "3 gün önce"-shaped expression. Turkish number
+     *                        words are parsed in exactly one place (ADR-028) — a second vocabulary
+     *                        here would drift from it, and would have to reimplement the rules that
+     *                        make "on iki" twelve and "bir iki" no number at all.
+     */
+    public DateResolver(NumberExtractor numberExtractor) {
+        this.numberExtractor = numberExtractor;
+    }
+
+    /**
      * The day the incident is filed under.
      *
      * <p>An explicit calendar date wins over a relative expression wherever both appear: naming a
@@ -138,8 +184,107 @@ public class DateResolver {
                     window.start(), window.end()));
         }
 
+        addQuantified(mentions, text, referenceDate);
+
         mentions.sort(Comparator.comparingInt(ResolvedDate::start));
         return List.copyOf(mentions);
+    }
+
+    /**
+     * Days named by counting backwards: "3 gün önce", "iki hafta kadar önce", "on iki gün önceki".
+     *
+     * <p>The span reported starts at the number rather than at the unit, so that the number is
+     * covered by the mention. Whoever holds the resolved spans drops the figures inside them, and
+     * without that the "3" of "3 gün önce" is a plausible-looking metric value sitting right next to
+     * a keyword — "3 gün önce 2 kişi yaralandı" would report five injured.
+     */
+    private void addQuantified(List<ResolvedDate> mentions, NormalizedText text, LocalDate referenceDate) {
+        String value = text.value();
+        List<NumberToken> numbers = null;
+
+        for (Quantified rule : QUANTIFIED) {
+            Matcher matcher = rule.pattern().matcher(value);
+            while (matcher.find()) {
+                if (numbers == null) {
+                    // Only worth a pass over the text once such an expression is actually present.
+                    numbers = numberExtractor.extract(text);
+                }
+                NumberToken quantity = quantityBefore(value, numbers, matcher.start());
+                if (quantity == null) {
+                    continue;
+                }
+                LocalDate date = shifted(referenceDate, quantity.value(), rule.unit());
+                if (date != null) {
+                    mentions.add(ResolvedDate.found(date, DateSource.RELATIVE,
+                            quantity.start(), matcher.end()));
+                }
+            }
+        }
+    }
+
+    /**
+     * The number such an expression counts, which is the one written immediately before the unit.
+     *
+     * <p>{@code null} when the text names none, and that is how a vague distance is refused rather
+     * than guessed: "birkaç gün önce" matches the pattern but carries no number, and deciding that
+     * "a few" means three would put a figure in the record that the text never gave (ADR-019).
+     */
+    private NumberToken quantityBefore(String value, List<NumberToken> numbers, int unitStart) {
+        for (NumberToken token : numbers) {
+            if (token.end() > unitStart || !blankBetween(value, token.end(), unitStart)) {
+                continue;
+            }
+            // "bir iki gün önce" is "a day or two ago", not two days ago. NumberExtractor already
+            // refuses to read "bir iki" as one number; two of them in a row means the same
+            // vagueness here, and there is no distance to date anything with.
+            return precededByAnotherNumber(value, numbers, token) ? null : token;
+        }
+        return null;
+    }
+
+    private boolean precededByAnotherNumber(String value, List<NumberToken> numbers, NumberToken token) {
+        return numbers.stream().anyMatch(other -> other != token
+                && other.end() <= token.start()
+                && blankBetween(value, other.end(), token.start()));
+    }
+
+    private boolean blankBetween(String value, int from, int to) {
+        return value.substring(from, to).isBlank();
+    }
+
+    /**
+     * The reference day moved back by a stated distance, or {@code null} when the result is not this
+     * report's timeframe.
+     *
+     * <p>{@code null} rather than an exception, the same choice {@link #dateOf} makes for
+     * "31.02.2020": "iki milyar gün önce" is not a date, it is a large number, and a text that says
+     * it has told us nothing about when anything happened.
+     */
+    private LocalDate shifted(LocalDate referenceDate, long quantity, ChronoUnit unit) {
+        if (quantity < 1 || quantity > Integer.MAX_VALUE) {
+            return null;
+        }
+        try {
+            LocalDate shifted = referenceDate.minus(quantity, unit);
+            return shifted.isBefore(referenceDate.minus(MAX_LOOKBACK)) ? null : shifted;
+        } catch (DateTimeException | ArithmeticException notATimeframe) {
+            return null;
+        }
+    }
+
+    /**
+     * One unit's worth of the "&lt;unit&gt; önce" family.
+     *
+     * <p>The unit carries no suffix of its own and needs none: the pattern requires whitespace after
+     * it, so "son iki <b>ayrı</b> olayda", "son 3 gün<b>de</b>" and "2020 yıl<b>ında</b>" cannot
+     * match. That makes this rule an instance of ADR-029's closed-suffix discipline, not an
+     * exception to it.
+     *
+     * <p>"kadar" is allowed between the unit and the direction because news text hedges — "bir hafta
+     * kadar önce" is a week ago, said less precisely.
+     */
+    private static Pattern backward(String units) {
+        return Pattern.compile("\\b(?:" + units + ")\\s+(?:kadar\\s+)?" + BACKWARD + "\\b", UNICODE);
     }
 
     private void addAll(List<ResolvedDate> mentions, Matcher matcher, DateOf dateOf) {
@@ -188,6 +333,10 @@ public class DateResolver {
     }
 
     private record Displacement(Pattern pattern, TemporalAmount shift) {
+    }
+
+    /** A backward-looking expression whose distance the text states. See {@link #backward}. */
+    private record Quantified(Pattern pattern, ChronoUnit unit) {
     }
 
     @FunctionalInterface

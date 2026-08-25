@@ -66,11 +66,12 @@ class GoldenExampleTest {
     private final TurkishTextNormalizer normalizer = new TurkishTextNormalizer(new SentenceSplitter());
     private final IncidentCatalog catalog =
             new IncidentCatalogLoader().load(new ClassPathResource("incident-catalog.yml"));
+    private final NumberExtractor numberExtractor = new NumberExtractor();
     private final CatalogIncidentExtractor extractor = new CatalogIncidentExtractor(
-            new DateResolver(),
+            new DateResolver(numberExtractor),
             new ProvinceExtractor(PROVINCES, normalizer),
             new EventTypeClassifier(catalog, normalizer),
-            new NumberExtractor(),
+            numberExtractor,
             catalog,
             normalizer);
 

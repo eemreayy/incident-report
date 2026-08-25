@@ -11,6 +11,7 @@ import org.springframework.core.io.ClassPathResource;
 import com.emreay.incidentreport.analysis.catalog.IncidentCatalog;
 import com.emreay.incidentreport.analysis.catalog.IncidentCatalogLoader;
 import com.emreay.incidentreport.analysis.domain.ClassificationStatus;
+import com.emreay.incidentreport.analysis.domain.DateSource;
 import com.emreay.incidentreport.analysis.domain.KeywordRole;
 import com.emreay.incidentreport.analysis.domain.ProvinceScope;
 import com.emreay.incidentreport.analysis.text.NumberExtractor;
@@ -40,11 +41,12 @@ class CatalogIncidentExtractorTest {
     private final TurkishTextNormalizer normalizer = new TurkishTextNormalizer(new SentenceSplitter());
     private final IncidentCatalog catalog =
             new IncidentCatalogLoader().load(new ClassPathResource("incident-catalog.yml"));
+    private final NumberExtractor numberExtractor = new NumberExtractor();
     private final CatalogIncidentExtractor extractor = new CatalogIncidentExtractor(
-            new DateResolver(),
+            new DateResolver(numberExtractor),
             new ProvinceExtractor(PROVINCES, normalizer),
             new EventTypeClassifier(catalog, normalizer),
-            new NumberExtractor(),
+            numberExtractor,
             catalog,
             normalizer);
 
@@ -144,6 +146,25 @@ class CatalogIncidentExtractorTest {
         assertThat(result.incidents()).singleElement().satisfies(incident ->
                 assertThat(incident.metrics()).containsEntry("ACCIDENT_COUNT", 8)
                         .doesNotContainValue(24));
+    }
+
+    @Test
+    @DisplayName("the number in a relative date is not a metric value either")
+    void theQuantityInAStatedDistanceIsNotCounted() {
+        // Before "N gün önce" was recognised this reported five injured: no date was found, so the
+        // "3" stayed countable, and the nearest metric keyword after it is "yaralandı" - the two
+        // figures then merged into one metric. One correct span fixes the day and the count at once.
+        ExtractionResult result = extract("3 gün önce Ankara'da selde 2 kişi yaralandı.");
+
+        assertThat(result.warnings()).doesNotContain(ExtractionWarnings.DATE_ASSUMED);
+        assertThat(result.incidents()).singleElement().satisfies(incident -> {
+            assertThat(incident.occurredOn()).isEqualTo(LocalDate.of(2020, 6, 12));
+            assertThat(incident.dateSource()).isEqualTo(DateSource.RELATIVE);
+            assertThat(incident.metrics()).containsExactlyEntriesOf(Map.of("INJURED", 2));
+            assertThat(incident.keywords()).filteredOn(keyword -> keyword.role() == KeywordRole.DATE)
+                    .singleElement()
+                    .satisfies(keyword -> assertThat(keyword.keyword()).isEqualTo("3 gün önce"));
+        });
     }
 
     @Test
