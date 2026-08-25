@@ -86,12 +86,13 @@ class GoldenPersistenceTest {
     void setUp() {
         TurkishTextNormalizer normalizer = new TurkishTextNormalizer(new SentenceSplitter());
         IncidentCatalog catalog = new IncidentCatalogLoader().load(new ClassPathResource("incident-catalog.yml"));
+        NumberExtractor numberExtractor = new NumberExtractor();
         CatalogIncidentExtractor extractor = new CatalogIncidentExtractor(
-                new DateResolver(),
+                new DateResolver(numberExtractor),
                 new ProvinceExtractor(provinces.findAll().stream()
                         .collect(Collectors.toMap(Province::getCode, Province::getName)), normalizer),
                 new EventTypeClassifier(catalog, normalizer),
-                new NumberExtractor(),
+                numberExtractor,
                 catalog,
                 normalizer);
 

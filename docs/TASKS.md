@@ -423,7 +423,7 @@ Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (
 `now()` değil. Çözüm kaynağı kayıtta saklanır. Bu task'ta ayrıca TC-6'nın açık kalan kısmı
 (aralık semantiği, zaman dilimi ve gün sınırı) karara bağlanır.
 - **Bağımlılık:** T-09, T-10
-- **Karşılar:** FR-06 · **Çözer:** TC-6 · **İlgili karar:** ADR-014, ADR-029
+- **Karşılar:** FR-06 · **Çözer:** TC-6 · **İlgili karar:** ADR-014, ADR-029, ADR-043
 - **DoD:** Örnek 3 `RELATIVE` olarak çözülüyor (`DEFAULTED` değil); aynı bildirim reprocess edildiğinde tarih değişmiyor; timezone kararı ADR'ye yazılmış.
 - **Sonuç:** 297 test geçiyor, `analysis` coverage **%98**; `analysis.extraction` ve `analysis.config`
   paketleri **%100**. `DateResolver` + `ResolvedDate` + `AnalysisConfiguration`; 43 tablo bazlı test.
@@ -443,6 +443,22 @@ Rakamla yazılmış sayılar ve Türkçe sayı sözcükleri; bileşikler dahil (
 - **TC-6 karara bağlandı (ADR-029):** zaman dilimi `Europe/Istanbul` (yapılandırılabilir),
   anlık zaman UTC kalıyor; göreli aralıklar tek güne indirgeniyor (pencere → referans gün,
   yer değiştirme → kaydırılan gün); açık tarih göreliye üstün; `DEFAULTED` kayıtlar düşürülmüyor.
+- **Sonradan bulunan kusur → ADR-043 ile düzeltildi.** Bu task göreli ifadeleri iki kalıba oturttu
+  ama üçüncüsünü atladı: mesafesini metnin **kendisinin söylediği** ifade. `önce` kelimesini içeren
+  tek desen `önceki gün`'dü, dolayısıyla `3 gün önce`, `iki hafta önce`, `2 ay önce`, `5 yıl önce`
+  ifadelerinin hepsi `DEFAULTED`'a düşüyordu. Tek eksik desen **iki** kusur üretiyordu ve ikincisi
+  sessizdi: tarih bulunmadığı için miktar sayılabilir kalıyor, ADR-032'nin en yakın anahtar kelime
+  kuralıyla metriğe yazılıyordu. Ölçüldü — "3 gün önce Ankara'da selde 2 kişi yaralandı." metni
+  `INJURED=5` üretiyordu; metnin verdiği sayı 2. Düzeltme ifadenin açıklığını **miktardan `önce`nin
+  sonuna** uzatarak ikisini birden kapatıyor: `countable` zaten tarih açıklıklarındaki rakamları
+  eliyor. Miktar desenle yakalanmıyor, `NumberExtractor`'dan okunuyor (ADR-028'in tek sayı
+  ayrıştırıcısı) — böylece `on iki gün önce` bedelsiz çalışıyor ve `birkaç gün önce` kendiliğinden
+  tarihsiz kalıyor. Ayrıntı ve geriye bakış sınırının gerekçesi ADR-043'te.
+- **Doğrulandı:** `analysis` modülü 491 test, tümü geçiyor; `DateResolverTest` 79 test (43'ten),
+  dal kapsamı `DateResolver` için 50/50, `analysis.extraction` paketi **%99**. Tüm reactor
+  `./mvnw verify` ile yeşil — ArchUnit kuralları dahil, `DateResolver`'ın `NumberExtractor`
+  bağımlılığı modül sınırını değiştirmiyor (`analysis.extraction → analysis.text` kenarı zaten
+  vardı). Altın testler değişmedi: üç örnek metnin hiçbiri `önce` ifadesi içermiyor.
 - **Kod geçici bir varsayılanla yaşıyordu:** `AnalysisService` içinde `ZoneOffset.UTC` vardı — karar
   değil, doldurulmuş boşluk. Türkiye saatiyle 00:30'da girilen bildirim UTC'de bir önceki güne
   yazılıyordu; sapma yalnızca günlük grafiklerde ve sessizce görünürdü. Sınır vakası teste sabitlendi.
@@ -1401,7 +1417,7 @@ tamamen ayrı bir hat** — frontend iskeleti, kalite kapısı ve Docker'ı back
 | TC-3 | Sayı ↔ metrik eşleştirme | **Karara bağlandı → ADR-032** · uygulaması T-14 |
 | TC-4 | Türkçe bileşik sayı sözcükleri | **Karara bağlandı → ADR-028** · uygulaması T-10 |
 | TC-5 | Türkçe normalizasyon | **Karara bağlandı → ADR-027** · uygulaması T-09 |
-| TC-6 | Tarih ayrıştırma ve göreli ifadeler | **Karara bağlandı → ADR-029** · uygulaması T-11 |
+| TC-6 | Tarih ayrıştırma ve göreli ifadeler | **Karara bağlandı → ADR-029**, genişletildi → **ADR-043** · uygulaması T-11 |
 | TC-7 | İl tanıma | **Karara bağlandı → ADR-030** · uygulaması T-12 |
 | TC-8 | Sınıflandırma skorlaması ve eşik | **Karara bağlandı → ADR-031** · uygulaması T-13 |
 | TC-9 | Mükerrer gönderim | T-19 |

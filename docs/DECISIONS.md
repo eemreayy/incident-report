@@ -44,6 +44,13 @@ Bu dosya projede alınan mimari ve teknoloji kararlarını, **neden** alındıkl
 | [ADR-034](#adr-034--canlı-akışın-yaşam-döngüsü-rapor-başına-sinyal-commit-sonrası-yayın-heartbeat-ile-temizlik) | Canlı akışın yaşam döngüsü: rapor başına sinyal, commit sonrası yayın | Kabul edildi · **TC-10 çözüldü** |
 | [ADR-035](#adr-035--yeniden-i̇şleme-ve-mükerrer-gönderim-aynı-metin-i̇kinci-kayıt-açmaz) | Yeniden işleme ve mükerrer gönderim: aynı metin ikinci kayıt açmaz | Kabul edildi · **TC-9 çözüldü** |
 | [ADR-036](#adr-036--agregasyon-uçlarının-şekli-seri-olarak-cevap-exists-ile-filtre-tek-sorguda-üç-seviye) | Agregasyon uçlarının şekli: seri olarak cevap, `EXISTS` ile filtre, tek sorguda üç seviye | Kabul edildi |
+| [ADR-037](#adr-037--filtre-durumunun-tek-kaynağı-adres-çubuğu) | Filtre durumunun tek kaynağı: adres çubuğu | Kabul edildi · **TC-15 çözüldü** |
+| [ADR-038](#adr-038--shared-ve-unknown-kapsamın-arayüzdeki-temsili-aynı-tabloda-kendi-satırında-adıyla) | `SHARED`/`UNKNOWN` kapsamın arayüzdeki temsili | Kabul edildi · **TC-14 çözüldü** |
+| [ADR-039](#adr-039--grafiğin-i̇ki-modu-grafik-ayarlarının-adres-çubuğunda-yaşaması-ve-kümülatifin-sunucudan-i̇stenmesi) | Grafiğin iki modu; kümülatifin sunucudan istenmesi | Kabul edildi |
+| [ADR-040](#adr-040--canlı-tazeleme-sinyal-geçersizleştirir-delta-uygulamaz-pencereli-birleştirme-ve-kanıtlanmış-i̇lgisizlikte-atlama) | Canlı tazeleme: sinyal geçersizleştirir, delta uygulamaz | Kabul edildi · **TC-13 çözüldü** |
+| [ADR-041](#adr-041--i̇zlenebilirlik-ekranları-sunucudan-gelen-offsetlerle-vurgulama-metne-hiçbir-şey-eklememe-ve-reprocessin-yerinde-tazelenmesi) | İzlenebilirlik ekranları: sunucudan gelen offset'lerle vurgulama | Kabul edildi · **TC-18 çözüldü** |
+| [ADR-042](#adr-042--frontend-kapanışı-kapsamın-ne-ölçtüğü-kapının-kırıldığının-kanıtlanması-ve-arayüzün-i̇ki-erişilebilirlik-kuralı) | Frontend kapanışı: kapsamın ne ölçtüğü ve iki erişilebilirlik kuralı | Kabul edildi · **TC-16 çözüldü** |
+| [ADR-043](#adr-043--nicelenmiş-geriye-dönük-göreli-tarihler-miktarın-sayı-ayrıştırıcıdan-okunması-ve-geriye-bakış-sınırı) | Nicelenmiş geriye dönük göreli tarihler (`3 gün önce`) | Kabul edildi |
 
 ---
 
@@ -796,7 +803,7 @@ Zor kısmı üçüncü örnek metin: *"Bursa'da 8, Kocaeli'nde 6 trafik kazası�
 
 **Sonuçlar.** `AnalysisService` metni **bir kez** normalize ediyor ve extractor'lar artık ham `String` değil `NormalizedText` alıyor (ADR-027, ADR-028'de kayıtlı niyet) — offset haritası her extractor için yeniden hesaplanmıyor. Sınıflandırılamayan kayıtlar da artık metinden tarihleniyor: olay tipinin tanınmaması, metnin tarih söyleyip söylemediğinden bağımsız. Buna bağlı olarak "tarih bulunamadı" uyarısı yalnızca gerçekten bulunamadığında veriliyor; tarihi açıkça yazan bir metne bu uyarıyı vermek okuyucuyu uyarıları göz ardı etmeye alıştırırdı. Türkçe ek desenleri **sayılı** tutuldu: serbest bir ek (`ay\p{L}*`) "son iki **ayrı** olayda" ifadesini iki aylık bir pencere, `dün\p{L}*` ise "**dünya**"yı dün sanıyordu — ikisi de sıradan cümleleri sessizce yanlış okuyordu.
 
-**İleride.** Aralık semantiği gerektiğinde `ResolvedDate` bir bitiş günü kazanabilir; bugün kaynağı ve offset'i taşıyor olması bu evrimin ön koşulunu karşılıyor. Zaman dilimi tek bir yapılandırma anahtarında toplandığı için çok ülkeli bir kuruluma geçiş tek noktadan yapılır. Göreli ifade sözlüğü (`dün`, `geçen hafta`, …) büyürse kataloğun yanında YAML'a taşınabilir — ADR-007'nin olay tipleri için kurduğu düzenin aynısı.
+**İleride.** Aralık semantiği gerektiğinde `ResolvedDate` bir bitiş günü kazanabilir; bugün kaynağı ve offset'i taşıyor olması bu evrimin ön koşulunu karşılıyor. Zaman dilimi tek bir yapılandırma anahtarında toplandığı için çok ülkeli bir kuruluma geçiş tek noktadan yapılır. Göreli ifade sözlüğü (`dün`, `geçen hafta`, …) büyürse kataloğun yanında YAML'a taşınabilir — ADR-007'nin olay tipleri için kurduğu düzenin aynısı. Bu notun **harcanmadığını** belirtmek gerekir: buradaki iki kalıbın (pencere, sabit yer değiştirme) yanına mesafesini metnin söylediği üçüncü kalıp [ADR-043](#adr-043--nicelenmiş-geriye-dönük-göreli-tarihler-miktarın-sayı-ayrıştırıcıdan-okunması-ve-geriye-bakış-sınırı) ile eklendi, ama o bir sözlük girdisi değil parametrik bir kural olduğu için kodda kaldı.
 
 ---
 
@@ -1285,3 +1292,88 @@ Kapsam sayısının anlamlı olmasını sağlayan üç yapısal tercih de burada
 - **Backend kapalıyken doğrulandı:** beyaz ekran yok; beş panelin her biri *"Sunucuya şu anda ulaşılamıyor…"* + **Tekrar dene** gösteriyor, hiçbiri "yükleniyor"da donmuyor, ekranda teknik ayrıntı (stack trace, sınıf adı, URL) yok. Backend geri gelince tekrar deneme düğmeleri görünümü kurtarıyor.
 
 **İleride.** Otomatik bir erişilebilirlik taraması (axe) CI'a eklenebilir; bu turda bulunan iki asıl kusuru bulamazdı ama regresyona karşı ucuz bir ağ olur. Grafiğin ipucu (tooltip) hâlâ fareye bağlı; aynı sayılar özet tablosunda okunabildiği için bugün kabul edilebilir, klavyeyle gezilebilir bir veri noktası listesi ileride eklenebilir. Kapsam kapısı bugün satır bazında; dal (branch) eşiği eklenmesi istenirse mevcut oran (%93) zaten üzerinde.
+
+---
+
+## ADR-043 — Nicelenmiş Geriye Dönük Göreli Tarihler: Miktarın Sayı Ayrıştırıcıdan Okunması ve Geriye Bakış Sınırı
+
+**Karar.** Metnin mesafesini kendisinin söylediği geriye dönük ifadeler — `3 gün önce`, `iki hafta
+kadar önce`, `on iki gün önceki`, `iki gün evvel` — çözümlenir ve kaynağı `RELATIVE` olur. Birimler
+`gün`, `hafta`, `ay`, `yıl`/`sene`. Miktar desenle **yakalanmaz**; birimden hemen önce yazılmış sayı
+`NumberExtractor`'dan okunur. İfadenin açıklığı **miktardan `önce`nin sonuna** uzanır, böylece
+miktarın kendisi metrik değeri sayılamaz. Miktarı olmayan ifade (`birkaç gün önce`, `bir iki gün
+önce`) tarih üretmez. Geriye bakış **100 yılla** sınırlıdır. `önceden` kapsam dışıdır: ileriye bakar.
+
+**Bağlam.** ADR-029 göreli ifadeleri iki kalıba oturtmuştu: referans günde kapanan **pencereler**
+(`son 24 saatte`) ve sabit **yer değiştirmeler** (`dün`, `önceki gün`, `geçen hafta`). Aradaki üçüncü
+kalıp — mesafesini metnin söylediği ifade — hiç ele alınmamıştı; `önce` kelimesini içeren tek desen
+`önceki gün`'dü. Sonuç, tek bir eksik desenin ürettiği **iki** kusurdu ve ikincisi sessizdi:
+
+1. Kayıt gönderim gününe yazılıyor ve üstüne yersiz bir `DATE_ASSUMED` uyarısı alıyordu — tarihini
+   açıkça söyleyen bir metne. ADR-029 bu uyarının yalnızca gerçekten bulunamadığında verilmesini
+   şart koşmuştu; tersi okuyucuyu uyarıları göz ardı etmeye alıştırır.
+2. Tarih bulunamadığı için miktar **sayılabilir** kalıyordu. "3 gün önce Ankara'da selde 2 kişi
+   yaralandı." metninde `3`, ADR-032'nin "sayıdan sonraki en yakın anahtar kelime" kuralıyla
+   `yaralandı`ya atanıyor ve gerçek `2` ile toplanıyordu: ölçülen sonuç `INJURED=5`. Metnin verdiği
+   sayı 2. Yanlış gün fark edilir, uydurulmuş metrik fark edilmez.
+
+**Gerekçe.**
+- **Miktarı desen yakalamaz, sayı ayrıştırıcı okur.** Türkçe sayı sözcükleri tek yerde ayrıştırılıyor
+  (ADR-028). Buraya ikinci bir sözlük koymak "küçük bir map" değil: `on iki`yi 12 yapan azalan
+  büyüklük kuralını ve `bir iki`yi 3 **yapmayan** reddetme kuralını yeniden yazmak gerekirdi. İki
+  dilbilgisi kopyası zamanla ayrışır. Bugün `on iki gün önce`, `kırk beş gün önce` ve `2 bin 500 gün
+  önce` bedelsiz çalışıyor.
+- **Yakalama grubu sıradan cümleleri yanlış okuyor.** Miktarı `\p{L}+(?:\s+\p{L}+)?` olarak yakalayan
+  desen, "sel oldu iki gün önce" metninde geri izleme yüzünden grubu **"oldu iki"** olarak
+  eşleştiriyor. Birimi bulup soluna bakmak bu sınıf hatayı tümüyle ortadan kaldırıyor: desen yalnızca
+  zaman dilbilgisini, `NumberExtractor` yalnızca sayı dilbilgisini biliyor.
+- **Birim ek almıyor ve almasına gerek yok.** Desen birimden sonra boşluk istiyor; bu yüzden
+  `ayrı`, `aylık`, `günde`, `yılında` eşleşemiyor. `2020 yılında Ankara'da sel oldu` — bu ailenin en
+  tehlikeli yanlış pozitifi — kapalı. Yani yeni kural ADR-029'un sayılı-ek disiplinine **istisna
+  değil, örnek**. `önce`nin eki ise sayılı: `önce\p{L}*` "öncelikle"yi tarih yapardı.
+- **Miktarı olmayan ifadeye tarih uydurulmuyor.** `birkaç` bir sayı değil; ona 3 demek metnin
+  vermediği bir veriyi üretmek olurdu — `SHARED` bir figürü iller arasında bölmemenin (ADR-019) ve
+  aralığı günlere yaymamanın (ADR-029) aynı gerekçesi. Kullanıcı `DATE_ASSUMED` uyarısını görüp
+  durumu anlıyor. Ayrı bir kara listeye de gerek yok: sayı token'ı yoksa tarih yok.
+- **Açıklık miktarı kapsıyor.** Bu, iki kusuru tek düzeltmeyle kapatan seçim. Zaten var olan
+  düzenin simetriği: `son 24 saatte` açıklığı da rakamı içine alıyor, ve `countable` **tüm**
+  mention'ları kullandığı için açık bir tarih günü kazandığında bile miktar elenmiş oluyor.
+- **Sınır gerekli, süs değil.** `LocalDate` iki milyar günlük kaydırmayı reddetmiyor; −5473794
+  yılını döndürüyor. Üstelik absürt okuma **kazanırdı**: "500 yıl önce kurulan şehirde dün sel oldu"
+  cümlesinde tarihsel kenar not metinde önce geçiyor ve göreli ifadeler arasında ilk geçen alınıyor.
+  Bir yüzyıl, gerçek bir olayı anlatan hiçbir raporu geri çevirmeyecek kadar geniş; tarihsel bir
+  kenar notun olayın tarihi olmasını engelleyecek kadar dar.
+
+**Alternatifler.**
+- *`DateResolver` içinde küçük bir sayı sözlüğü:* Bağımlılık eklemezdi, ama yukarıdaki iki kuralı
+  yeniden yazmayı gerektirir ve `NumberExtractor` ile ayrışmaya açıktır.
+- *Sözlüğü YAML'a taşımak (ADR-029'un "İleride" notu):* ADR-007/CLAUDE.md'nin YAML testi "bir girdi
+  eklemek kod değişikliği gerektirmemeli"dir. Burada geçmiyor: yeni bir birim yeni takvim aritmetiği
+  demek, yani yine Java. Eklenen şey bir **parametrik kural ailesi**, sabit girdilerden oluşan bir
+  sözlüğün büyümesi değil. ADR-029'un notu sözlük büyümesi için geçerliliğini koruyor.
+- *Miktarı regex yakalama grubuyla okumak:* Yukarıdaki "oldu iki" hatası; ayrıca grup ile token
+  kısmen çakıştığında (`2 bin 500 gün önce`) ne olacağının tanımlanması gerekirdi.
+- *Sınır koymamak:* −5473794 yılına yazılmış, indekslenmiş, filtrelenmiş ve grafiğe çizilmiş kayıt.
+- *10 yıllık sınır:* Absürtlükleri aynı şekilde keser ama "20 yıl önce" gibi meşru bir arşiv kaydını
+  da reddeder. Bir yüzyıl daha az editoryal bir yargı.
+- *`ChronoUnit` yerine `Period` + fonksiyon:* Gün altı birimler (`saat`, `dakika`) eklenecekse
+  gerekli, çünkü `LocalDate` `HOURS` desteklemiyor. Bugünkü dört birim için `ChronoUnit` yeterli ve
+  daha az dolaylı.
+
+**Sonuçlar.** `DateResolver` artık `NumberExtractor` bağımlısı — dört yapıcı çağrı noktası (hepsi
+test) güncellendi; modül sınırı ihlali yok, `analysis.extraction → analysis.text` kenarı zaten
+vardı, ArchUnit kuralları değişmedi. Sayı taraması ifade **fiilen metinde varsa** yapılıyor
+(tembel), ama `mentions` istek başına iki kez çağrıldığı için o durumda iki tarama oluyor; bu
+ölçekte ölçülebilir bir maliyet değil, `mentions`'ın bir kez hesaplanıp paylaşılması ayrı bir iş.
+Sınırın dışında kalan bir miktar mention üretmediği için rakamı yeniden sayılabilir hâle geliyor —
+kabul edilen bir ödünç: pratikte eşleşecek bir metrik anahtarı bulamıyor. `20.04.2020 tarihinden 3
+gün önce` **bileşik olarak** çözülmüyor; açık tarih kazanıyor (ADR-029) ve bu bir testle kayda
+geçirildi. `DateResolver` dal kapsamı 50/50; `analysis.extraction` paketi %99.
+
+**İleride.** Gün altı birimler (`3 saat önce`, `10 dakika önce`) bugün hâlâ tarihsiz ve miktarları
+sayılabilir durumda — aynı kusurun küçük ölçekli hâli. Bunları eklemek günü kaydırmaz (ADR-029'un
+pencere gerekçesi), ama açıklığı miktarın üstüne çeker; kural kaydının `ChronoUnit` yerine `Period`
+üreten bir fonksiyona dönmesi gerekir. İleriye bakan yön (`3 gün sonra`, `önceden`) hiç ele
+alınmadı; bir bildirimin gelecekte bir olayı anlatması ayrı bir tartışma. 100 yıllık sınır bir
+sabit; gerekirse `reporting-zone`'un yanında yapılandırmaya çıkabilir. Bileşik çözümleme ("şu
+tarihten üç gün önce") `ResolvedDate`'in offset taşıması sayesinde mümkün, ama bugün yapılmıyor.
